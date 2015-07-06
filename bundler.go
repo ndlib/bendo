@@ -9,21 +9,41 @@ import (
 // The item bundler maps between the in-memory representation of an item
 // and its serialization into many zip files on disk or tape.
 
-func FindBlobInfo(b xbid) (*blob, error) {
-	// if blob metadata cached
-	//	...
-	// else
-	//	...
-	// is blob cached?
+type Bendo struct {
+	Metadata cache
+	Blobs    cache
 }
 
-func FindBlob(b xbid) (io.Reader, error) {
-	// if blob in cache, return it
+// do we keep one blob structure in memory for EACH blob and share it
+// or do we load a blob structure on demand?
 
-	// else load it from system and return error
+func (bo *Bendo) FindBlobInfo(b XBid) (*Blob, error) {
+	var key = b.CacheKey()
+	b, ok := bo.Metadata.Find(key)
+	if !ok {
+		// get blob metadata
+	}
+	b.Cached = bo.Blobs.Has(key)
+	return b
 }
 
-func loadblob(b xbid) {
+const (
+	// ErrNotCached means an item is being fetched from tape. Retry the
+	// operation after some delay
+	ErrNotCached = errors.Error("Not Cached")
+)
+
+func FindBlob(b XBid) (io.Reader, error) {
+	var key = b.CacheKey()
+	b, ok := bo.Blobs.Find(key)
+	if !ok {
+		// fetch blob
+		return nil, ErrNotCached
+	}
+	// blob in cache, return it
+}
+
+func loadblob(b XBid) {
 }
 
 func FindItem(id string) {
@@ -58,7 +78,8 @@ func readItemInfo(rc io.Reader) (*item, error) {
 	return result, err
 }
 
-type item struct {
+// on tape serialization data
+type itemOnTape struct {
 	ItemID          string
 	ByteCount       int
 	ActiveByteCount int
