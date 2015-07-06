@@ -1,6 +1,8 @@
 package bendo
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/url"
@@ -17,12 +19,12 @@ type store struct {
 	rest url.URL
 }
 
-func NewTapeStore() BundleStore {
-	return nil
+func NewTapeStore(root string, api url.URL) BundleStore {
+	return &store{root: root, rest: api}
 }
 
-func NewFSStore() BundleStore {
-	return nil
+func NewFSStore(root string) BundleStore {
+	return &store{root: root}
 }
 
 func (s *store) ItemList() <-chan string {
@@ -31,14 +33,15 @@ func (s *store) ItemList() <-chan string {
 	return c
 }
 
-// walk tree at root, emiting all unique item identifiers on channel out.
-// if toplevel is true, the channel is closed when the function exits.
+// Perform depth first walk of file tree at root, emitting all unique item
+// identifiers on channel out. Be careful to only open directories and stat
+// files. Otherwise we might trigger a blocking request on the tape system.
+//
+// If toplevel is true, the channel is closed when the function exits.
 func walkTree(out chan<- string, root string, toplevel bool) {
-	defer func() {
-		if toplevel {
-			close(out)
-		}
-	}()
+	if toplevel {
+		defer close(out)
+	}
 	seen := make(map[string]struct{})
 	f, err := os.Open(root)
 	if err != nil {
@@ -51,8 +54,7 @@ func walkTree(out chan<- string, root string, toplevel bool) {
 		if err == io.EOF {
 			return
 		} else if err != nil {
-			// log the error since we have no way of otherwise
-			// passing it back
+			// we have no other way of passing this error back
 			log.Println(err)
 			return
 		}
@@ -82,10 +84,78 @@ func decodeID(s string) string {
 	return s[:i]
 }
 
+// Return the metadata for the specified item
 func (s *store) Item(id string) (*Item, error) {
+	// find the most recent zip for this item
 	return nil, nil
+}
+
+const (
+	maxSaveIterations = 100
+	fileTemplate      = "%s-%04d-%d.zip"
+)
+
+var (
+	ErrNoItem = errors.New("No such item")
+)
+
+// find the name of the zip file with the largest version number for item id.
+func (s *store) mostRecent(id string) (string, error) {
+	p := filepath.Join(s.root, itemSubdir(id), id)
+	var version int
+	var iteration int
+	for version = 1; ; version++ {
+		i := findIteration(p, version)
+		if i == -1 {
+			break
+		}
+		iteration = i
+	}
+	version--
+	if version == 0 {
+		// there are no matching zip files
+		return "", ErrNoItem
+	}
+	return fmt.Sprintf(fileTemplate, p, version, iteration), nil
+}
+
+// return -1 if no iteration could be found.
+func findIteration(p string, version int) int {
+	for i := 1; i <= maxSaveIterations; i++ {
+		fname := fmt.Sprintf(fileTemplate, p, version, i)
+		_, err := os.Stat(fname)
+		if err == nil {
+			return i
+		}
+	}
+	return -1
+}
+
+// Given an item id, return the subdirectory the item's file are stored in
+// e.g. "abcdd123" returns "ab/cd/"
+func itemSubdir(id string) string {
+	var result = make([]byte, 0, 8)
+	var count int
+	for j := range id {
+		result = append(result, id[j])
+		count++
+		if count == 2 {
+			result = append(result, '/')
+		}
+		if count >= 4 {
+			break
+		}
+	}
+	if count != 2 {
+		result = append(result, '/')
+	}
+	return string(result)
 }
 
 func (s *store) BlobContent(bid XBid) (io.Reader, error) {
 	return nil, nil
+}
+
+func (s *store) SaveItem(item *Item, bd []BlobData) error {
+	return nil
 }

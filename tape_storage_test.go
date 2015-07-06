@@ -22,6 +22,23 @@ func TestDecodeID(t *testing.T) {
 	}
 }
 
+func TestItemSubdir(t *testing.T) {
+	var table = []struct{ input, output string }{
+		{"x", "x/"},
+		{"xy", "xy/"},
+		{"xyz", "xy/z/"},
+		{"wxyz", "wx/yz/"},
+		{"vwxyz", "vw/xy/"},
+		{"b930agg8z", "b9/30/"},
+	}
+	for _, s := range table {
+		result := itemSubdir(s.input)
+		if result != s.output {
+			t.Errorf("Got %s, expected %s", result, s.output)
+		}
+	}
+}
+
 func TestWalkTree(t *testing.T) {
 	var files = []string{
 		"a/",
@@ -67,6 +84,40 @@ func makeTmpTree(root string, files []string) {
 		}
 		if err != nil {
 			fmt.Println(err)
+		}
+	}
+}
+
+func TestMostRecent(t *testing.T) {
+	var files = []string{
+		"wx/",
+		"wx/yz/",
+		"wx/yz/wxyz55-0001-2.zip",
+		"wx/yz/wxyz55-0002-1.zip",
+		"wx/yz/wxyz55-0003-1.zip",
+		"wx/yz/wxyz55-0004-30.zip",
+		"wx/yz/wxyz55-0005-1.zip",
+		"wx/yz/wxyz66-0001-1.zip",
+	}
+	var table = []struct {
+		input, output string
+		err           error
+	}{
+		{"wxyz55", "wx/yz/wxyz55-0005-1.zip", nil},
+		{"wxyz66", "wx/yz/wxyz66-0001-1.zip", nil},
+		{"wxyz67", "", ErrNoItem},
+	}
+	dir, _ := ioutil.TempDir("", "")
+	makeTmpTree(dir, files)
+	defer os.RemoveAll(dir)
+	store := &store{root: dir}
+	for _, tab := range table {
+		result, err := store.mostRecent(tab.input)
+		fullPath := filepath.Join(dir, tab.output)
+		if err != tab.err ||
+			(tab.output != "" && result != fullPath) {
+			t.Errorf("Got (%s,%s) for %s expected (%s, %s)",
+				result, err, tab.input, fullPath, tab.err)
 		}
 	}
 }
