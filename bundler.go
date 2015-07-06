@@ -1,13 +1,20 @@
 package bendo
 
 import (
-	"archive/zip"
-	"encoding/json"
-	"io"
+//"archive/zip"
+//"encoding/json"
+//"errors"
+//"io"
+//"time"
 )
 
 // The item bundler maps between the in-memory representation of an item
 // and its serialization into many zip files on disk or tape.
+
+type cache interface {
+	Find(string) (interface{}, bool)
+	Has(string) bool
+}
 
 type Bendo struct {
 	Metadata cache
@@ -17,20 +24,21 @@ type Bendo struct {
 // do we keep one blob structure in memory for EACH blob and share it
 // or do we load a blob structure on demand?
 
-func (bo *Bendo) FindBlobInfo(b XBid) (*Blob, error) {
-	var key = b.CacheKey()
-	b, ok := bo.Metadata.Find(key)
+/*
+func (bo *Bendo) FindBlobInfo(bid XBid) (*Blob, error) {
+	var key = bid.CacheKey()
+	result, ok := bo.Metadata.Find(key)
 	if !ok {
 		// get blob metadata
 	}
-	b.Cached = bo.Blobs.Has(key)
-	return b
+	//result.Cached = bo.Blobs.Has(key)
+	//return result, nil
 }
 
 const (
 	// ErrNotCached means an item is being fetched from tape. Retry the
 	// operation after some delay
-	ErrNotCached = errors.Error("Not Cached")
+	ErrNotCached = errors.Errorf("Not Cached")
 )
 
 func FindBlob(b XBid) (io.Reader, error) {
@@ -49,8 +57,8 @@ func loadblob(b XBid) {
 func FindItem(id string) {
 }
 
-func readZipFile(fname string) (*item, error) {
-	var result *item
+func readZipFile(fname string) (*Item, error) {
+	var result *Item
 	z, err := zip.OpenReader(fname)
 	if err != nil {
 		return nil, err
@@ -60,6 +68,7 @@ func readZipFile(fname string) (*item, error) {
 	// find info file
 	for _, f := range z.File {
 		if f.Name == "item-info.json" {
+			var rc io.ReadCloser
 			rc, err = f.Open()
 			if err == nil {
 				result, err = readItemInfo(rc)
@@ -71,9 +80,9 @@ func readZipFile(fname string) (*item, error) {
 	return result, err
 }
 
-func readItemInfo(rc io.Reader) (*item, error) {
+func readItemInfo(rc io.Reader) (*Item, error) {
 	decoder := json.NewDecoder(rc)
-	result = new(item)
+	result = new(Item)
 	err := deocder.Decode(result)
 	return result, err
 }
@@ -84,19 +93,19 @@ type itemOnTape struct {
 	ByteCount       int
 	ActiveByteCount int
 	BlobCount       int
-	CreatedDate     date.DateTime
-	ModifiedDate    date.DateTime
+	CreatedDate     time.Time
+	ModifiedDate    time.Time
 	VersionCount    int
 	Versions        []struct {
 		VersionID   int
 		Iteration   int
-		CreatedDate date.DateTime
+		CreatedDate time.Time
 		SlotCount   int
 		ByteCount   int
 		BlobCount   int
 		CreatedBy   string
 		Note        string
-		Slots       map[string]blobid
+		Slots       map[string]BlobID
 	}
 	Blobs []struct {
 		BlobID          string
@@ -108,7 +117,24 @@ type itemOnTape struct {
 	Deleted []struct {
 		BlobID      string
 		DeletedBy   string
-		DeletedDate date.DateTime
+		DeletedDate time.Time
 		Note        string
 	}
 }
+
+func ItemList() <-chan string {
+
+}
+
+// implements a copy-on-write store mirroring
+// another preservation system. Requires Read
+// access to the other store.
+func NewProxyStore(save BundleStore, source BundleReadStore) BundleStore {
+}
+
+type MetadataRegistry interface {
+	Item(id string)
+	Version()
+	Blob()
+}
+*/
