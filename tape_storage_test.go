@@ -57,8 +57,7 @@ func TestWalkTree(t *testing.T) {
 		"qwe",
 		"asd",
 	}
-	dir, _ := ioutil.TempDir("", "")
-	makeTmpTree(dir, files)
+	dir := makeTmpTree(files)
 	defer os.RemoveAll(dir)
 	c := make(chan string)
 	go walkTree(c, dir, true)
@@ -72,8 +71,11 @@ func TestWalkTree(t *testing.T) {
 	}
 }
 
-func makeTmpTree(root string, files []string) {
+// returns abs path to the root of the new tree.
+// remember to delete the new directory when finished.
+func makeTmpTree(files []string) string {
 	var data []byte
+	root, _ := ioutil.TempDir("", "")
 	for _, s := range files {
 		var err error
 		p := filepath.Join(root, s)
@@ -86,6 +88,7 @@ func makeTmpTree(root string, files []string) {
 			fmt.Println(err)
 		}
 	}
+	return root
 }
 
 func TestMostRecent(t *testing.T) {
@@ -107,8 +110,7 @@ func TestMostRecent(t *testing.T) {
 		{"wxyz66", "wx/yz/wxyz66-0001-1.zip", nil},
 		{"wxyz67", "", ErrNoItem},
 	}
-	dir, _ := ioutil.TempDir("", "")
-	makeTmpTree(dir, files)
+	dir := makeTmpTree(files)
 	defer os.RemoveAll(dir)
 	store := &store{root: dir}
 	for _, tab := range table {

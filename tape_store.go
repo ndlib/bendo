@@ -1,6 +1,9 @@
 package bendo
 
 import (
+	"archive/zip"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // store is used to implement both the TapeStore and the FSStore.
@@ -87,7 +91,12 @@ func decodeID(s string) string {
 // Return the metadata for the specified item
 func (s *store) Item(id string) (*Item, error) {
 	// find the most recent zip for this item
-	return nil, nil
+	fname, err := s.mostRecent(id)
+	if err != nil {
+		return nil, err
+	}
+	// read the zip file and extract the item record
+	return readZipFile(fname)
 }
 
 const (
@@ -96,7 +105,9 @@ const (
 )
 
 var (
-	ErrNoItem = errors.New("No such item")
+	ErrNoItem        = errors.New("No such item")
+	ErrNoBlob        = errors.New("No such blob")
+	ErrVersionExists = errors.New("Given Version already exists")
 )
 
 // find the name of the zip file with the largest version number for item id.
@@ -111,7 +122,7 @@ func (s *store) mostRecent(id string) (string, error) {
 		}
 		iteration = i
 	}
-	version--
+	version-- // because we stopped upon not finding a version
 	if version == 0 {
 		// there are no matching zip files
 		return "", ErrNoItem
@@ -152,10 +163,212 @@ func itemSubdir(id string) string {
 	return string(result)
 }
 
-func (s *store) BlobContent(bid XBid) (io.Reader, error) {
-	return nil, nil
+// open and read the json metadata file from fname.
+func readZipFile(fname string) (*Item, error) {
+	var result *Item
+	z, err := zip.OpenReader(fname)
+	if err != nil {
+		return nil, err
+	}
+	defer z.Close()
+
+	// find info file
+	for _, f := range z.File {
+		if f.Name != "item-info.json" {
+			continue
+		}
+		var rc io.ReadCloser
+		rc, err = f.Open()
+		if err == nil {
+			result, err = readItemInfo(rc)
+			rc.Close()
+		}
+		break
+	}
+	return result, err
 }
 
-func (s *store) SaveItem(item *Item, bd []BlobData) error {
+func readItemInfo(rc io.Reader) (*Item, error) {
+	var fromTape itemOnTape
+	decoder := json.NewDecoder(rc)
+	err := decoder.Decode(fromTape)
+	if err != nil {
+		return nil, err
+	}
+	result := &Item{
+		ID: fromTape.ItemID,
+	}
+	for _, ver := range fromTape.Versions {
+		v := &Version{
+			ID:        VersionID(ver.VersionID),
+			Iteration: ver.Iteration,
+			SaveDate:  ver.CreatedDate,
+			CreatedBy: ver.CreatedBy,
+			Note:      ver.Note,
+			Slots:     ver.Slots,
+		}
+		result.versions = append(result.versions, v)
+	}
+	for _, blob := range fromTape.Blobs {
+		b := &Blob{
+			ID:            BlobID(blob.BlobID),
+			Created:       time.Now(),
+			Creator:       "",
+			Parent:        result.ID,
+			Size:          blob.ByteCount,
+			SourceVersion: VersionID(blob.OriginalVersion),
+		}
+		b.MD5, _ = hex.DecodeString(blob.MD5)
+		b.SHA256, _ = hex.DecodeString(blob.SHA256)
+		result.blobs = append(result.blobs, b)
+	}
+	// TODO(dbrower): handle deleted blobs
+	return result, nil
+}
+
+func writeItemInfo(w io.Writer, item *Item) error {
+	itemStore := itemOnTape{
+		ItemID: item.ID,
+	}
+	encoder := json.NewEncoder(w)
+	return encoder.Encode(itemStore)
+}
+
+// on tape serialization data.
+// Use this indirection so that we can change Item without worrying about
+// being able to read data previously serialized
+type itemOnTape struct {
+	ItemID          string
+	ByteCount       int
+	ActiveByteCount int
+	BlobCount       int
+	CreatedDate     time.Time
+	ModifiedDate    time.Time
+	VersionCount    int
+	Versions        []struct {
+		VersionID   int
+		Iteration   uint
+		CreatedDate time.Time
+		SlotCount   int
+		ByteCount   int
+		BlobCount   int
+		CreatedBy   string
+		Note        string
+		Slots       map[string]BlobID
+	}
+	Blobs []struct {
+		BlobID          int
+		OriginalVersion int
+		ByteCount       int
+		MD5             string
+		SHA256          string
+	}
+	Deleted []struct {
+		BlobID      string
+		DeletedBy   string
+		DeletedDate time.Time
+		Note        string
+	}
+}
+
+// Track the open archive file so it can be closed.
+// the embedded ReadCloser is for the actual blob content.
+type archiveStream struct {
+	zipFd *zip.ReadCloser
+	io.ReadCloser
+}
+
+func (as *archiveStream) Close() error {
+	as.ReadCloser.Close()
+	return as.zipFd.Close()
+}
+
+func (s *store) BlobContent(id string, version VersionID, bid BlobID) (io.ReadCloser, error) {
+	// find zip file
+	iteration := findIteration(id, int(version))
+	if iteration == -1 {
+		return nil, ErrNoBlob
+	}
+	fname := fmt.Sprintf(fileTemplate, id, version, iteration)
+	return s.readZipStream(fname, bid)
+}
+
+func (s *store) readZipStream(fname string, blob BlobID) (*archiveStream, error) {
+	z, err := zip.OpenReader(fname)
+	if err != nil {
+		return nil, err
+	}
+	// don't leak the open z. Close it if we did not make
+	// an archiveStream to hold it.
+	var result *archiveStream
+	defer func() {
+		if result == nil {
+			z.Close()
+		}
+	}()
+
+	streamName := fmt.Sprintf("blob/%d", blob)
+	// find info file
+	for _, f := range z.File {
+		if f.Name != streamName {
+			continue
+		}
+		var rc io.ReadCloser
+		rc, err = f.Open()
+		if err == nil {
+			result = &archiveStream{
+				zipFd:      z,
+				ReadCloser: rc,
+			}
+		}
+		break
+	}
+	return result, err
+}
+
+func (s *store) SaveItem(item *Item, v VersionID, bd []BlobData) error {
+	// make sure there is not already a version there
+	iteration := findIteration(item.ID, int(v))
+	if iteration != -1 {
+		// this version already exists on tape
+		return ErrVersionExists
+	}
+	// Then open a new zip file
+	fname := ""
+	f, err := os.Create(fname)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	z := zip.NewWriter(f)
+	defer z.Close()
+	// write out the item data
+	header := zip.FileHeader{
+		Name:   "item-info.json",
+		Method: zip.Store,
+	}
+	w, err := z.CreateHeader(&header)
+	if err != nil {
+		return err
+	}
+	err = writeItemInfo(w, item)
+	if err != nil {
+		return err
+	}
+	// write out all the blobs
+	for _, blob := range bd {
+		header := zip.FileHeader{
+			Name:   "blob/%d", // blob.id
+			Method: zip.Store,
+		}
+		w, err := z.CreateHeader(&header)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(w, blob.r)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }

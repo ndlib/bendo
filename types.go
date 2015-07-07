@@ -45,7 +45,7 @@ type Blob struct {
 	MD5            []byte    // unused if Size == 0
 	SHA256         []byte    // unused if Size == 0
 	ChecksumDate   time.Time // unused if Size == 0
-	ChecksumStatus bool      // true == pass, false == error
+	ChecksumStatus bool      // true == pass, false == error. Only valid if ChecksumDate > 0
 	Cached         bool      // true == in our disk cache
 	SourceVersion  VersionID // the version file this blob is in
 
@@ -74,7 +74,8 @@ type Item struct {
 
 // BundleReadStore is the read only part of the underlying tape store.
 // It fetches item information and the blob contents. The caching is implemented
-// above this, so implementations of this interface should not cache data
+// above this, so implementations of this interface should not cache data.
+// This interface serialized the Item data, but otherwise does not use it.
 // These methods should be thread safe.
 type BundleReadStore interface {
 	// ItemList starts a goroutine to scan the items on tape
@@ -87,15 +88,20 @@ type BundleReadStore interface {
 	// In particular, the blob data is NOT returned
 	Item(id string) (*Item, error)
 
-	// Given an extended blob id, return a stream giving the blob's contents
-	BlobContent(bid XBid) (io.Reader, error)
+	// Given an extended blob id, return a stream giving the blob's contents.
+	// While the version v is not necessary, it allows the blob content to
+	// be read using a single tape access.
+	BlobContent(id string, v VersionID, b BlobID) (io.ReadCloser, error)
 }
 
 type BlobData struct {
+	id BlobID
+	r  io.Reader
 }
 
 // BundleStore is the read and write interface to the tape store.
 type BundleStore interface {
 	BundleReadStore
-	SaveItem(*Item, []BlobData) error
+	SaveItem(*Item, VersionID, []BlobData) error
+	// DeleteBlobs(*Item, VersionID, []BlobID) error
 }
