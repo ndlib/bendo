@@ -12,8 +12,8 @@ import (
 )
 
 /*
-Low level routines to serialize and deserialize items one level above the bare
-storage interface, which is abstracted by a BS2.
+Low level routines to serialize and deserialize items from the storage
+interface, which is abstracted by a BS2.
 
 An item's metadata and blobs are grouped into "bundles", which are zip files.
 Each bundle contains the complete up-to-date metadata information on an item,
@@ -23,9 +23,13 @@ assumed to be numbered sequentially since deletions may remove some bundles.
 There is no relationship between a bundle number and the versions of an item.
 */
 
+// A romp is our item metadata registry
 type romp struct {
-	s     BS2
+	// our metadata cache store...the authoritative source is the bundles
 	items map[string]*Item
+
+	// our underlying bundle store
+	s BS2
 }
 
 // this is not thread safe on rmp
@@ -54,21 +58,21 @@ func (rmp *romp) ItemList() <-chan string {
 	return out
 }
 
-func sugar(id string, n uint) string {
+func sugar(id string, n int) string {
 	return fmt.Sprintf("%s-%04d", id, n)
 }
 
-func desugar(s string) (id string, n uint) {
+func desugar(s string) (id string, n int) {
 	z := strings.Split(s, "-")
 	if len(z) != 2 {
 		return "", 0
 	}
 	id = z[0]
-	n64, err := strconv.ParseUint(z[1], 10, 0)
+	n64, err := strconv.ParseInt(z[1], 10, 0)
 	if err != nil {
 		return "", 0
 	}
-	n = uint(n64)
+	n = int(n64)
 	return
 }
 
@@ -78,7 +82,7 @@ func (rmp *romp) Item(id string) (*Item, error) {
 		return item, nil
 	}
 	// get the highest version number somehow
-	var n uint
+	var n int
 	rc, err := rmp.openZipStream(sugar(id, n), "item-info.json")
 	if err != nil {
 		return nil, err
@@ -88,15 +92,15 @@ func (rmp *romp) Item(id string) (*Item, error) {
 	return result, err
 }
 
-func (rmp *romp) BlobContent(id string, n VersionID, b BlobID) (io.ReadCloser, error) {
-	// which version+iteration is this blob in?
+func (rmp *romp) BlobContent(id string, n int, b BlobID) (io.ReadCloser, error) {
+	// which bundle is this blob in?
 
 	sname := fmt.Sprintf("blob/%d", b)
-	return rmp.openZipStream(sugar(id, uint(n)), sname)
+	return rmp.openZipStream(sugar(id, n), sname)
 }
 
-func (rmp *romp) SaveItem(item *Item, v VersionID, bd []BlobData) error {
-	var n uint
+func (rmp *romp) SaveItem(item *Item, bd []BlobData) error {
+	var n int
 	ww, err := rmp.s.Create(sugar(item.ID, n), item.ID)
 	if err != nil {
 		return err
@@ -150,9 +154,8 @@ func (rmp *romp) openZipStream(key, sname string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rac.Close()
-	// don't leak the open rac. Close it if we did not make
-	// a zstream to hold it.
+	// Don't leak the open rac.
+	// Close it if we did not make a zstream to hold it.
 	var result *zstream
 	defer func() {
 		if result == nil {
@@ -193,7 +196,6 @@ func readItemInfo(rc io.Reader) (*Item, error) {
 	for _, ver := range fromTape.Versions {
 		v := &Version{
 			ID:        VersionID(ver.VersionID),
-			Iteration: ver.Iteration,
 			SaveDate:  ver.CreatedDate,
 			CreatedBy: ver.CreatedBy,
 			Note:      ver.Note,
@@ -203,12 +205,12 @@ func readItemInfo(rc io.Reader) (*Item, error) {
 	}
 	for _, blob := range fromTape.Blobs {
 		b := &Blob{
-			ID:            BlobID(blob.BlobID),
-			Created:       time.Now(),
-			Creator:       "",
-			Parent:        result.ID,
-			Size:          blob.ByteCount,
-			SourceVersion: VersionID(blob.OriginalVersion),
+			ID:      BlobID(blob.BlobID),
+			Created: time.Now(),
+			Creator: "",
+			Parent:  result.ID,
+			Size:    blob.ByteCount,
+			Bundle:  blob.Bundle,
 		}
 		b.MD5, _ = hex.DecodeString(blob.MD5)
 		b.SHA256, _ = hex.DecodeString(blob.SHA256)
@@ -239,21 +241,20 @@ type itemOnTape struct {
 	VersionCount    int
 	Versions        []struct {
 		VersionID   int
-		Iteration   uint
 		CreatedDate time.Time
 		SlotCount   int
-		ByteCount   int
+		ByteCount   int64
 		BlobCount   int
 		CreatedBy   string
 		Note        string
 		Slots       map[string]BlobID
 	}
 	Blobs []struct {
-		BlobID          int
-		OriginalVersion int
-		ByteCount       int
-		MD5             string
-		SHA256          string
+		BlobID    int
+		Bundle    int
+		ByteCount int64
+		MD5       string
+		SHA256    string
 	}
 	Deleted []struct {
 		BlobID      string

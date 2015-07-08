@@ -9,19 +9,6 @@ import (
 	"testing"
 )
 
-func TestDecodeID(t *testing.T) {
-	var table = []struct{ input, output string }{
-		{"xyz-0001-1.zip", "xyz"},
-		{"b930agg8z-002003-30.zip", "b930agg8z"},
-	}
-	for _, s := range table {
-		result := decodeID(s.input)
-		if result != s.output {
-			t.Errorf("Got %s, expected %s", result, s.output)
-		}
-	}
-}
-
 func TestItemSubdir(t *testing.T) {
 	var table = []struct{ input, output string }{
 		{"x", "x/"},
@@ -53,9 +40,13 @@ func TestWalkTree(t *testing.T) {
 		"a/c/asd-0003-2.zip",
 	}
 	var goal = []string{
-		"xyz",
-		"qwe",
-		"asd",
+		"xyz-0001-1",
+		"xyz-0002-1",
+		"qwe-0001-2",
+		"qwe-0002-1",
+		"asd-0001-1",
+		"asd-0002-1",
+		"asd-0003-2",
 	}
 	dir := makeTmpTree(files)
 	defer os.RemoveAll(dir)
@@ -89,51 +80,4 @@ func makeTmpTree(files []string) string {
 		}
 	}
 	return root
-}
-
-func TestMostRecent(t *testing.T) {
-	var files = []string{
-		"wx/",
-		"wx/yz/",
-		"wx/yz/wxyz55-0001-2.zip",
-		"wx/yz/wxyz55-0002-1.zip",
-		"wx/yz/wxyz55-0003-1.zip",
-		"wx/yz/wxyz55-0004-30.zip",
-		"wx/yz/wxyz55-0005-1.zip",
-		"wx/yz/wxyz66-0001-1.zip",
-	}
-	var table = []struct {
-		input, output string
-		err           error
-	}{
-		{"wxyz55", "wx/yz/wxyz55-0005-1.zip", nil},
-		{"wxyz66", "wx/yz/wxyz66-0001-1.zip", nil},
-		{"wxyz67", "", ErrNoItem},
-	}
-	dir := makeTmpTree(files)
-	defer os.RemoveAll(dir)
-	store := &store{root: dir}
-	for _, tab := range table {
-		result, err := store.mostRecent(tab.input)
-		fullPath := filepath.Join(dir, tab.output)
-		if err != tab.err ||
-			(tab.output != "" && result != fullPath) {
-			t.Errorf("Got (%s,%s) for %s expected (%s, %s)",
-				result, err, tab.input, fullPath, tab.err)
-		}
-	}
-}
-
-func TestSaveRoundtrip(t *testing.T) {
-	var item = &Item{
-		ID: "abcd5",
-	}
-	dir := makeTmpTree(nil)
-	//defer os.RemoveAll(dir)
-	store := &store{root: dir}
-	err := store.SaveItem(item, 1, nil)
-	if err != nil {
-		t.Errorf("Got error %s", err)
-	}
-	fmt.Println(dir)
 }

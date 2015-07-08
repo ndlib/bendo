@@ -39,17 +39,17 @@ type Blob struct {
 	Created time.Time
 	Creator string
 	Parent  string // the parent item's id
-	Size    int    // logical size of associated content (i.e. before compression), 0 if deleted
+	Size    int64  // logical size of associated content (i.e. before compression), 0 if deleted
 
-	// valid if not deleted
+	// following valid if blob is NOT deleted
 	MD5            []byte    // unused if Size == 0
 	SHA256         []byte    // unused if Size == 0
 	ChecksumDate   time.Time // unused if Size == 0
 	ChecksumStatus bool      // true == pass, false == error. Only valid if ChecksumDate > 0
 	Cached         bool      // true == in our disk cache
-	SourceVersion  VersionID // the version file this blob is in
+	Bundle         int       // which bundle file this blob is stored in
 
-	// following valid if item is deleted
+	// following valid if blob is deleted
 	Deleted    time.Time // 0 value if not deleted
 	Deleter    string    // empty iff not deleted
 	DeleteNote string    // optional note for deletion event
@@ -58,7 +58,6 @@ type Blob struct {
 type Version struct {
 	m         sync.RWMutex
 	ID        VersionID
-	Iteration uint
 	SaveDate  time.Time
 	CreatedBy string
 	Note      string
@@ -83,15 +82,13 @@ type BundleReadStore interface {
 	// when the scanning is finished.
 	ItemList() <-chan string
 
-	// given an item's ID, return a new structure containing metadata
+	// Given an item's ID, return a new structure containing metadata
 	// about that item, including all versions and blob metadata.
 	// In particular, the blob data is NOT returned
 	Item(id string) (*Item, error)
 
-	// Given an extended blob id, return a stream giving the blob's contents.
-	// While the version v is not necessary, it allows the blob content to
-	// be read using a single tape access.
-	BlobContent(id string, v VersionID, b BlobID) (io.ReadCloser, error)
+	// Return a stream containing the blob's contents.
+	BlobContent(id string, b BlobID) (io.ReadCloser, error)
 }
 
 type BlobData struct {
@@ -99,11 +96,35 @@ type BlobData struct {
 	r  io.Reader
 }
 
-// BundleStore is the read and write interface to the tape store.
+// BundleStore is the high level read and write interface
 type BundleStore interface {
 	BundleReadStore
-	SaveItem(*Item, VersionID, []BlobData) error
-	// DeleteBlobs(*Item, VersionID, []BlobID) error
+
+	// Start an update transaction on an item. There can be at most one
+	// update transaction at a time per item.
+	NewTransaction(id string) Transaction
+}
+
+// type Transaction is not tread safe
+type Transaction interface {
+	// r needs to be open until the end of the transaction.
+	// No deduplication checks are performed on the blob.
+	// Will modify the ID in the record to be the new value
+	AddBlob(b *Blob, r io.Reader) BlobID
+
+	// Add a new version to the item
+	AddVersion(v *Version) VersionID
+
+	// Purge the given blob from the underlying storage.
+	// Use this with caution.
+	DeleteBlob(b BlobID)
+
+	// Commits this given transaction to tape and releases the transaction
+	// lock on the underlying item.
+	Commit() error
+
+	// Cancels this transaction and releases all the locks
+	Cancel()
 }
 
 type ReadAtCloser interface {
@@ -115,6 +136,6 @@ type BS2 interface {
 	List() <-chan string
 	ListPrefix(prefix string) ([]string, error)
 	Open(key string, id string) (ReadAtCloser, int64, error)
-	Create(key string, id string) (io.WriteCloser, error)
-	Delete(key string) error
+	Create(key, id string) (io.WriteCloser, error)
+	Delete(key, id string) error
 }
