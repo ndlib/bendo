@@ -2,8 +2,6 @@ package bendo
 
 import (
 	"archive/zip"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -12,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 // store is used to implement both the TapeStore and the FSStore.
@@ -101,7 +98,16 @@ func (s *store) Item(id string) (*Item, error) {
 
 const (
 	maxSaveIterations = 100
-	fileTemplate      = "%s-%04d-%d.zip"
+
+	// A given item named abcdefg will be stored as a group of key-value
+	// pairs. Each key will have a name in the form:
+	//     abcdefg-VVVV-I
+	// where VVVV is the `version number`, and `I` is the iteration number.
+	//
+	// The FS store will group keys into a directory hierarchy which has
+	// the form
+	//     ab/cd/abcdefg-VVVV-I
+	fileTemplate = "%s-%04d-%d.zip"
 )
 
 var (
@@ -188,89 +194,6 @@ func readZipFile(fname string) (*Item, error) {
 	return result, err
 }
 
-func readItemInfo(rc io.Reader) (*Item, error) {
-	var fromTape itemOnTape
-	decoder := json.NewDecoder(rc)
-	err := decoder.Decode(fromTape)
-	if err != nil {
-		return nil, err
-	}
-	result := &Item{
-		ID: fromTape.ItemID,
-	}
-	for _, ver := range fromTape.Versions {
-		v := &Version{
-			ID:        VersionID(ver.VersionID),
-			Iteration: ver.Iteration,
-			SaveDate:  ver.CreatedDate,
-			CreatedBy: ver.CreatedBy,
-			Note:      ver.Note,
-			Slots:     ver.Slots,
-		}
-		result.versions = append(result.versions, v)
-	}
-	for _, blob := range fromTape.Blobs {
-		b := &Blob{
-			ID:            BlobID(blob.BlobID),
-			Created:       time.Now(),
-			Creator:       "",
-			Parent:        result.ID,
-			Size:          blob.ByteCount,
-			SourceVersion: VersionID(blob.OriginalVersion),
-		}
-		b.MD5, _ = hex.DecodeString(blob.MD5)
-		b.SHA256, _ = hex.DecodeString(blob.SHA256)
-		result.blobs = append(result.blobs, b)
-	}
-	// TODO(dbrower): handle deleted blobs
-	return result, nil
-}
-
-func writeItemInfo(w io.Writer, item *Item) error {
-	itemStore := itemOnTape{
-		ItemID: item.ID,
-	}
-	encoder := json.NewEncoder(w)
-	return encoder.Encode(itemStore)
-}
-
-// on tape serialization data.
-// Use this indirection so that we can change Item without worrying about
-// being able to read data previously serialized
-type itemOnTape struct {
-	ItemID          string
-	ByteCount       int
-	ActiveByteCount int
-	BlobCount       int
-	CreatedDate     time.Time
-	ModifiedDate    time.Time
-	VersionCount    int
-	Versions        []struct {
-		VersionID   int
-		Iteration   uint
-		CreatedDate time.Time
-		SlotCount   int
-		ByteCount   int
-		BlobCount   int
-		CreatedBy   string
-		Note        string
-		Slots       map[string]BlobID
-	}
-	Blobs []struct {
-		BlobID          int
-		OriginalVersion int
-		ByteCount       int
-		MD5             string
-		SHA256          string
-	}
-	Deleted []struct {
-		BlobID      string
-		DeletedBy   string
-		DeletedDate time.Time
-		Note        string
-	}
-}
-
 // Track the open archive file so it can be closed.
 // the embedded ReadCloser is for the actual blob content.
 type archiveStream struct {
@@ -308,7 +231,6 @@ func (s *store) readZipStream(fname string, blob BlobID) (*archiveStream, error)
 	}()
 
 	streamName := fmt.Sprintf("blob/%d", blob)
-	// find info file
 	for _, f := range z.File {
 		if f.Name != streamName {
 			continue

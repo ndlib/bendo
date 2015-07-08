@@ -105,3 +105,16 @@ type BundleStore interface {
 	SaveItem(*Item, VersionID, []BlobData) error
 	// DeleteBlobs(*Item, VersionID, []BlobID) error
 }
+
+type ReadAtCloser interface {
+	io.ReaderAt
+	io.Closer
+}
+
+type BS2 interface {
+	List() <-chan string
+	ListPrefix(prefix string) ([]string, error)
+	Open(key string, id string) (ReadAtCloser, int64, error)
+	Create(key string, id string) (io.WriteCloser, error)
+	Delete(key string) error
+}

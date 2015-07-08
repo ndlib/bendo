@@ -123,3 +123,17 @@ func TestMostRecent(t *testing.T) {
 		}
 	}
 }
+
+func TestSaveRoundtrip(t *testing.T) {
+	var item = &Item{
+		ID: "abcd5",
+	}
+	dir := makeTmpTree(nil)
+	//defer os.RemoveAll(dir)
+	store := &store{root: dir}
+	err := store.SaveItem(item, 1, nil)
+	if err != nil {
+		t.Errorf("Got error %s", err)
+	}
+	fmt.Println(dir)
+}
