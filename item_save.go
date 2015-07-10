@@ -17,7 +17,7 @@ interface, which is abstracted by a BS2.
 
 An item's metadata and blobs are grouped into "bundles", which are zip files.
 Each bundle contains the complete up-to-date metadata information on an item,
-as well as some number of blobs. Bundles are numbered, but they should not be
+as well as zero or more blobs. Bundles are numbered, but they should not be
 assumed to be numbered sequentially since deletions may remove some bundles.
 
 There is no relationship between a bundle number and the versions of an item.
@@ -53,15 +53,18 @@ func (rmp *romp) ItemList() <-chan string {
 			}
 			// add this version info
 		}
-		rmp.items = items
+		rmp.items = items // not thread safe because of this
 	}()
 	return out
 }
 
+// turn an item id and a bundle number n into a string key
 func sugar(id string, n int) string {
 	return fmt.Sprintf("%s-%04d", id, n)
 }
 
+// extract an item id and a bundle number from a string key
+// return an id of "" if the key could not be decoded
 func desugar(s string) (id string, n int) {
 	z := strings.Split(s, "-")
 	if len(z) != 2 {

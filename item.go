@@ -16,7 +16,7 @@ import (
 type rompTx struct {
 	rmp   *romp
 	isnew bool
-	item  *Item
+	item  *Item // we hold the lock on item.
 	blobs []blobData
 	del   []BlobID
 	vers  []Version

@@ -33,6 +33,11 @@ type VersionID int
 // Blob records metadata for each blob. We keep one blob structure in memory
 // for each blob on tape and share it. Use the mutex if making updates.
 // The blob structures are backed by a database layer
+//
+// This mixes together 3 levels of information:
+//   1. that saved on tape
+//   2. operational info saved to our caching database
+//   3. in memory data used by the program
 type Blob struct {
 	m       sync.RWMutex
 	ID      BlobID
@@ -42,12 +47,11 @@ type Blob struct {
 	Size    int64  // logical size of associated content (i.e. before compression), 0 if deleted
 
 	// following valid if blob is NOT deleted
+	Bundle         int       // which bundle file this blob is stored in
 	MD5            []byte    // unused if Size == 0
 	SHA256         []byte    // unused if Size == 0
 	ChecksumDate   time.Time // unused if Size == 0
 	ChecksumStatus bool      // true == pass, false == error. Only valid if ChecksumDate > 0
-	Cached         bool      // true == in our disk cache
-	Bundle         int       // which bundle file this blob is stored in
 
 	// following valid if blob is deleted
 	Deleted    time.Time // 0 value if not deleted
@@ -67,6 +71,7 @@ type Version struct {
 type Item struct {
 	m        sync.RWMutex
 	ID       string
+	nbundles int
 	blobs    []*Blob
 	versions []*Version
 }
@@ -119,8 +124,8 @@ type Transaction interface {
 	// Use this with caution.
 	DeleteBlob(b BlobID)
 
-	// Commits this given transaction to tape and releases the transaction
-	// lock on the underlying item.
+	// Commits this given transaction to tape and releases the underlying
+	// transaction lock on the item.
 	Commit() error
 
 	// Cancels this transaction and releases all the locks
