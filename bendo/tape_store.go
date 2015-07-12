@@ -17,11 +17,11 @@ type store struct {
 	rest url.URL
 }
 
-func NewTapeStore(root string, api url.URL) BS2 {
+func NewTapeStore(root string, api url.URL) BundleStore {
 	return &store{root: root, rest: api}
 }
 
-func NewFSStore(root string) BS2 {
+func NewFSStore(root string) BundleStore {
 	return &store{root: root}
 }
 

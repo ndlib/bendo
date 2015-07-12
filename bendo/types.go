@@ -80,7 +80,7 @@ type Item struct {
 // above this, so implementations of this interface should not cache data.
 // This interface serialized the Item data, but otherwise does not use it.
 // These methods should be thread safe.
-type BundleReadStore interface {
+type BundleReadStoreX interface {
 	// ItemList starts a goroutine to scan the items on tape
 	// and returns its results in the channel. the channel is closed
 	// when the scanning is finished.
@@ -89,6 +89,9 @@ type BundleReadStore interface {
 	// Given an item's ID, return a new structure containing metadata
 	// about that item, including all versions and blob metadata.
 	// In particular, the blob data is NOT returned
+	//
+	// If the item is known to exist, and its metadata has not been
+	// loaded from tape, this will block while loading the meatadata from tape
 	Item(id string) (*Item, error)
 
 	// Return a stream containing the blob's contents.
@@ -101,12 +104,12 @@ type BlobData struct {
 }
 
 // BundleStore is the high level read and write interface
-type BundleStore interface {
-	BundleReadStore
+type BundleStoreX interface {
+	BundleReadStoreX
 
 	// Start an update transaction on an item. There can be at most one
 	// update transaction at a time per item.
-	NewTransaction(id string) Transaction
+	Update(id string) Transaction
 }
 
 // type Transaction is not tread safe
@@ -136,7 +139,7 @@ type ReadAtCloser interface {
 	io.Closer
 }
 
-type BS2 interface {
+type BundleStore interface {
 	List() <-chan string
 	ListPrefix(prefix string) ([]string, error)
 	Open(key string, id string) (ReadAtCloser, int64, error)

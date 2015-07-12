@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -16,7 +17,7 @@ import (
 
 /*
 Low level routines to serialize and deserialize items from the storage
-interface, which is abstracted by a BS2.
+interface, which is abstracted by a BundleStore.
 
 An item's metadata and blobs are grouped into "bundles", which are zip files.
 Each bundle contains the complete up-to-date metadata information on an item,
@@ -32,7 +33,13 @@ type romp struct {
 	items map[string]*Item
 
 	// our underlying bundle store
-	s BS2
+	s BundleStore
+}
+
+func NewRomp(s BundleStore) BundleReadStoreX {
+	return &romp{items: make(map[string]*Item),
+		s: s,
+	}
 }
 
 // this is not thread safe on rmp
@@ -98,7 +105,9 @@ func (rmp *romp) Item(id string) (*Item, error) {
 	return result, err
 }
 
-func (rmp *romp) BlobContent(id string, n int, b BlobID) (io.ReadCloser, error) {
+//func (rmp *romp) BlobContent(id string, n int, b BlobID) (io.ReadCloser, error) {
+func (rmp *romp) BlobContent(id string, b BlobID) (io.ReadCloser, error) {
+	var n = 1
 	// which bundle is this blob in?
 
 	sname := fmt.Sprintf("blob/%d", b)
@@ -254,6 +263,10 @@ func (r *parentReadCloser) Close() error {
 	return r.parent.Close()
 }
 
+var (
+	ErrNotFound = errors.New("stream not found")
+)
+
 func (rmp *romp) openZipStream(key, sname string) (io.ReadCloser, error) {
 	rac, size, err := rmp.s.Open(key, key)
 	if err != nil {
@@ -271,6 +284,7 @@ func (rmp *romp) openZipStream(key, sname string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
+	err = ErrNotFound
 	for _, f := range z.File {
 		if f.Name != sname {
 			continue
