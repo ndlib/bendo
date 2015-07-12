@@ -2,6 +2,9 @@ package bendo
 
 import (
 	"archive/zip"
+	"bytes"
+	"crypto/md5"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -102,54 +105,153 @@ func (rmp *romp) BlobContent(id string, n int, b BlobID) (io.ReadCloser, error) 
 	return rmp.openZipStream(sugar(id, n), sname)
 }
 
-func (rmp *romp) SaveItem(item *Item, bd []BlobData) error {
-	var n int
-	ww, err := rmp.s.Create(sugar(item.ID, n), item.ID)
+// save all the blobs, and then updates the blob info in Item and writes that out
+// the Bundle, MD5, SHA256, and Size fields for the new blobs are verified (and set if they
+// were not initialized)
+func (rmp *romp) SaveItem(item *Item, n int, bd []BlobData) error {
+	zf, err := rmp.s.Create(sugar(item.ID, n), item.ID)
 	if err != nil {
 		return err
 	}
-	defer ww.Close()
-	z := zip.NewWriter(ww)
+	defer zf.Close()
+	z := zip.NewWriter(zf)
 	defer z.Close()
-	// write out the item data
-	header := zip.FileHeader{
-		Name:   "item-info.json",
-		Method: zip.Store,
-	}
-	w, err := z.CreateHeader(&header)
-	if err != nil {
-		return err
-	}
-	err = writeItemInfo(w, item)
-	if err != nil {
-		return err
-	}
 	// write out all the blobs
 	for _, blob := range bd {
-		header := zip.FileHeader{
-			Name:   "blob/%d", // blob.id
-			Method: zip.Store,
+		b := item.blobByID(blob.id)
+		if b == nil {
+			panic("Save blob with id not in blob list")
 		}
-		w, err := z.CreateHeader(&header)
+		w, err := makeStream(z, fmt.Sprintf("blob/%d", blob.id))
 		if err != nil {
 			return err
 		}
+		md5 := md5.New()
+		sha256 := sha256.New()
+		sz := &writeSizer{}
+		w = io.MultiWriter(w, md5, sha256, sz)
 		_, err = io.Copy(w, blob.r)
 		if err != nil {
 			return err
 		}
+		// Don't update created timestamp, since the blob may be being
+		// copied because of a purge
+		b.Bundle = n
+		if b.Size > 0 && b.Size != sz.Size() {
+			// the size counts don't match
+		} else {
+			b.Size = sz.Size()
+		}
+		h := md5.Sum(nil)
+		if b.MD5 != nil && bytes.Compare(b.MD5, h) != 0 {
+		} else {
+			b.MD5 = h
+		}
+		h = sha256.Sum(nil)
+		if b.SHA256 != nil && bytes.Compare(b.SHA256, h) != 0 {
+		} else {
+			b.SHA256 = h
+		}
 	}
-	return nil
+	// write out the item data
+	w, err := makeStream(z, "item-info.json")
+	if err != nil {
+		return err
+	}
+	return writeItemInfo(w, item)
 }
 
-type zstream struct {
+func makeStream(z *zip.Writer, name string) (io.Writer, error) {
+	header := zip.FileHeader{
+		Name:   name,
+		Method: zip.Store,
+	}
+	return z.CreateHeader(&header)
+}
+
+type writeSizer struct {
+	size int64
+}
+
+func (ws *writeSizer) Write(p []byte) (int, error) {
+	ws.size += int64(len(p))
+	return len(p), nil
+}
+
+func (ws *writeSizer) Size() int64 {
+	return ws.size
+}
+
+// copies all the blobs in the bundle src to the (new) bundle target, except for blobs with an id
+// in except.
+func (rmp *romp) copyBundleExcept(item *Item, src, target int, except []BlobID) error {
+	rac, size, err := rmp.s.Open(sugar(item.ID, src), item.ID)
+	if err != nil {
+		return err
+	}
+	defer rac.Close()
+	z, err := zip.NewReader(rac, size)
+	if err != nil {
+		return err
+	}
+	var badnames = []string{"item-info.json"}
+	for _, i := range except {
+		badnames = append(badnames, fmt.Sprintf("blob/%d", i))
+	}
+	var toclose []io.ReadCloser
+	var blobcopies []BlobData
+	defer func() {
+		for i := range toclose {
+			toclose[i].Close()
+		}
+	}()
+	for _, f := range z.File {
+		if contains(badnames, f.Name) {
+			continue
+		}
+		var rc io.ReadCloser
+		rc, err = f.Open()
+		if err == nil {
+			toclose = append(toclose, rc)
+			blobcopies = append(blobcopies,
+				BlobData{id: extractBlobId(f.Name),
+					r: rc})
+		}
+	}
+	rmp.SaveItem(item, target, blobcopies)
+	return err
+}
+
+func contains(lst []string, s string) bool {
+	for i := range lst {
+		if lst[i] == s {
+			return true
+		}
+	}
+	return false
+}
+
+// from "blob/xxx" return xxx as a BlobID
+func extractBlobId(s string) BlobID {
+	sa := strings.SplitN(s, "/", 2)
+	if len(sa) != 2 || sa[0] != "blob" {
+		return BlobID(0)
+	}
+	id, err := strconv.ParseInt(sa[1], 10, 0)
+	if err != nil {
+		id = 0
+	}
+	return BlobID(id)
+}
+
+type parentReadCloser struct {
 	parent io.Closer
 	io.ReadCloser
 }
 
-func (zs *zstream) Closer() error {
-	zs.ReadCloser.Close()
-	return zs.parent.Close()
+func (r *parentReadCloser) Close() error {
+	r.ReadCloser.Close()
+	return r.parent.Close()
 }
 
 func (rmp *romp) openZipStream(key, sname string) (io.ReadCloser, error) {
@@ -159,7 +261,7 @@ func (rmp *romp) openZipStream(key, sname string) (io.ReadCloser, error) {
 	}
 	// Don't leak the open rac.
 	// Close it if we did not make a zstream to hold it.
-	var result *zstream
+	var result *parentReadCloser
 	defer func() {
 		if result == nil {
 			rac.Close()
@@ -176,7 +278,7 @@ func (rmp *romp) openZipStream(key, sname string) (io.ReadCloser, error) {
 		var rc io.ReadCloser
 		rc, err = f.Open()
 		if err == nil {
-			result = &zstream{
+			result = &parentReadCloser{
 				parent:     rac,
 				ReadCloser: rc,
 			}
@@ -211,7 +313,6 @@ func readItemInfo(rc io.Reader) (*Item, error) {
 			ID:      BlobID(blob.BlobID),
 			Created: time.Now(),
 			Creator: "",
-			Parent:  result.ID,
 			Size:    blob.ByteCount,
 			Bundle:  blob.Bundle,
 		}

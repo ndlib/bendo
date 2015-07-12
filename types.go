@@ -43,8 +43,7 @@ type Blob struct {
 	ID      BlobID
 	Created time.Time
 	Creator string
-	Parent  string // the parent item's id
-	Size    int64  // logical size of associated content (i.e. before compression), 0 if deleted
+	Size    int64 // logical size of associated content (i.e. before compression), 0 if deleted
 
 	// following valid if blob is NOT deleted
 	Bundle         int       // which bundle file this blob is stored in
@@ -54,7 +53,7 @@ type Blob struct {
 	ChecksumStatus bool      // true == pass, false == error. Only valid if ChecksumDate > 0
 
 	// following valid if blob is deleted
-	Deleted    time.Time // 0 value if not deleted
+	Deleted    time.Time // zero iff not deleted
 	Deleter    string    // empty iff not deleted
 	DeleteNote string    // optional note for deletion event
 }
@@ -69,11 +68,11 @@ type Version struct {
 }
 
 type Item struct {
-	m        sync.RWMutex
-	ID       string
-	nbundles int
-	blobs    []*Blob
-	versions []*Version
+	m         sync.RWMutex
+	ID        string
+	maxBundle int        // largest bundle id used by this item
+	blobs     []*Blob    // list of blobs, sorted by id
+	versions  []*Version // list of versions, sorted by it
 }
 
 // BundleReadStore is the read only part of the underlying tape store.

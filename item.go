@@ -63,7 +63,7 @@ func (tx *rompTx) DeleteBlob(b BlobID) {
 }
 
 func (tx *rompTx) Commit() error {
-	// remove any new blobs which were deleted
+	// remove any new blobs that were deleted
 	cutoff := len(tx.item.blobs)
 	for i, did := range tx.del {
 		if int(did) <= cutoff {
@@ -100,4 +100,16 @@ func (tx *rompTx) doDeletes() {
 	}
 	// now rewrite each bundle
 
+}
+
+func (item *Item) blobByID(id BlobID) *Blob {
+	item.m.RLock()
+	for _, b := range item.blobs {
+		if b.ID == id {
+			item.m.Unlock()
+			return b
+		}
+	}
+	item.m.Unlock()
+	return nil
 }
