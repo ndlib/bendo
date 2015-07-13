@@ -12,13 +12,6 @@ import (
 /*
 Low level routines to serialize and deserialize items from the storage
 interface, which is abstracted by a BundleStore.
-
-An item's metadata and blobs are grouped into "bundles", which are zip files.
-Each bundle contains the complete up-to-date metadata information on an item,
-as well as zero or more blobs. Bundles are numbered, but they should not be
-assumed to be numbered sequentially since deletions may remove some bundles.
-
-There is no relationship between a bundle number and the versions of an item.
 */
 
 type parentReadCloser struct {
@@ -35,8 +28,8 @@ var (
 	ErrNotFound = errors.New("stream not found")
 )
 
-func (rmp *romp) openZipStream(key, sname string) (io.ReadCloser, error) {
-	rac, size, err := rmp.s.Open(key, key)
+func (dty *Directory) openZipStream(key, sname string) (io.ReadCloser, error) {
+	rac, size, err := dty.s.Open(key, key)
 	if err != nil {
 		return nil, err
 	}

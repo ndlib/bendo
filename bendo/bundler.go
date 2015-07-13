@@ -17,7 +17,7 @@ when doing deletions.
 */
 
 type bundler struct {
-	rmp  *romp
+	dty  *Directory
 	item *Item
 	zf   io.WriteCloser // the underlying bundle file
 	zw   *zip.Writer    // the zip interface over the bundle file
@@ -27,9 +27,9 @@ type bundler struct {
 
 // make new bundle writer for item. n is the new bundle number to start with.
 // more than one bundle may be written.
-func (rmp *romp) newBundler(item *Item, n int) *bundler {
+func (dty *Directory) newBundler(item *Item, n int) *bundler {
 	return &bundler{
-		rmp:  rmp,
+		dty:  dty,
 		item: item,
 		n:    n,
 	}
@@ -37,7 +37,7 @@ func (rmp *romp) newBundler(item *Item, n int) *bundler {
 
 func (b *bundler) openNext() error {
 	var err error
-	b.zf, err = b.rmp.s.Create(sugar(b.item.ID, b.n), b.item.ID)
+	b.zf, err = b.dty.s.Create(sugar(b.item.ID, b.n), b.item.ID)
 	if err != nil {
 		return err
 	}
@@ -148,7 +148,7 @@ func (b *bundler) copyBundleExcept(src int, except []BlobID) error {
 	// reading. Can this be refactored to use the same code base. The difference
 	// here is that we are scanning EVERYTHING in the bundle rather than
 	// looking for a specific file.
-	rac, size, err := b.rmp.s.Open(sugar(b.item.ID, src), b.item.ID)
+	rac, size, err := b.dty.s.Open(sugar(b.item.ID, src), b.item.ID)
 	if err != nil {
 		return err
 	}

@@ -18,8 +18,8 @@ import (
 // Knowledge of type (2) requires reading from tape. So we will fill it in
 // on demand and selectively in the background.
 
-// A romp is our item metadata registry
-type romp struct {
+// A Directory is our item metadata registry
+type Directory struct {
 	// the metadata cache store...the authoritative source is the bundles
 	cache ItemCache
 
@@ -31,19 +31,19 @@ type romp struct {
 }
 
 func NewRomp(s BundleStore) T {
-	return &romp{
+	return &Directory{
 		cache:     NewMemoryCache(),
 		maxBundle: make(map[string]int),
 		s:         s,
 	}
 }
 
-// this is not thread safe on rmp
-func (rmp *romp) ItemList() <-chan string {
+// this is not thread safe on dty
+func (dty *Directory) ItemList() <-chan string {
 	out := make(chan string)
 	go func() {
-		rmp.updateMaxBundle()
-		for k, _ := range rmp.maxBundle {
+		dty.updateMaxBundle()
+		for k, _ := range dty.maxBundle {
 			out <- k
 		}
 		close(out)
@@ -51,9 +51,9 @@ func (rmp *romp) ItemList() <-chan string {
 	return out
 }
 
-func (rmp *romp) updateMaxBundle() {
+func (dty *Directory) updateMaxBundle() {
 	var maxes = make(map[string]int)
-	c := rmp.s.List()
+	c := dty.s.List()
 	for key := range c {
 		id, n := desugar(key)
 		if id == "" {
@@ -64,8 +64,8 @@ func (rmp *romp) updateMaxBundle() {
 			maxes[id] = n
 		}
 	}
-	rmp.maxBundle = maxes // not thread safe because of this
-	rmp.scanned = true    // and this
+	dty.maxBundle = maxes // not thread safe because of this
+	dty.scanned = true    // and this
 }
 
 // turn an item id and a bundle number n into a string key
@@ -94,41 +94,40 @@ var (
 	ErrNoItem   = errors.New("no item, bad item id")
 )
 
-func (rmp *romp) Item(id string) (*Item, error) {
-	item := rmp.cache.Lookup(id)
+func (dty *Directory) Item(id string) (*Item, error) {
+	item := dty.cache.Lookup(id)
 	if item == nil {
 		return item, nil
 	}
-	if !rmp.scanned {
+	if !dty.scanned {
 		return nil, ErrTryAgain
 	}
 	// get the highest version number somehow
-	n := rmp.maxBundle[id]
+	n := dty.maxBundle[id]
 	if n == 0 {
 		return nil, ErrNoItem
 	}
-	rc, err := rmp.openZipStream(sugar(id, n), "item-info.json")
+	rc, err := dty.openZipStream(sugar(id, n), "item-info.json")
 	if err != nil {
 		return nil, err
 	}
 	result, err := readItemInfo(rc)
 	rc.Close()
 	if err == nil {
-		rmp.cache.Set(id, result)
+		dty.cache.Set(id, result)
 	}
 	return result, err
 }
 
-//func (rmp *romp) BlobContent(id string, n int, b BlobID) (io.ReadCloser, error) {
-func (rmp *romp) Blob(id string, b BlobID) (io.ReadCloser, error) {
+func (dty *Directory) Blob(id string, b BlobID) (io.ReadCloser, error) {
 	var n = 1
 	// which bundle is this blob in?
 
 	sname := fmt.Sprintf("blob/%d", b)
-	return rmp.openZipStream(sugar(id, n), sname)
+	return dty.openZipStream(sugar(id, n), sname)
 }
 
-func (rmp *romp) Validate(id string) (int64, []string, error) {
+func (dty *Directory) Validate(id string) (int64, []string, error) {
 	return 0, nil, nil
 }
 

@@ -5,8 +5,8 @@ import (
 	"sort"
 )
 
-type rompTx struct {
-	rmp   *romp
+type dTx struct {
+	dty   *Directory
 	isnew bool
 	item  *Item // we hold the lock on item.
 	blobs []blobData
@@ -26,9 +26,9 @@ func (p bySize) Len() int           { return len(p) }
 func (p bySize) Less(i, j int) bool { return p[i].b.Size < p[j].b.Size }
 func (p bySize) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
-func (rmp *romp) Update(id string) Transaction {
-	tx := &rompTx{rmp: rmp}
-	item := rmp.cache.Lookup(id)
+func (dty *Directory) Update(id string) Transaction {
+	tx := &dTx{dty: dty}
+	item := dty.cache.Lookup(id)
 	if item == nil {
 		// this is a new item
 		item = &Item{ID: id}
@@ -39,7 +39,7 @@ func (rmp *romp) Update(id string) Transaction {
 	return tx
 }
 
-func (tx *rompTx) Cancel() {
+func (tx *dTx) Cancel() {
 	tx.item.m.Unlock()
 }
 
@@ -47,7 +47,7 @@ func (tx *rompTx) Cancel() {
 // r must be open until after Commit() or Cancel() are called.
 //
 // not thread safe
-func (tx *rompTx) AddBlob(b *Blob, r io.Reader) BlobID {
+func (tx *dTx) AddBlob(b *Blob, r io.Reader) BlobID {
 	// blob ids are 1 based
 	if tx.next == 0 {
 		blen := len(tx.item.blobs)
@@ -63,7 +63,7 @@ func (tx *rompTx) AddBlob(b *Blob, r io.Reader) BlobID {
 	return b.ID
 }
 
-func (tx *rompTx) AddVersion(v *Version) VersionID {
+func (tx *dTx) AddVersion(v *Version) VersionID {
 	n := VersionID(len(tx.item.versions) + len(tx.vers))
 	v.ID = n
 	tx.vers = append(tx.vers, *v)
@@ -77,7 +77,7 @@ func (tx *rompTx) AddVersion(v *Version) VersionID {
 // There can be holes in blob ids if, say, two blobs are added and then
 // the first one is deleted while the transaction is still open. We cannot renumber the
 // second blob, so there will be a gap in the ids where the first blob was.
-func (tx *rompTx) DeleteBlob(b BlobID) {
+func (tx *dTx) DeleteBlob(b BlobID) {
 	// is this blob in the new blob list? if so, remove it from the list
 	for j, bx := range tx.blobs {
 		if bx.b.ID == b {
@@ -88,13 +88,13 @@ func (tx *rompTx) DeleteBlob(b BlobID) {
 	tx.del = append(tx.del, b)
 }
 
-func (tx *rompTx) Commit() error {
+func (tx *dTx) Commit() error {
 	// TODO(dbrower): add error handling
 
 	// Update item metadata
 
 	//
-	b := tx.rmp.newBundler(tx.item, tx.item.maxBundle+1)
+	b := tx.dty.newBundler(tx.item, tx.item.maxBundle+1)
 
 	// First handle deletions
 	tx.doDeletes(b)
@@ -114,7 +114,7 @@ func (tx *rompTx) Commit() error {
 	return nil
 }
 
-func (tx *rompTx) doDeletes(b *bundler) {
+func (tx *dTx) doDeletes(b *bundler) {
 	// gather up which bundles need to be rewritten
 	var bundles []int
 	for _, id := range tx.del {
