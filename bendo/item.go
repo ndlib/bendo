@@ -1,8 +1,10 @@
 package bendo
 
 import (
+	"fmt"
 	"io"
-	"sort"
+	"strconv"
+	"strings"
 )
 
 //// handle interface to loading and saving items
@@ -14,139 +16,102 @@ import (
 // Knowledge of type (2) requires reading from tape. So we will fill it in
 // on demand and selectively in the background.
 
-type rompTx struct {
-	rmp   *romp
-	isnew bool
-	item  *Item // we hold the lock on item.
-	blobs []blobData
-	next  BlobID
-	del   []BlobID
-	vers  []Version
+// A romp is our item metadata registry
+type romp struct {
+	// the metadata cache store...the authoritative source is the bundles
+	items map[string]*Item
+
+	maxBundle map[string]int
+
+	// the underlying bundle store
+	s BundleStore
 }
 
-type blobData struct {
-	b *Blob
-	r io.Reader
+func NewRomp(s BundleStore) T {
+	return &romp{
+		items:     make(map[string]*Item),
+		maxBundle: make(map[string]int),
+		s:         s,
+	}
 }
 
-type bySize []blobData
+// this is not thread safe on rmp
+func (rmp *romp) ItemList() <-chan string {
+	out := make(chan string)
+	go func() {
+		rmp.updateMaxBundle()
+		for k, _ := range rmp.maxBundle {
+			out <- k
+		}
+		close(out)
+	}()
+	return out
+}
 
-func (p bySize) Len() int           { return len(p) }
-func (p bySize) Less(i, j int) bool { return p[i].b.Size < p[j].b.Size }
-func (p bySize) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (rmp *romp) updateMaxBundle() {
+	var maxes = make(map[string]int)
+	c := rmp.s.List()
+	for key := range c {
+		id, n := desugar(key)
+		if id == "" {
+			continue
+		}
+		mx := maxes[id]
+		if n > mx {
+			maxes[id] = n
+		}
+	}
+	rmp.maxBundle = maxes // not thread safe because of this
+}
 
-func (rmp *romp) NewTransaction(id string) Transaction {
-	tx := &rompTx{rmp: rmp}
+// turn an item id and a bundle number n into a string key
+func sugar(id string, n int) string {
+	return fmt.Sprintf("%s-%04d", id, n)
+}
+
+// extract an item id and a bundle number from a string key
+// return an id of "" if the key could not be decoded
+func desugar(s string) (id string, n int) {
+	z := strings.Split(s, "-")
+	if len(z) != 2 {
+		return "", 0
+	}
+	id = z[0]
+	n64, err := strconv.ParseInt(z[1], 10, 0)
+	if err != nil {
+		return "", 0
+	}
+	n = int(n64)
+	return
+}
+
+func (rmp *romp) Item(id string) (*Item, error) {
 	item, ok := rmp.items[id]
-	if !ok {
-		// this is a new item
-		item = &Item{ID: id}
-		tx.isnew = true
+	if ok {
+		return item, nil
 	}
-	tx.item = item
-	item.m.Lock()
-	return tx
-}
-
-func (tx *rompTx) Cancel() {
-	tx.item.m.Unlock()
-}
-
-// This blobID is provisional, provided the transaction completes successfully
-// r must be open until after Commit() or Cancel() are called.
-//
-// not thread safe
-func (tx *rompTx) AddBlob(b *Blob, r io.Reader) BlobID {
-	// blob ids are 1 based
-	if tx.next == 0 {
-		blen := len(tx.item.blobs)
-		if blen == 0 {
-			tx.next = 1
-		} else {
-			tx.next = tx.item.blobs[blen-1].ID + 1
-		}
+	// get the highest version number somehow
+	var n int
+	rc, err := rmp.openZipStream(sugar(id, n), "item-info.json")
+	if err != nil {
+		return nil, err
 	}
-	b.ID = tx.next
-	tx.next++
-	tx.blobs = append(tx.blobs, blobData{b: b, r: r})
-	return b.ID
+	result, err := readItemInfo(rc)
+	rc.Close()
+	return result, err
 }
 
-func (tx *rompTx) AddVersion(v *Version) VersionID {
-	n := VersionID(len(tx.item.versions) + len(tx.vers))
-	v.ID = n
-	tx.vers = append(tx.vers, *v)
-	return n
+//func (rmp *romp) BlobContent(id string, n int, b BlobID) (io.ReadCloser, error) {
+func (rmp *romp) Blob(id string, b BlobID) (io.ReadCloser, error) {
+	var n = 1
+	// which bundle is this blob in?
+
+	sname := fmt.Sprintf("blob/%d", b)
+	return rmp.openZipStream(sugar(id, n), sname)
 }
 
-// Remove the given blob.
-//
-// If the blob was added in this transaction, then the blob is removed, and will not be
-// saved to tape.
-// There can be holes in blob ids if, say, two blobs are added and then
-// the first one is deleted while the transaction is still open. We cannot renumber the
-// second blob, so there will be a gap in the ids where the first blob was.
-func (tx *rompTx) DeleteBlob(b BlobID) {
-	// is this blob in the new blob list? if so, remove it from the list
-	for j, bx := range tx.blobs {
-		if bx.b.ID == b {
-			tx.blobs = append(tx.blobs[:j], tx.blobs[j+1:]...)
-			return
-		}
-	}
-	tx.del = append(tx.del, b)
-}
-
-const (
-	MB              = 1000000
-	IdealBundleSize = 500 * MB
-)
-
-func (tx *rompTx) Commit() error {
-	// Update item metadata
-
-	// First handle deletions
-	//
-	// TODO(dbrower): this could be more efficient...for example if we are
-	// deleting blobs from more than one bundle, or if we are deleting a blob
-	// and saving new ones, we could repack all the blobs into a single new
-	// bundle. Instead now, each bundle having a blob deleted from it is copied
-	// into its own new bundle, and then all the new blobs are saved into
-	// another new bundle.
-	tx.doDeletes()
-
-	// Now save new blobs and new metadata
-	// We try to make bundles about the same size, but only if size metadata
-	// has been supplied already. If not, then there is not much we can do
-	// about it now. Perhaps we should put this logic into the function actually
-	// saving the blobs, since then we will always have correct size information.
-	sort.Stable(sort.Reverse(bySize(tx.blobs))) // sort larger blobs first
-
-	// TODO(dbrower): actually implement this algorithm.
-	// For now jam everything into a single bundle
-	var currentBundle = tx.item.maxBundle + 1
-	var data []BlobData
-	for _, b := range tx.blobs {
-		tx.item.blobs = append(tx.item.blobs, b.b)
-		data = append(data, BlobData{id: b.b.ID, r: b.r})
-	}
-	tx.item.maxBundle = currentBundle
-	return tx.rmp.SaveItem(tx.item, currentBundle, data)
-}
-
-func (tx *rompTx) doDeletes() {
-	// gather up which bundles need to be rewritten
-	var bundles []int
-	for _, id := range tx.del {
-		b := tx.item.blobByID(id)
-		if b != nil {
-			bundles = append(bundles, b.Bundle)
-		}
-	}
-	sort.Sort(sort.IntSlice(bundles))
-
-	// now rewrite each bundle
-
+func (rmp *romp) Validate(id string) (int64, []string, error) {
+	return 0, nil, nil
 }
 
 type byID []*Blob
@@ -156,13 +121,11 @@ func (p byID) Less(i, j int) bool { return p[i].ID < p[j].ID }
 func (p byID) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 func (item *Item) blobByID(id BlobID) *Blob {
-	item.m.RLock()
 	for _, b := range item.blobs {
 		if b.ID == id {
 			item.m.Unlock()
 			return b
 		}
 	}
-	item.m.Unlock()
 	return nil
 }

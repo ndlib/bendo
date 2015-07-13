@@ -77,7 +77,7 @@ type T interface {
 	//
 	// If the item is known to exist, and its metadata has not been
 	// loaded from tape, this will block while loading the meatadata from tape
-	Item(id string) (Item, error)
+	Item(id string) (*Item, error)
 
 	// Return a stream containing the blob's contents.
 	Blob(id string, b BlobID) (io.ReadCloser, error)
@@ -97,7 +97,7 @@ type Transaction interface {
 	// r needs to be open until the end of the transaction.
 	// No deduplication checks are performed on the blob.
 	// Will modify the ID in the record to be the new value
-	AddBlob(b Blob, r io.Reader) BlobID
+	AddBlob(b *Blob, r io.Reader) BlobID
 
 	// Add a new version to the item
 	AddVersion(v *Version) VersionID

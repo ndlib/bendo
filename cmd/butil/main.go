@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
+	"time"
 
 	"github.com/dbrower/bendo/bendo"
 )
@@ -14,11 +16,15 @@ var (
 func main() {
 	flag.Parse()
 
+	data := bytes.NewBufferString("Hello There World!!")
+
 	r := bendo.NewRomp(bendo.NewFSStore(*storeDir))
-	m, err := r.Item("abc")
-	if err != nil {
-		fmt.Printf("Error %s", err)
-	} else {
-		fmt.Printf("Item %#v", m)
-	}
+	tx := r.Update("qwer")
+	tx.AddBlob(&bendo.Blob{
+		SaveDate: time.Now(),
+		Creator:  "don",
+	}, data)
+	err := tx.Commit()
+
+	fmt.Println(err)
 }

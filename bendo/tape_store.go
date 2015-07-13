@@ -86,8 +86,14 @@ func (s *store) Open(key, id string) (ReadAtCloser, int64, error) {
 }
 
 func (s *store) Create(key, id string) (io.WriteCloser, error) {
-	fname := filepath.Join(s.root, itemSubdir(id), key+".zip")
-	return os.Create(fname)
+	var w io.WriteCloser
+	dir := filepath.Join(s.root, itemSubdir(id))
+	err := os.MkdirAll(dir, 0775)
+	if err == nil {
+		fname := filepath.Join(dir, key+".zip")
+		w, err = os.Create(fname)
+	}
+	return w, err
 }
 
 func (s *store) Delete(key, id string) error {
