@@ -9,24 +9,6 @@ import (
 // BlobID identifies a single blob within an item
 type BlobID int
 
-// XBid uniquely identifies a blob in the entire system
-type XBid struct {
-	ID   string
-	Blob BlobID
-}
-
-func (x XBid) CacheKey() string {
-	return x.ID
-}
-
-// VBid is a versioned blob id, and is an alternate way of identifying
-// a blob. Though, prefer to use XBid's when possible.
-type VBid struct {
-	Item    string
-	Version VersionID
-	Slot    string
-}
-
 // VersionID identifies a version of an item
 type VersionID int
 
@@ -39,11 +21,11 @@ type VersionID int
 //   2. operational info saved to our caching database
 //   3. in memory data used by the program
 type Blob struct {
-	m       sync.RWMutex
-	ID      BlobID
-	Created time.Time
-	Creator string
-	Size    int64 // logical size of associated content (i.e. before compression), 0 if deleted
+	m        sync.RWMutex
+	ID       BlobID
+	SaveDate time.Time
+	Creator  string
+	Size     int64 // logical size of associated content (i.e. before compression), 0 if deleted
 
 	// following valid if blob is NOT deleted
 	Bundle         int       // which bundle file this blob is stored in
@@ -53,18 +35,18 @@ type Blob struct {
 	ChecksumStatus bool      // true == pass, false == error. Only valid if ChecksumDate > 0
 
 	// following valid if blob is deleted
-	Deleted    time.Time // zero iff not deleted
+	DeleteDate time.Time // zero iff not deleted
 	Deleter    string    // empty iff not deleted
 	DeleteNote string    // optional note for deletion event
 }
 
 type Version struct {
-	m         sync.RWMutex
-	ID        VersionID
-	SaveDate  time.Time
-	CreatedBy string
-	Note      string
-	Slots     map[string]BlobID
+	m        sync.RWMutex
+	ID       VersionID
+	SaveDate time.Time
+	Creator  string
+	Note     string
+	Slots    map[string]BlobID
 }
 
 type Item struct {
@@ -75,14 +57,17 @@ type Item struct {
 	versions  []*Version // list of versions, sorted by it
 }
 
-// BundleReadStore is the read only part of the underlying tape store.
+// The main type for the bendo interface
+// It maintains metadata on the items in the BundleStore,
+// and provides access to them and ways to update them.
+//
 // It fetches item information and the blob contents. The caching is implemented
 // above this, so implementations of this interface should not cache data.
 // This interface serialized the Item data, but otherwise does not use it.
 // These methods should be thread safe.
-type BundleReadStoreX interface {
+type T interface {
 	// ItemList starts a goroutine to scan the items on tape
-	// and returns its results in the channel. the channel is closed
+	// and returns its results in the channel. The channel is closed
 	// when the scanning is finished.
 	ItemList() <-chan string
 
@@ -92,37 +77,32 @@ type BundleReadStoreX interface {
 	//
 	// If the item is known to exist, and its metadata has not been
 	// loaded from tape, this will block while loading the meatadata from tape
-	Item(id string) (*Item, error)
+	Item(id string) (Item, error)
 
 	// Return a stream containing the blob's contents.
-	BlobContent(id string, b BlobID) (io.ReadCloser, error)
-}
-
-type BlobData struct {
-	id BlobID
-	r  io.Reader
-}
-
-// BundleStore is the high level read and write interface
-type BundleStoreX interface {
-	BundleReadStoreX
+	Blob(id string, b BlobID) (io.ReadCloser, error)
 
 	// Start an update transaction on an item. There can be at most one
 	// update transaction at a time per item.
+	// If the item doesn't exist, it is created
 	Update(id string) Transaction
+
+	// validate all the bundles associated with the given item.
+	// returns the total number of bytes and a list of errors found.
+	Validate(id string) (int64, []string, error)
 }
 
-// type Transaction is not tread safe
+// Transactions are not tread safe
 type Transaction interface {
 	// r needs to be open until the end of the transaction.
 	// No deduplication checks are performed on the blob.
 	// Will modify the ID in the record to be the new value
-	AddBlob(b *Blob, r io.Reader) BlobID
+	AddBlob(b Blob, r io.Reader) BlobID
 
 	// Add a new version to the item
 	AddVersion(v *Version) VersionID
 
-	// Purge the given blob from the underlying storage.
+	// Remove the given blob from the underlying storage.
 	// Use this with caution.
 	DeleteBlob(b BlobID)
 

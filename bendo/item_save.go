@@ -29,41 +29,48 @@ There is no relationship between a bundle number and the versions of an item.
 
 // A romp is our item metadata registry
 type romp struct {
-	// our metadata cache store...the authoritative source is the bundles
+	// the metadata cache store...the authoritative source is the bundles
 	items map[string]*Item
 
-	// our underlying bundle store
+	maxBundle map[string]int
+
+	// the underlying bundle store
 	s BundleStore
 }
 
 func NewRomp(s BundleStore) BundleReadStoreX {
-	return &romp{items: make(map[string]*Item),
-		s: s,
+	return &romp{
+		items:     make(map[string]*Item),
+		maxBundle: make(map[string]int),
+		s:         s,
 	}
+}
+
+func (rmp *romp) updateMaxBundle() {
+	var maxes = make(map[string]int64)
+	c := rmp.s.List()
+	for key := range c {
+		id, n := desugar(key)
+		if id == "" {
+			continue
+		}
+		mx := maxes[id]
+		if n > mx {
+			maxes[id] = n
+		}
+	}
+	rmp.items = items // not thread safe because of this
 }
 
 // this is not thread safe on rmp
 func (rmp *romp) ItemList() <-chan string {
 	out := make(chan string)
 	go func() {
-		// get key list and then update our item list from it
-		// make a new item list so we can detect deletions
-		var items = make(map[string]*Item)
-		c := rmp.s.List()
-		for key := range c {
-			id, _ := desugar(key)
-			if id == "" {
-				continue
-			}
-			item, ok := items[id]
-			if !ok {
-				out <- id
-				item = &Item{ID: id}
-				items[id] = item
-			}
-			// add this version info
+		rmp.updateMaxBundle()
+		for k, _ := range rmp.maxBundle {
+			out <- k
 		}
-		rmp.items = items // not thread safe because of this
+		close(out)
 	}()
 	return out
 }
