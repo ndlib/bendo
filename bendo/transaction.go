@@ -28,8 +28,8 @@ func (p bySize) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 func (rmp *romp) Update(id string) Transaction {
 	tx := &rompTx{rmp: rmp}
-	item, ok := rmp.items[id]
-	if !ok {
+	item := rmp.cache.Lookup(id)
+	if item == nil {
 		// this is a new item
 		item = &Item{ID: id}
 		tx.isnew = true

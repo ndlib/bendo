@@ -1,10 +1,12 @@
 package bendo
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 //// handle interface to loading and saving items
@@ -19,9 +21,10 @@ import (
 // A romp is our item metadata registry
 type romp struct {
 	// the metadata cache store...the authoritative source is the bundles
-	items map[string]*Item
+	cache ItemCache
 
 	maxBundle map[string]int
+	scanned   bool
 
 	// the underlying bundle store
 	s BundleStore
@@ -29,7 +32,7 @@ type romp struct {
 
 func NewRomp(s BundleStore) T {
 	return &romp{
-		items:     make(map[string]*Item),
+		cache:     NewMemoryCache(),
 		maxBundle: make(map[string]int),
 		s:         s,
 	}
@@ -62,6 +65,7 @@ func (rmp *romp) updateMaxBundle() {
 		}
 	}
 	rmp.maxBundle = maxes // not thread safe because of this
+	rmp.scanned = true    // and this
 }
 
 // turn an item id and a bundle number n into a string key
@@ -85,19 +89,33 @@ func desugar(s string) (id string, n int) {
 	return
 }
 
+var (
+	ErrTryAgain = errors.New("scanning directories, try again")
+	ErrNoItem   = errors.New("no item, bad item id")
+)
+
 func (rmp *romp) Item(id string) (*Item, error) {
-	item, ok := rmp.items[id]
-	if ok {
+	item := rmp.cache.Lookup(id)
+	if item == nil {
 		return item, nil
 	}
+	if !rmp.scanned {
+		return nil, ErrTryAgain
+	}
 	// get the highest version number somehow
-	var n int
+	n := rmp.maxBundle[id]
+	if n == 0 {
+		return nil, ErrNoItem
+	}
 	rc, err := rmp.openZipStream(sugar(id, n), "item-info.json")
 	if err != nil {
 		return nil, err
 	}
 	result, err := readItemInfo(rc)
 	rc.Close()
+	if err == nil {
+		rmp.cache.Set(id, result)
+	}
 	return result, err
 }
 
@@ -128,4 +146,28 @@ func (item *Item) blobByID(id BlobID) *Blob {
 		}
 	}
 	return nil
+}
+
+type memcache struct {
+	m  sync.RWMutex
+	kv map[string]*Item
+}
+
+func NewMemoryCache() ItemCache {
+	return &memcache{
+		kv: make(map[string]*Item),
+	}
+}
+
+func (mc *memcache) Lookup(id string) *Item {
+	mc.m.RLock()
+	v := mc.kv[id]
+	mc.m.RUnlock()
+	return v
+}
+
+func (mc *memcache) Set(id string, item *Item) {
+	mc.m.Lock()
+	mc.kv[id] = item
+	mc.m.Unlock()
 }

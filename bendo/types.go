@@ -114,6 +114,11 @@ type Transaction interface {
 	Cancel()
 }
 
+type ItemCache interface {
+	Lookup(id string) *Item
+	Set(id string, item *Item)
+}
+
 type ReadAtCloser interface {
 	io.ReaderAt
 	io.Closer
