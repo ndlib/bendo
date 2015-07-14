@@ -114,7 +114,7 @@ func (tx *dTx) Commit() error {
 	return nil
 }
 
-func (tx *dTx) doDeletes(b *bundler) {
+func (tx *dTx) doDeletes(b *bundleWriter) {
 	// gather up which bundles need to be rewritten
 	var bundles []int
 	for _, id := range tx.del {
