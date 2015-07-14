@@ -92,6 +92,10 @@ type T interface {
 	Validate(id string) (int64, []string, error)
 }
 
+// Each transaction will save a new version to the item.
+// To explicitly remove a slot, set it to BlobID 0.
+// otherwise, any slots from the previous version are rolled over unchanged.
+//
 // Transactions are not tread safe
 type Transaction interface {
 	// r needs to be open until the end of the transaction.
@@ -99,8 +103,14 @@ type Transaction interface {
 	// Will modify the ID in the record to be the new value
 	AddBlob(b *Blob, r io.Reader) BlobID
 
-	// Add a new version to the item
-	AddVersion(v *Version) VersionID
+	// set version metadata for this transaction
+	SetNote(s string)
+	SetCreator(s string)
+
+	// Updates a slot mapping for this version.
+	// To explicitly remove a slot, set it to blobid 0.
+	// The slot mapping is initialized to that of the previous version.
+	SetSlot(s string, id BlobID)
 
 	// Remove the given blob from the underlying storage.
 	// Use this with caution.
@@ -108,6 +118,7 @@ type Transaction interface {
 
 	// Commits this given transaction to tape and releases the underlying
 	// transaction lock on the item.
+	// It is an error to commit without setting a Creator.
 	Commit() error
 
 	// Cancels this transaction and releases all the locks
@@ -115,7 +126,10 @@ type Transaction interface {
 }
 
 type ItemCache interface {
+	// try to return an item record with the given id.
+	// return nil if there is nothing matching in the cache.
 	Lookup(id string) *Item
+
 	Set(id string, item *Item)
 }
 

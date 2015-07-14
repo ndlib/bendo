@@ -22,10 +22,9 @@ It is not goroutine safe. Make sure to call Close when finished.
 type bundleWriter struct {
 	dty  *Directory
 	item *Item
-	zf   io.WriteCloser // the underlying bundle file, nil if no file is currently open
-	zw   *zip.Writer    // the zip interface over the bundle file
-	size int64          // amount written to current bundle
-	n    int            // 1 + current bundle id
+	zw   *zipwriter // target bundle file. nil if nothing is open.
+	size int64      // amount written to current bundle
+	n    int        // 1 + current bundle id
 }
 
 // make new bundle writer for item. n is the new bundle number to start with.
@@ -40,32 +39,26 @@ func (dty *Directory) newBundler(item *Item, n int) *bundleWriter {
 
 func (bw *bundleWriter) openNext() error {
 	var err error
-	bw.zf, err = bw.dty.s.Create(sugar(bw.item.ID, bw.n), bw.item.ID)
+	bw.zw, err = openZipWriter(bw.dty.s, bw.item.ID, bw.n)
 	if err != nil {
 		return err
 	}
-	bw.zw = zip.NewWriter(bw.zf)
 	bw.n++
 	bw.size = 0
 	return nil
 }
 
 func (bw *bundleWriter) Close() error {
-	if bw.zf == nil {
+	if bw.zw == nil {
 		return nil
 	}
 	// write out the item data
-	w, err := makeStream(bw.zw, "item-info.json")
+	w, err := bw.zw.makeStream("item-info.json")
 	if err == nil {
 		err = writeItemInfo(w, bw.item)
 	}
-	if err == nil {
-		err = bw.zw.Close()
-	}
-	if err == nil {
-		err = bw.zf.Close()
-		bw.zf = nil
-	}
+	bw.zw.Close()
+	bw.zw = nil
 	return err
 }
 
@@ -77,7 +70,7 @@ const (
 // assumes blob points to a blob already in the blob list for the bundle this
 // item is for
 func (bw *bundleWriter) writeBlob(blob *Blob, r io.Reader) error {
-	if bw.zf == nil {
+	if bw.zw == nil {
 		if err := bw.openNext(); err != nil {
 			return err
 		}
@@ -85,7 +78,7 @@ func (bw *bundleWriter) writeBlob(blob *Blob, r io.Reader) error {
 	if bw.item.blobByID(blob.ID) == nil {
 		panic("Save blob with id not in blob list")
 	}
-	w, err := makeStream(bw.zw, fmt.Sprintf("blob/%d", blob.ID))
+	w, err := bw.zw.makeStream(fmt.Sprintf("blob/%d", blob.ID))
 	if err != nil {
 		return err
 	}
@@ -121,14 +114,6 @@ func (bw *bundleWriter) writeBlob(blob *Blob, r io.Reader) error {
 		bw.Close()
 	}
 	return nil
-}
-
-func makeStream(z *zip.Writer, name string) (io.Writer, error) {
-	header := zip.FileHeader{
-		Name:   name,
-		Method: zip.Store,
-	}
-	return z.CreateHeader(&header)
 }
 
 type writeSizer struct {
@@ -205,4 +190,40 @@ func extractBlobId(s string) BlobID {
 		id = 0
 	}
 	return BlobID(id)
+}
+
+/* Simple wrapper around the zip.Writer object, which also
+tracks the underlying file stream we are writing to.
+Some utility methods are added to make our life easier.
+*/
+type zipwriter struct {
+	f           io.WriteCloser // the underlying bundle file, nil if no file is currently open
+	*zip.Writer                // the zip interface over the bundle file
+}
+
+func openZipWriter(s BundleStore, id string, n int) (*zipwriter, error) {
+	f, err := s.Create(sugar(id, n), id)
+	if err != nil {
+		return nil, err
+	}
+	return &zipwriter{
+		f:      f,
+		Writer: zip.NewWriter(f),
+	}, nil
+}
+
+func (zw *zipwriter) Close() error {
+	err := zw.Writer.Close()
+	if err == nil {
+		err = zw.f.Close()
+	}
+	return err
+}
+
+func (zw *zipwriter) makeStream(name string) (io.Writer, error) {
+	header := zip.FileHeader{
+		Name:   name,
+		Method: zip.Store,
+	}
+	return zw.CreateHeader(&header)
 }

@@ -3,16 +3,16 @@ package bendo
 import (
 	"io"
 	"sort"
+	"time"
 )
 
 type dTx struct {
-	dty   *Directory
-	isnew bool
-	item  *Item // we hold the lock on item.
-	blobs []blobData
-	next  BlobID
-	del   []BlobID
-	vers  []Version
+	dty     *Directory
+	item    *Item // we hold the lock on item.
+	blobs   []blobData
+	bnext   BlobID
+	del     []BlobID
+	version Version
 }
 
 type blobData struct {
@@ -27,12 +27,25 @@ func (p bySize) Less(i, j int) bool { return p[i].b.Size < p[j].b.Size }
 func (p bySize) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 func (dty *Directory) Update(id string) Transaction {
-	tx := &dTx{dty: dty}
+	tx := &dTx{dty: dty,
+		version: Version{
+			// version ids are 1 based
+			ID:    1,
+			Slots: make(map[string]BlobID),
+		},
+	}
+	vlen := len(tx.item.versions)
+	if vlen > 0 {
+		lst := tx.item.versions[vlen-1]
+		tx.version.ID = lst.ID + 1
+		for k, v := range lst.Slots {
+			tx.version.Slots[k] = v
+		}
+	}
 	item := dty.cache.Lookup(id)
 	if item == nil {
 		// this is a new item
 		item = &Item{ID: id}
-		tx.isnew = true
 	}
 	tx.item = item
 	item.m.Lock()
@@ -49,25 +62,33 @@ func (tx *dTx) Cancel() {
 // not thread safe
 func (tx *dTx) AddBlob(b *Blob, r io.Reader) BlobID {
 	// blob ids are 1 based
-	if tx.next == 0 {
+	if tx.bnext == 0 {
+		tx.bnext = 1
 		blen := len(tx.item.blobs)
-		if blen == 0 {
-			tx.next = 1
-		} else {
-			tx.next = tx.item.blobs[blen-1].ID + 1
+		if blen > 0 {
+			tx.bnext = tx.item.blobs[blen-1].ID + 1
 		}
 	}
-	b.ID = tx.next
-	tx.next++
+	b.ID = tx.bnext
+	tx.bnext++
 	tx.blobs = append(tx.blobs, blobData{b: b, r: r})
 	return b.ID
 }
 
-func (tx *dTx) AddVersion(v *Version) VersionID {
-	n := VersionID(len(tx.item.versions) + len(tx.vers))
-	v.ID = n
-	tx.vers = append(tx.vers, *v)
-	return n
+func (tx *dTx) SetNote(s string) {
+	tx.version.Note = s
+}
+
+func (tx *dTx) SetCreator(s string) {
+	tx.version.Creator = s
+}
+
+func (tx *dTx) SetSlot(s string, id BlobID) {
+	if id == 0 {
+		delete(tx.version.Slots, s)
+	} else {
+		tx.version.Slots[s] = id
+	}
 }
 
 // Remove the given blob.
@@ -90,40 +111,72 @@ func (tx *dTx) DeleteBlob(b BlobID) {
 
 func (tx *dTx) Commit() error {
 	// TODO(dbrower): add error handling
+	if tx.version.Creator == "" {
+		panic("commit() called with empty Creator field")
+	}
 
 	// Update item metadata
+	tx.version.SaveDate = time.Now()
+	tx.item.versions = append(tx.item.versions, &tx.version)
 
-	//
+	// now save everything
 	b := tx.dty.newBundler(tx.item, tx.item.maxBundle+1)
 
 	// First handle deletions
-	tx.doDeletes(b)
+	if err := tx.doDeletes(b); err != nil {
+		b.Close()
+		return err
+	}
 
-	// Now save new blobs and new metadata
+	// Save new blobs and new metadata
 	// Try to save the larger blobs first.
 	sort.Stable(sort.Reverse(bySize(tx.blobs))) // sort larger blobs first
 
 	for _, bd := range tx.blobs {
+		bd.b.SaveDate = time.Now()
+		bd.b.Creator = tx.version.Creator
 		tx.item.blobs = append(tx.item.blobs, bd.b)
-		// TODO(dbrower): sort blobs list by blob id
+		sort.Stable(byID(tx.item.blobs))
 		// maybe updating maxBundle should be moved to bundler.end()?
 		tx.item.maxBundle = b.n - 1
-		b.writeBlob(bd.b, bd.r)
+		err := b.writeBlob(bd.b, bd.r)
+		if err != nil {
+			b.Close()
+			return err
+		}
 	}
-	b.Close()
+	err := b.Close()
+	if err != nil {
+		return err
+	}
+
+	// now delete bundles which contain purged items
+
 	return nil
 }
 
-func (tx *dTx) doDeletes(b *bundleWriter) {
+func (tx *dTx) doDeletes(b *bundleWriter) error {
 	// gather up which bundles need to be rewritten
-	var bundles []int
+	// and update blob metadata
+	var bundles = make(map[int][]BlobID)
 	for _, id := range tx.del {
-		b := tx.item.blobByID(id)
-		if b != nil {
-			bundles = append(bundles, b.Bundle)
+		blob := tx.item.blobByID(id)
+		if blob != nil {
+			bundles[blob.Bundle] = append(bundles[blob.Bundle], id)
+
+			blob.DeleteDate = time.Now()
+			blob.Deleter = tx.version.Creator
+			blob.DeleteNote = tx.version.Note
+			blob.Bundle = 0
+			blob.Size = 0
 		}
 	}
-	sort.Sort(sort.IntSlice(bundles))
 
-	// now rewrite each bundle
+	for k, v := range bundles {
+		err := b.copyBundleExcept(k, v)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
