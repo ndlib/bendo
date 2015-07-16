@@ -18,54 +18,44 @@ import (
 // Knowledge of type (2) requires reading from tape. So we will fill it in
 // on demand and selectively in the background.
 
+// We keep a goroutine in charge of the metadata registry.
+// to get an item record, one should:
+// 1) first check the cache
+// 2) if not in the cache, ask the registry via the channel
+// 3) you will get either a) the record, b) an error to try again, c) an error of
+//    no such item.
+//
+// To modify an item, first get it.
+// Or try to create it (ask the registry)
+// Then ask to lock it for updating
+// Then either submit back the updated item record or a cancel request (we assume
+// you have saved the item already if you are updating it. the registry is only
+// concerned with updating the cache)
+
 // A Directory is our item metadata registry
 type Directory struct {
 	// the metadata cache store...the authoritative source is the bundles
 	cache ItemCache
 
-	maxBundle map[string]int
-	scanned   bool
-
 	// the underlying bundle store
 	s BundleStore
 }
 
-func NewRomp(s BundleStore) T {
-	return &Directory{
-		cache:     NewMemoryCache(),
-		maxBundle: make(map[string]int),
-		s:         s,
+func NewDirectory(s BundleStore) T {
+	dty := &Directory{
+		cache: NewMemoryCache(),
+		s:     s,
 	}
+	return dty
 }
 
 // this is not thread safe on dty
 func (dty *Directory) ItemList() <-chan string {
 	out := make(chan string)
 	go func() {
-		dty.updateMaxBundle()
-		for k, _ := range dty.maxBundle {
-			out <- k
-		}
-		close(out)
+		// need to do something here
 	}()
 	return out
-}
-
-func (dty *Directory) updateMaxBundle() {
-	var maxes = make(map[string]int)
-	c := dty.s.List()
-	for key := range c {
-		id, n := desugar(key)
-		if id == "" {
-			continue
-		}
-		mx := maxes[id]
-		if n > mx {
-			maxes[id] = n
-		}
-	}
-	dty.maxBundle = maxes // not thread safe because of this
-	dty.scanned = true    // and this
 }
 
 // turn an item id and a bundle number n into a string key
@@ -96,18 +86,18 @@ var (
 
 func (dty *Directory) Item(id string) (*Item, error) {
 	item := dty.cache.Lookup(id)
-	if item == nil {
+	if item != nil {
 		return item, nil
 	}
-	if !dty.scanned {
-		return nil, ErrTryAgain
-	}
-	// get the highest version number somehow
-	n := dty.maxBundle[id]
+	c := make(chan int)
+	//dty.maxBundle <- scan{id: id, c: c}
+	n := <-c
 	if n == 0 {
+		return nil, ErrTryAgain
+	} else if n == -1 {
 		return nil, ErrNoItem
 	}
-	rc, err := dty.openZipStream(sugar(id, n), "item-info.json")
+	rc, err := OpenBundleStream(dty.s, sugar(id, n), "item-info.json")
 	if err != nil {
 		return nil, err
 	}
@@ -119,28 +109,26 @@ func (dty *Directory) Item(id string) (*Item, error) {
 	return result, err
 }
 
-func (dty *Directory) Blob(id string, b BlobID) (io.ReadCloser, error) {
-	var n = 1
-	// which bundle is this blob in?
-
-	sname := fmt.Sprintf("blob/%d", b)
-	return dty.openZipStream(sugar(id, n), sname)
+func (dty *Directory) Blob(id string, bid BlobID) (io.ReadCloser, error) {
+	item, err := dty.Item(id)
+	if err != nil {
+		return nil, err
+	}
+	b := item.blobByID(bid)
+	if b == nil {
+		return nil, fmt.Errorf("No blob (%s, %s)", id, bid)
+	}
+	sname := fmt.Sprintf("blob/%d", bid)
+	return OpenBundleStream(dty.s, sugar(id, b.Bundle), sname)
 }
 
 func (dty *Directory) Validate(id string) (int64, []string, error) {
 	return 0, nil, nil
 }
 
-type byID []*Blob
-
-func (p byID) Len() int           { return len(p) }
-func (p byID) Less(i, j int) bool { return p[i].ID < p[j].ID }
-func (p byID) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
-
 func (item *Item) blobByID(id BlobID) *Blob {
 	for _, b := range item.blobs {
 		if b.ID == id {
-			item.m.Unlock()
 			return b
 		}
 	}

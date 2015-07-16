@@ -2,7 +2,6 @@ package bendo
 
 import (
 	"io"
-	"sync"
 	"time"
 )
 
@@ -21,7 +20,6 @@ type VersionID int
 //   2. operational info saved to our caching database
 //   3. in memory data used by the program
 type Blob struct {
-	m        sync.RWMutex
 	ID       BlobID
 	SaveDate time.Time
 	Creator  string
@@ -41,7 +39,6 @@ type Blob struct {
 }
 
 type Version struct {
-	m        sync.RWMutex
 	ID       VersionID
 	SaveDate time.Time
 	Creator  string
@@ -50,7 +47,6 @@ type Version struct {
 }
 
 type Item struct {
-	m         sync.RWMutex
 	ID        string
 	maxBundle int        // largest bundle id used by this item
 	blobs     []*Blob    // list of blobs, sorted by id
@@ -99,9 +95,9 @@ type T interface {
 // Transactions are not tread safe
 type Transaction interface {
 	// r needs to be open until the end of the transaction.
-	// No deduplication checks are performed on the blob.
-	// Will modify the ID in the record to be the new value
-	AddBlob(b *Blob, r io.Reader) BlobID
+	// size may be 0 if unknown.
+	// the hashes may be nil if unknown.
+	AddBlob(r io.Reader, size int64, md5, sha256 []byte) BlobID
 
 	// set version metadata for this transaction
 	SetNote(s string)

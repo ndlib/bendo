@@ -20,6 +20,12 @@ type blobData struct {
 	r io.Reader
 }
 
+type byID []*Blob
+
+func (p byID) Len() int           { return len(p) }
+func (p byID) Less(i, j int) bool { return p[i].ID < p[j].ID }
+func (p byID) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+
 type bySize []blobData
 
 func (p bySize) Len() int           { return len(p) }
@@ -34,6 +40,12 @@ func (dty *Directory) Update(id string) Transaction {
 			Slots: make(map[string]BlobID),
 		},
 	}
+	item := dty.cache.Lookup(id)
+	if item == nil {
+		// this is a new item
+		item = &Item{ID: id}
+	}
+	tx.item = item
 	vlen := len(tx.item.versions)
 	if vlen > 0 {
 		lst := tx.item.versions[vlen-1]
@@ -42,25 +54,17 @@ func (dty *Directory) Update(id string) Transaction {
 			tx.version.Slots[k] = v
 		}
 	}
-	item := dty.cache.Lookup(id)
-	if item == nil {
-		// this is a new item
-		item = &Item{ID: id}
-	}
-	tx.item = item
-	item.m.Lock()
 	return tx
 }
 
 func (tx *dTx) Cancel() {
-	tx.item.m.Unlock()
 }
 
 // This blobID is provisional, provided the transaction completes successfully
 // r must be open until after Commit() or Cancel() are called.
 //
 // not thread safe
-func (tx *dTx) AddBlob(b *Blob, r io.Reader) BlobID {
+func (tx *dTx) AddBlob(r io.Reader, size int64, md5, sha256 []byte) BlobID {
 	// blob ids are 1 based
 	if tx.bnext == 0 {
 		tx.bnext = 1
@@ -69,19 +73,19 @@ func (tx *dTx) AddBlob(b *Blob, r io.Reader) BlobID {
 			tx.bnext = tx.item.blobs[blen-1].ID + 1
 		}
 	}
-	b.ID = tx.bnext
+	blob := &Blob{
+		ID:     tx.bnext,
+		Size:   size,
+		MD5:    md5,
+		SHA256: sha256,
+	}
 	tx.bnext++
-	tx.blobs = append(tx.blobs, blobData{b: b, r: r})
-	return b.ID
+	tx.blobs = append(tx.blobs, blobData{b: blob, r: r})
+	return blob.ID
 }
 
-func (tx *dTx) SetNote(s string) {
-	tx.version.Note = s
-}
-
-func (tx *dTx) SetCreator(s string) {
-	tx.version.Creator = s
-}
+func (tx *dTx) SetNote(s string)    { tx.version.Note = s }
+func (tx *dTx) SetCreator(s string) { tx.version.Creator = s }
 
 func (tx *dTx) SetSlot(s string, id BlobID) {
 	if id == 0 {
@@ -149,6 +153,9 @@ func (tx *dTx) Commit() error {
 	if err != nil {
 		return err
 	}
+
+	//tx.dty.Set(tx.item.ID, tx.item)
+	//tx.dty.maxBundle <- scan{id: tx.item.ID, max: tx.item.maxBundle}
 
 	// now delete bundles which contain purged items
 

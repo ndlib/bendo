@@ -1,11 +1,12 @@
 package bendo
 
 import (
-	"archive/zip"
 	"bytes"
 	"crypto/md5"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"hash"
 	"io"
 	"strconv"
 	"strings"
@@ -20,26 +21,28 @@ file when needed.
 It is not goroutine safe. Make sure to call Close when finished.
 */
 type bundleWriter struct {
-	dty  *Directory
-	item *Item
-	zw   *zipwriter // target bundle file. nil if nothing is open.
-	size int64      // amount written to current bundle
-	n    int        // 1 + current bundle id
+	store BundleStore
+	item  *Item
+	zw    *zipwriter // target bundle file. nil if nothing is open.
+	size  int64      // amount written to current bundle
+	n     int        // 1 + current bundle id
 }
 
 // make new bundle writer for item. n is the new bundle number to start with.
 // more than one bundle may be written.
 func (dty *Directory) newBundler(item *Item, n int) *bundleWriter {
 	return &bundleWriter{
-		dty:  dty,
-		item: item,
-		n:    n,
+		store: dty.s,
+		item:  item,
+		n:     n,
 	}
 }
 
+// sets our zw to write to the next bundle file. Assumes no other process is
+// writting bundle files for this item.
 func (bw *bundleWriter) openNext() error {
 	var err error
-	bw.zw, err = openZipWriter(bw.dty.s, bw.item.ID, bw.n)
+	bw.zw, err = openZipWriter(bw.store, bw.item.ID, bw.n)
 	if err != nil {
 		return err
 	}
@@ -70,6 +73,11 @@ const (
 // assumes blob points to a blob already in the blob list for the bundle this
 // item is for
 func (bw *bundleWriter) writeBlob(blob *Blob, r io.Reader) error {
+	if bw.size >= IdealBundleSize {
+		if err := bw.Close(); err != nil {
+			return err
+		}
+	}
 	if bw.zw == nil {
 		if err := bw.openNext(); err != nil {
 			return err
@@ -84,49 +92,42 @@ func (bw *bundleWriter) writeBlob(blob *Blob, r io.Reader) error {
 	}
 	md5 := md5.New()
 	sha256 := sha256.New()
-	sz := &writeSizer{}
-	w = io.MultiWriter(w, md5, sha256, sz)
-	_, err = io.Copy(w, r)
+	w = io.MultiWriter(w, md5, sha256)
+	size, err := io.Copy(w, r)
+	bw.size += size
 	if err != nil {
 		return err
 	}
 	// Don't update DateSaved timestamp, since the blob may be a copy
 	// because of a purge
 	blob.Bundle = bw.n - 1
-	if blob.Size != 0 && blob.Size != sz.Size() {
-		// the size counts don't match
-	} else {
-		blob.Size = sz.Size()
+	if blob.Size == 0 {
+		blob.Size = size
+	} else if blob.Size != size {
+		return fmt.Errorf("commit (%s blob %d), copied %d bytes, expected %d",
+			bw.item.ID,
+			blob.ID,
+			size,
+			blob.Size)
 	}
-	h := md5.Sum(nil)
-	if blob.MD5 != nil && bytes.Compare(blob.MD5, h) != 0 {
-	} else {
-		blob.MD5 = h
+	err = testhash(md5, &blob.MD5, bw.item.ID)
+	if err == nil {
+		err = testhash(sha256, &blob.SHA256, bw.item.ID)
 	}
-	h = sha256.Sum(nil)
-	if blob.SHA256 != nil && bytes.Compare(blob.SHA256, h) != 0 {
-	} else {
-		blob.SHA256 = h
-	}
-	// do this last, after we have updated the metadata for this blob
-	bw.size += sz.Size()
-	if bw.size >= IdealBundleSize {
-		bw.Close()
+	return err
+}
+
+func testhash(h hash.Hash, target *[]byte, name string) error {
+	computed := h.Sum(nil)
+	if *target == nil {
+		*target = computed
+	} else if bytes.Compare(*target, computed) != 0 {
+		return fmt.Errorf("commit (%s), got %s, expected %s",
+			name,
+			hex.EncodeToString(computed),
+			hex.EncodeToString(*target))
 	}
 	return nil
-}
-
-type writeSizer struct {
-	size int64
-}
-
-func (ws *writeSizer) Write(p []byte) (int, error) {
-	ws.size += int64(len(p))
-	return len(p), nil
-}
-
-func (ws *writeSizer) Size() int64 {
-	return ws.size
 }
 
 // copies all the blobs in the bundle src, except for blobs with an id in except.
@@ -136,21 +137,17 @@ func (bw *bundleWriter) copyBundleExcept(src int, except []BlobID) error {
 	// reading. Can this be refactored to use the same code base. The difference
 	// here is that we are scanning EVERYTHING in the bundle rather than
 	// looking for a specific file.
-	rac, size, err := bw.dty.s.Open(sugar(bw.item.ID, src), bw.item.ID)
+	r, err := OpenBundle(bw.store, sugar(bw.item.ID, src))
 	if err != nil {
 		return err
 	}
-	defer rac.Close()
-	z, err := zip.NewReader(rac, size)
-	if err != nil {
-		return err
-	}
+	defer r.Close()
 	var badnames = make([]string, 1+len(except))
 	badnames[0] = "item-info.json"
 	for i, id := range except {
 		badnames[i+1] = fmt.Sprintf("blob/%d", id)
 	}
-	for _, f := range z.File {
+	for _, f := range r.File {
 		if contains(badnames, f.Name) {
 			continue
 		}
@@ -190,40 +187,4 @@ func extractBlobId(s string) BlobID {
 		id = 0
 	}
 	return BlobID(id)
-}
-
-/* Simple wrapper around the zip.Writer object, which also
-tracks the underlying file stream we are writing to.
-Some utility methods are added to make our life easier.
-*/
-type zipwriter struct {
-	f           io.WriteCloser // the underlying bundle file, nil if no file is currently open
-	*zip.Writer                // the zip interface over the bundle file
-}
-
-func openZipWriter(s BundleStore, id string, n int) (*zipwriter, error) {
-	f, err := s.Create(sugar(id, n), id)
-	if err != nil {
-		return nil, err
-	}
-	return &zipwriter{
-		f:      f,
-		Writer: zip.NewWriter(f),
-	}, nil
-}
-
-func (zw *zipwriter) Close() error {
-	err := zw.Writer.Close()
-	if err == nil {
-		err = zw.f.Close()
-	}
-	return err
-}
-
-func (zw *zipwriter) makeStream(name string) (io.Writer, error) {
-	header := zip.FileHeader{
-		Name:   name,
-		Method: zip.Store,
-	}
-	return zw.CreateHeader(&header)
 }

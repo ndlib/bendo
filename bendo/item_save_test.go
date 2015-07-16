@@ -23,20 +23,6 @@ func TestDecodeID(t *testing.T) {
 	}
 }
 
-func TestWriteSizer(t *testing.T) {
-	b := []byte("hello. this is a long string")
-	ws := &writeSizer{}
-	n, err := ws.Write(b)
-	if n != len(b) || err != nil {
-		t.Errorf("Got (%d, %v), expected (%d, %v)",
-			n, err,
-			len(b), nil)
-	}
-	if int64(n) != ws.Size() {
-		t.Errorf("Size() = %d, expected %d", ws.Size(), n)
-	}
-}
-
 type closer struct{ closed bool }
 
 func (c *closer) Close() error {
