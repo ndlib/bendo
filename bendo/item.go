@@ -43,7 +43,20 @@ func New(s BundleStore) ItemStore {
 func (is *itemstore) List() <-chan string {
 	out := make(chan string)
 	go func() {
-		// need to do something here
+		items := make(map[string]struct{})
+		c := is.s.List()
+		for key := range c {
+			id, _ := desugar(key)
+			if id == "" {
+				continue
+			}
+			_, ok := items[id]
+			if !ok {
+				items[id] = struct{}{}
+				out <- id
+			}
+		}
+		close(out)
 	}()
 	return out
 }
