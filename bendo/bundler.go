@@ -30,9 +30,9 @@ type bundleWriter struct {
 
 // make new bundle writer for item. n is the new bundle number to start with.
 // more than one bundle may be written.
-func (dty *Directory) newBundler(item *Item, n int) *bundleWriter {
+func (is *itemstore) newBundler(item *Item, n int) *bundleWriter {
 	return &bundleWriter{
-		store: dty.s,
+		store: is.s,
 		item:  item,
 		n:     n,
 	}

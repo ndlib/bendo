@@ -6,10 +6,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"sync"
 )
-
-//// handle interface to loading and saving items
 
 // We have two levels of item knowledge:
 //   1. We know an item exists and the extent of its bundle numbers
@@ -32,25 +29,18 @@ import (
 // you have saved the item already if you are updating it. the registry is only
 // concerned with updating the cache)
 
-// A Directory is our item metadata registry
-type Directory struct {
-	// the metadata cache store...the authoritative source is the bundles
-	cache ItemCache
-
+type itemstore struct {
 	// the underlying bundle store
 	s BundleStore
 }
 
-func NewDirectory(s BundleStore) T {
-	dty := &Directory{
-		cache: NewMemoryCache(),
-		s:     s,
+func New(s BundleStore) ItemStore {
+	return &itemstore{
+		s: s,
 	}
-	return dty
 }
 
-// this is not thread safe on dty
-func (dty *Directory) ItemList() <-chan string {
+func (is *itemstore) List() <-chan string {
 	out := make(chan string)
 	go func() {
 		// need to do something here
@@ -84,33 +74,43 @@ var (
 	ErrNoItem   = errors.New("no item, bad item id")
 )
 
-func (dty *Directory) Item(id string) (*Item, error) {
-	item := dty.cache.Lookup(id)
-	if item != nil {
-		return item, nil
-	}
-	c := make(chan int)
-	//dty.maxBundle <- scan{id: id, c: c}
-	n := <-c
+// Load and return an item's metadata info. This will block until the
+// item is loaded.
+func (is *itemstore) Item(id string) (*Item, error) {
+	n := is.findMaxBundle(id)
 	if n == 0 {
-		return nil, ErrTryAgain
-	} else if n == -1 {
 		return nil, ErrNoItem
 	}
-	rc, err := OpenBundleStream(dty.s, sugar(id, n), "item-info.json")
+	rc, err := OpenBundleStream(is.s, sugar(id, n), "item-info.json")
 	if err != nil {
 		return nil, err
 	}
-	result, err := readItemInfo(rc)
-	rc.Close()
-	if err == nil {
-		dty.cache.Set(id, result)
-	}
-	return result, err
+	defer rc.Close()
+	return readItemInfo(rc)
 }
 
-func (dty *Directory) Blob(id string, bid BlobID) (io.ReadCloser, error) {
-	item, err := dty.Item(id)
+// Find the maximum bundle for the given id.
+// Returns 0 if the item does not exist in the BundleStore.
+func (is *itemstore) findMaxBundle(id string) int {
+	bundles, err := is.s.ListPrefix(id)
+	if err != nil {
+		// TODO(dbrower): log the error or just lose it?
+		return 0
+	}
+	var max int
+	for _, b := range bundles {
+		s, n := desugar(b)
+		if s == id && n > max {
+			max = n
+		}
+	}
+	return max
+}
+
+// Return an io.ReadCloser containing the given blob's contents.
+// Will block until the item and blob are loaded from tape.
+func (is *itemstore) Blob(id string, bid BlobID) (io.ReadCloser, error) {
+	item, err := is.Item(id)
 	if err != nil {
 		return nil, err
 	}
@@ -119,42 +119,22 @@ func (dty *Directory) Blob(id string, bid BlobID) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("No blob (%s, %s)", id, bid)
 	}
 	sname := fmt.Sprintf("blob/%d", bid)
-	return OpenBundleStream(dty.s, sugar(id, b.Bundle), sname)
+	return OpenBundleStream(is.s, sugar(id, b.Bundle), sname)
 }
 
-func (dty *Directory) Validate(id string) (int64, []string, error) {
+func (is *itemstore) Validate(id string) (int64, []string, error) {
 	return 0, nil, nil
 }
 
-func (item *Item) blobByID(id BlobID) *Blob {
+func (is *itemstore) BundleStore() BundleStore {
+	return is.s
+}
+
+func (item Item) blobByID(id BlobID) *Blob {
 	for _, b := range item.blobs {
 		if b.ID == id {
 			return b
 		}
 	}
 	return nil
-}
-
-type memcache struct {
-	m  sync.RWMutex
-	kv map[string]*Item
-}
-
-func NewMemoryCache() ItemCache {
-	return &memcache{
-		kv: make(map[string]*Item),
-	}
-}
-
-func (mc *memcache) Lookup(id string) *Item {
-	mc.m.RLock()
-	v := mc.kv[id]
-	mc.m.RUnlock()
-	return v
-}
-
-func (mc *memcache) Set(id string, item *Item) {
-	mc.m.Lock()
-	mc.kv[id] = item
-	mc.m.Unlock()
 }

@@ -11,14 +11,7 @@ type BlobID int
 // VersionID identifies a version of an item
 type VersionID int
 
-// Blob records metadata for each blob. We keep one blob structure in memory
-// for each blob on tape and share it. Use the mutex if making updates.
-// The blob structures are backed by a database layer
-//
-// This mixes together 3 levels of information:
-//   1. that saved on tape
-//   2. operational info saved to our caching database
-//   3. in memory data used by the program
+// Blob records metadata for each blob.
 type Blob struct {
 	ID       BlobID
 	SaveDate time.Time
@@ -53,46 +46,46 @@ type Item struct {
 	versions  []*Version // list of versions, sorted by it
 }
 
-// The main type for the bendo interface
-// It maintains metadata on the items in the BundleStore,
-// and provides access to them and ways to update them.
+// The lower-level interface for working with Items.
+// It wraps a BundleStore and provides code to serialize and deserialize them
+// from bundles.
 //
-// It fetches item information and the blob contents. The caching is implemented
-// above this, so implementations of this interface should not cache data.
-// This interface serialized the Item data, but otherwise does not use it.
-// These methods should be thread safe.
-type T interface {
-	// ItemList starts a goroutine to scan the items on tape
-	// and returns its results in the channel. The channel is closed
+// The default ItemStore does not implement caching, and the caller needs to
+// ensure only one goroutine is accessing an item at a time.
+type ItemStore interface {
+	// ItemList returns a list of item IDs. The channel is closed
 	// when the scanning is finished.
-	ItemList() <-chan string
+	List() <-chan string
 
-	// Given an item's ID, return a new structure containing metadata
-	// about that item, including all versions and blob metadata.
+	// Return a new item structure for the given item. This structure
+	// contains all the metadata about that item, including a version list
+	// and a list of blob metadata.
 	// In particular, the blob data is NOT returned
 	//
-	// If the item is known to exist, and its metadata has not been
-	// loaded from tape, this will block while loading the meatadata from tape
+	// This will block while the metadata is loading from the BundleStore.
 	Item(id string) (*Item, error)
 
 	// Return a stream containing the blob's contents.
 	Blob(id string, b BlobID) (io.ReadCloser, error)
 
-	// Start an update transaction on an item. There can be at most one
-	// update transaction at a time per item.
+	// Start an update transaction on an item. It is an error to have two
+	// parallel transactions on the same item.
 	// If the item doesn't exist, it is created
 	Update(id string) Transaction
 
-	// validate all the bundles associated with the given item.
-	// returns the total number of bytes and a list of errors found.
+	// Validate all the bundles associated with the given item.
+	// Returns the total number of bytes and a list of errors found.
 	Validate(id string) (int64, []string, error)
+
+	// Returns the underlying BundleStore
+	BundleStore() BundleStore
 }
 
 // Each transaction will save a new version to the item.
 // To explicitly remove a slot, set it to BlobID 0.
 // otherwise, any slots from the previous version are rolled over unchanged.
 //
-// Transactions are not tread safe
+// Transactions are not tread safe.
 type Transaction interface {
 	// r needs to be open until the end of the transaction.
 	// size may be 0 if unknown.
@@ -117,8 +110,12 @@ type Transaction interface {
 	// It is an error to commit without setting a Creator.
 	Commit() error
 
-	// Cancels this transaction and releases all the locks
+	// Cancels this transaction
 	Cancel()
+}
+
+type ItemServer interface {
+	ItemStore
 }
 
 type ItemCache interface {
