@@ -32,7 +32,11 @@ func (s *store) List() <-chan string {
 }
 
 func (s *store) ListPrefix(prefix string) ([]string, error) {
-	// TODO(dbrower): implement
+	if len(prefix) < 4 {
+		// this item is stored across more than one directory
+	} else {
+		return s.getprefix(prefix)
+	}
 	return nil, nil
 }
 
@@ -120,4 +124,17 @@ func itemSubdir(id string) string {
 		result = append(result, '/')
 	}
 	return string(result)
+}
+
+func (s *store) getprefix(prefix string) ([]string, error) {
+	dir := filepath.Join(s.root, itemSubdir(prefix)) + "/"
+	glob := dir + prefix + "*"
+	result, err := filepath.Glob(glob)
+	if err == nil {
+		for i := range result {
+			r := strings.TrimPrefix(result[i], dir)
+			result[i] = strings.TrimSuffix(r, ".zip")
+		}
+	}
+	return result, err
 }

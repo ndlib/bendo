@@ -26,6 +26,32 @@ func TestItemSubdir(t *testing.T) {
 	}
 }
 
+func TestGetPrefix(t *testing.T) {
+	var files = []string{
+		"ab/",
+		"ab/cd/",
+		"ab/cd/abcd-0001.zip",
+		"ab/cd/abcd-0002.zip",
+		"ab/cd/abcdef-0001.zip",
+		"ab/qw/",
+		"ab/qw/abqw-0001.zip",
+	}
+	var expected = []string{
+		"abcd-0001",
+		"abcd-0002",
+		"abcdef-0001",
+	}
+	dir := makeTmpTree(files)
+	defer os.RemoveAll(dir)
+	s := &store{root: dir}
+	result, err := s.getprefix("abcd")
+	if err != nil {
+		t.Errorf("Got unexpected error: %s", err.Error())
+	} else if !equal(expected, result) {
+		t.Errorf("Got result %v, expected %v", result, expected)
+	}
+}
+
 func TestWalkTree(t *testing.T) {
 	var files = []string{
 		"a/",
@@ -80,4 +106,16 @@ func makeTmpTree(files []string) string {
 		}
 	}
 	return root
+}
+
+func equal(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
