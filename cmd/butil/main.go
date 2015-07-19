@@ -22,6 +22,10 @@ func main() {
 
 	args := flag.Args()
 
+	if len(args) == 0 {
+		return
+	}
+
 	switch args[0] {
 	case "blob":
 		doblob(r, args[1], args[2])
