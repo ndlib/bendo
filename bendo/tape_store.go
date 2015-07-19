@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -127,12 +128,11 @@ func itemSubdir(id string) string {
 }
 
 func (s *store) getprefix(prefix string) ([]string, error) {
-	dir := filepath.Join(s.root, itemSubdir(prefix)) + "/"
-	glob := dir + prefix + "*"
+	glob := filepath.Join(s.root, itemSubdir(prefix), prefix) + "*"
 	result, err := filepath.Glob(glob)
 	if err == nil {
 		for i := range result {
-			r := strings.TrimPrefix(result[i], dir)
+			r := path.Base(result[i])
 			result[i] = strings.TrimSuffix(r, ".zip")
 		}
 	}
