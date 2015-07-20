@@ -14,9 +14,8 @@ import (
 
 /*
 BundleWriter helps with saving blobs into bundles, and with repackaging blobs
-when doing deletions.
-It keeps a reference to its source item, and will use that to save the item-info.json
-file when needed.
+when doing deletions. It keeps a reference to its source item, and will use
+that to save the item-info.json file when needed.
 
 It is not goroutine safe. Make sure to call Close when finished.
 */
@@ -87,8 +86,8 @@ const (
 	IdealBundleSize = 500 * MB
 )
 
-// Write the given blob into the bundle. The blob must also be in the underlying item's
-// blob list.
+// Write the given blob into the bundle. The blob must also be in the
+// underlying item's blob list.
 func (bw *BundleWriter) WriteBlob(blob *Blob, r io.Reader) error {
 	// we lazily open bw
 	if bw.size >= IdealBundleSize || bw.zw == nil {
@@ -143,8 +142,8 @@ func testhash(h hash.Hash, target *[]byte, name string) error {
 	return nil
 }
 
-// Copies all the blobs in the bundle src, except for those in the list, into the
-// current place in the bundle writer.
+// Copies all the blobs in the bundle src, except for those in the list, into
+// the current place in the bundle writer.
 func (bw *BundleWriter) CopyBundleExcept(src int, except []BlobID) error {
 	r, err := OpenBundle(bw.store, sugar(bw.item.ID, src))
 	if err != nil {

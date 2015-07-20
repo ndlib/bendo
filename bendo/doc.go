@@ -13,14 +13,11 @@ However, like blobs, bundle files may be deleted.
 Items do not share blobs between them. Bundle files do not contain information
 from more than one item.
 
-Two levels of interfaces are provided. An ItemStore provides the logic
-to do the serialization and deserialization of items to bundles. It wraps
-a BundleStore interface. It will block, and is intended to be used inside a
-single goroutine.
-
-The other level of interface is the Server, which provides caching, and
-grouping of requests so that many requests for an item from different gorutines
-will only spawn a single request to the underlying BundleStore.
+A Store provides the logic to do the serialization and deserialization of items
+to bundles. It wraps a BundleStore interface. It will block. It is possible to
+add a cache to store item metadata. The data retreival paths of a store are
+safe to be accessed from multiple goroutines. However, an open Writer for any
+given item should only be used by one gouroutine at a time.
 
 Both blobs and versions are numbered sequentually starting from 1.
 

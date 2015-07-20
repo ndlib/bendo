@@ -27,7 +27,7 @@ func New(s BundleStore) *Store {
 	return &Store{S: s, cache: nullcache}
 }
 
-func NewServer(s BundleStore, cache ItemCache) *Store {
+func NewWithCache(s BundleStore, cache ItemCache) *Store {
 	return &Store{S: s, cache: cache}
 }
 
