@@ -13,14 +13,14 @@ import (
 )
 
 /*
-bundleWriter helps with saving blobs into bundles, and with repackaging blobs
+BundleWriter helps with saving blobs into bundles, and with repackaging blobs
 when doing deletions.
 It keeps a reference to its source item, and will use that to save the item-info.json
 file when needed.
 
 It is not goroutine safe. Make sure to call Close when finished.
 */
-type bundleWriter struct {
+type BundleWriter struct {
 	store BundleStore
 	item  *Item
 	zw    *zipwriter // target bundle file. nil if nothing is open.
@@ -30,17 +30,24 @@ type bundleWriter struct {
 
 // make new bundle writer for item. n is the new bundle number to start with.
 // more than one bundle may be written.
-func (is *itemstore) newBundler(item *Item, n int) *bundleWriter {
-	return &bundleWriter{
-		store: is.s,
+func NewBundler(s BundleStore, item *Item, n int) *BundleWriter {
+	return &BundleWriter{
+		store: s,
 		item:  item,
 		n:     n,
 	}
 }
 
+func (bw *BundleWriter) CurrentBundle() int {
+	if bw.zw == nil {
+		return bw.n
+	}
+	return bw.n - 1
+}
+
 // sets our zw to write to the next bundle file. Assumes no other process is
 // writting bundle files for this item.
-func (bw *bundleWriter) openNext() error {
+func (bw *BundleWriter) openNext() error {
 	var err error
 	bw.zw, err = openZipWriter(bw.store, bw.item.ID, bw.n)
 	if err != nil {
@@ -51,7 +58,7 @@ func (bw *bundleWriter) openNext() error {
 	return nil
 }
 
-func (bw *bundleWriter) Close() error {
+func (bw *BundleWriter) Close() error {
 	if bw.zw == nil {
 		return nil
 	}
@@ -72,7 +79,7 @@ const (
 
 // assumes blob points to a blob already in the blob list for the bundle this
 // item is for
-func (bw *bundleWriter) writeBlob(blob *Blob, r io.Reader) error {
+func (bw *BundleWriter) WriteBlob(blob *Blob, r io.Reader) error {
 	if bw.size >= IdealBundleSize {
 		if err := bw.Close(); err != nil {
 			return err
@@ -131,7 +138,7 @@ func testhash(h hash.Hash, target *[]byte, name string) error {
 }
 
 // copies all the blobs in the bundle src, except for blobs with an id in except.
-func (bw *bundleWriter) copyBundleExcept(src int, except []BlobID) error {
+func (bw *BundleWriter) CopyBundleExcept(src int, except []BlobID) error {
 	// open the source bundle
 	// NOTE: a lot of this is identical to the code which opens blobs for
 	// reading. Can this be refactored to use the same code base. The difference
@@ -158,7 +165,7 @@ func (bw *bundleWriter) copyBundleExcept(src int, except []BlobID) error {
 		}
 		// TODO(dbrower): check for errors
 		blob := bw.item.blobByID(extractBlobId(f.Name))
-		err = bw.writeBlob(blob, rc)
+		err = bw.WriteBlob(blob, rc)
 		rc.Close()
 		if err != nil {
 			return err

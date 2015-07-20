@@ -52,7 +52,11 @@ type Item struct {
 //
 // The default ItemStore does not implement caching, and the caller needs to
 // ensure only one goroutine is accessing an item at a time.
-type ItemStore interface {
+type ItemStore struct {
+	Store BundleStore
+}
+
+/*
 	// ItemList returns a list of item IDs. The channel is closed
 	// when the scanning is finished.
 	List() <-chan string
@@ -71,7 +75,7 @@ type ItemStore interface {
 	// Start an update transaction on an item. It is an error to have two
 	// parallel transactions on the same item.
 	// If the item doesn't exist, it is created
-	Update(id string) Transaction
+	Open(id string) Writer
 
 	// Validate all the bundles associated with the given item.
 	// Returns the total number of bytes and a list of errors found.
@@ -79,44 +83,7 @@ type ItemStore interface {
 
 	// Returns the underlying BundleStore
 	BundleStore() BundleStore
-}
-
-// Each transaction will save a new version to the item.
-// To explicitly remove a slot, set it to BlobID 0.
-// otherwise, any slots from the previous version are rolled over unchanged.
-//
-// Transactions are not tread safe.
-type Transaction interface {
-	// r needs to be open until the end of the transaction.
-	// size may be 0 if unknown.
-	// the hashes may be nil if unknown.
-	AddBlob(r io.Reader, size int64, md5, sha256 []byte) BlobID
-
-	// set version metadata for this transaction
-	SetNote(s string)
-	SetCreator(s string)
-
-	// Updates a slot mapping for this version.
-	// To explicitly remove a slot, set it to blobid 0.
-	// The slot mapping is initialized to that of the previous version.
-	SetSlot(s string, id BlobID)
-
-	// Remove the given blob from the underlying storage.
-	// Use this with caution.
-	DeleteBlob(b BlobID)
-
-	// Commits this given transaction to tape and releases the underlying
-	// transaction lock on the item.
-	// It is an error to commit without setting a Creator.
-	Commit() error
-
-	// Cancels this transaction
-	Cancel()
-}
-
-type ItemServer interface {
-	ItemStore
-}
+*/
 
 type ItemCache interface {
 	// try to return an item record with the given id.

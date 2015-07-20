@@ -96,7 +96,9 @@ func (s *store) Create(key, id string) (io.WriteCloser, error) {
 	err := os.MkdirAll(dir, 0775)
 	if err == nil {
 		fname := filepath.Join(dir, key+".zip")
-		w, err = os.Create(fname)
+		// pass the O_EXCL flag explicitly to prevent overwriting
+		// already existing files
+		w, err = os.OpenFile(fname, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
 	}
 	return w, err
 }

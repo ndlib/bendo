@@ -1,5 +1,7 @@
 package bendo
 
+/*
+
 import (
 	"fmt"
 	"io"
@@ -58,7 +60,7 @@ func (s *server) Blob(id string, bid BlobID) (io.ReadCloser, error) {
 	return OpenBundleStream(s.BundleStore(), sugar(id, b.Bundle), sname)
 }
 
-func (s *server) Update(id string) Transaction {
+func (s *server) Update(id string) Writer {
 	s.m.Lock()
 	if s.updates == nil {
 		s.updates = make(map[string]struct{})
@@ -75,7 +77,7 @@ func (s *server) Update(id string) Transaction {
 }
 
 type serverTx struct {
-	tx
+	Writer
 }
 
 func (s *server) Validate(id string) (int64, []string, error) {
@@ -110,3 +112,4 @@ func (mc *memcache) Set(id string, item *Item) {
 	mc.kv[id] = item
 	mc.m.Unlock()
 }
+*/

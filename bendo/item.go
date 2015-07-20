@@ -29,22 +29,20 @@ import (
 // you have saved the item already if you are updating it. the registry is only
 // concerned with updating the cache)
 
-type itemstore struct {
+type Store struct {
 	// the underlying bundle store
-	s BundleStore
+	S BundleStore
 }
 
-func New(s BundleStore) ItemStore {
-	return &itemstore{
-		s: s,
-	}
+func New(s BundleStore) *Store {
+	return &Store{s}
 }
 
-func (is *itemstore) List() <-chan string {
+func (s *Store) List() <-chan string {
 	out := make(chan string)
 	go func() {
 		items := make(map[string]struct{})
-		c := is.s.List()
+		c := s.S.List()
 		for key := range c {
 			id, _ := desugar(key)
 			if id == "" {
@@ -89,31 +87,35 @@ var (
 
 // Load and return an item's metadata info. This will block until the
 // item is loaded.
-func (is *itemstore) Item(id string) (*Item, error) {
-	n := is.findMaxBundle(id)
+func (s *Store) Item(id string) (*Item, error) {
+	n := s.findMaxBundle(id)
 	if n == 0 {
 		return nil, ErrNoItem
 	}
-	rc, err := OpenBundleStream(is.s, sugar(id, n), "item-info.json")
+	rc, err := OpenBundleStream(s.S, sugar(id, n), "item-info.json")
 	if err != nil {
 		return nil, err
 	}
 	defer rc.Close()
-	return readItemInfo(rc)
+	item, err := readItemInfo(rc)
+	if err == nil {
+		item.maxBundle = n
+	}
+	return item, err
 }
 
 // Find the maximum bundle for the given id.
 // Returns 0 if the item does not exist in the BundleStore.
-func (is *itemstore) findMaxBundle(id string) int {
-	bundles, err := is.s.ListPrefix(id)
+func (s *Store) findMaxBundle(id string) int {
+	bundles, err := s.S.ListPrefix(id)
 	if err != nil {
 		// TODO(dbrower): log the error or just lose it?
 		return 0
 	}
 	var max int
 	for _, b := range bundles {
-		s, n := desugar(b)
-		if s == id && n > max {
+		slug, n := desugar(b)
+		if slug == id && n > max {
 			max = n
 		}
 	}
@@ -122,8 +124,8 @@ func (is *itemstore) findMaxBundle(id string) int {
 
 // Return an io.ReadCloser containing the given blob's contents.
 // Will block until the item and blob are loaded from tape.
-func (is *itemstore) Blob(id string, bid BlobID) (io.ReadCloser, error) {
-	item, err := is.Item(id)
+func (s *Store) Blob(id string, bid BlobID) (io.ReadCloser, error) {
+	item, err := s.Item(id)
 	if err != nil {
 		return nil, err
 	}
@@ -132,15 +134,11 @@ func (is *itemstore) Blob(id string, bid BlobID) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("No blob (%s, %s)", id, bid)
 	}
 	sname := fmt.Sprintf("blob/%d", bid)
-	return OpenBundleStream(is.s, sugar(id, b.Bundle), sname)
+	return OpenBundleStream(s.S, sugar(id, b.Bundle), sname)
 }
 
-func (is *itemstore) Validate(id string) (int64, []string, error) {
+func (s *Store) Validate(id string) (int64, []string, error) {
 	return 0, nil, nil
-}
-
-func (is *itemstore) BundleStore() BundleStore {
-	return is.s
 }
 
 func (item Item) blobByID(id BlobID) *Blob {

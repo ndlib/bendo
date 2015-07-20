@@ -15,7 +15,7 @@ interface, which is abstracted by a BundleStore.
 func readItemInfo(rc io.Reader) (*Item, error) {
 	var fromTape itemOnTape
 	decoder := json.NewDecoder(rc)
-	err := decoder.Decode(fromTape)
+	err := decoder.Decode(&fromTape)
 	if err != nil {
 		return nil, err
 	}
