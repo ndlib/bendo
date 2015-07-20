@@ -6,6 +6,8 @@ import (
 	"io"
 	"strconv"
 	"strings"
+
+	"github.com/golang/groupcache/singleflight"
 )
 
 // We have two levels of item knowledge:
@@ -15,27 +17,18 @@ import (
 // Knowledge of type (2) requires reading from tape. So we will fill it in
 // on demand and selectively in the background.
 
-// We keep a goroutine in charge of the metadata registry.
-// to get an item record, one should:
-// 1) first check the cache
-// 2) if not in the cache, ask the registry via the channel
-// 3) you will get either a) the record, b) an error to try again, c) an error of
-//    no such item.
-//
-// To modify an item, first get it.
-// Or try to create it (ask the registry)
-// Then ask to lock it for updating
-// Then either submit back the updated item record or a cancel request (we assume
-// you have saved the item already if you are updating it. the registry is only
-// concerned with updating the cache)
-
 type Store struct {
-	// the underlying bundle store
-	S BundleStore
+	cache ItemCache
+	S     BundleStore        // the underlying bundle store
+	table singleflight.Group // for metadata lookups. keyed by item id
 }
 
 func New(s BundleStore) *Store {
-	return &Store{s}
+	return &Store{S: s, cache: nullcache}
+}
+
+func NewServer(s BundleStore, cache ItemCache) *Store {
+	return &Store{S: s, cache: cache}
 }
 
 func (s *Store) List() <-chan string {
@@ -88,6 +81,24 @@ var (
 // Load and return an item's metadata info. This will block until the
 // item is loaded.
 func (s *Store) Item(id string) (*Item, error) {
+	result := s.cache.Lookup(id)
+	if result != nil && len(result.Versions) > 0 {
+		return result, nil // a complete item record
+	}
+	val, err := s.table.Do(id, func() (interface{}, error) {
+		v, err := s.itemload(id)
+		if err == nil {
+			s.cache.Set(id, v)
+		}
+		return v, err
+	})
+	if val != nil {
+		result = val.(*Item)
+	}
+	return result, err
+}
+
+func (s *Store) itemload(id string) (*Item, error) {
 	n := s.findMaxBundle(id)
 	if n == 0 {
 		return nil, ErrNoItem
@@ -99,7 +110,7 @@ func (s *Store) Item(id string) (*Item, error) {
 	defer rc.Close()
 	item, err := readItemInfo(rc)
 	if err == nil {
-		item.maxBundle = n
+		item.MaxBundle = n
 	}
 	return item, err
 }
@@ -142,10 +153,17 @@ func (s *Store) Validate(id string) (int64, []string, error) {
 }
 
 func (item Item) blobByID(id BlobID) *Blob {
-	for _, b := range item.blobs {
+	for _, b := range item.Blobs {
 		if b.ID == id {
 			return b
 		}
 	}
 	return nil
 }
+
+type cache struct{}
+
+var nullcache cache
+
+func (_ cache) Lookup(id string) *Item    { return nil }
+func (_ cache) Set(id string, item *Item) {}

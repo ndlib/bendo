@@ -47,9 +47,7 @@ var (
 	ErrNotFound = errors.New("stream not found")
 )
 
-// Return a io.ReadCloser which contains the contents of the file `sname` in the bundle `key`.
-//
-// this doesn't really need a Directory, just a BundleStore...
+// Return a io.ReadCloser which contains the contents of the file sname in the bundle key.
 func OpenBundleStream(store BundleStore, key, sname string) (io.ReadCloser, error) {
 	r, err := OpenBundle(store, key)
 	if err != nil {
@@ -78,23 +76,23 @@ func OpenBundleStream(store BundleStore, key, sname string) (io.ReadCloser, erro
 tracks the underlying file stream we are writing to.
 Some utility methods are added to make our life easier.
 */
-type zipwriter struct {
+type Zipwriter struct {
 	f           io.WriteCloser // the underlying bundle file, nil if no file is currently open
 	*zip.Writer                // the zip interface over the bundle file
 }
 
-func openZipWriter(s BundleStore, id string, n int) (*zipwriter, error) {
+func OpenZipWriter(s BundleStore, id string, n int) (*Zipwriter, error) {
 	f, err := s.Create(sugar(id, n), id)
 	if err != nil {
 		return nil, err
 	}
-	return &zipwriter{
+	return &Zipwriter{
 		f:      f,
 		Writer: zip.NewWriter(f),
 	}, nil
 }
 
-func (zw *zipwriter) Close() error {
+func (zw *Zipwriter) Close() error {
 	err := zw.Writer.Close()
 	if err == nil {
 		err = zw.f.Close()
@@ -102,7 +100,7 @@ func (zw *zipwriter) Close() error {
 	return err
 }
 
-func (zw *zipwriter) makeStream(name string) (io.Writer, error) {
+func (zw *Zipwriter) MakeStream(name string) (io.Writer, error) {
 	header := zip.FileHeader{
 		Name:   name,
 		Method: zip.Store,

@@ -30,21 +30,20 @@ func readItemInfo(rc io.Reader) (*Item, error) {
 			Note:     ver.Note,
 			Slots:    ver.Slots,
 		}
-		result.versions = append(result.versions, v)
+		result.Versions = append(result.Versions, v)
 	}
 	for _, blob := range fromTape.Blobs {
 		b := &Blob{
 			ID:       BlobID(blob.BlobID),
-			SaveDate: time.Now(),
-			Creator:  "",
+			SaveDate: blob.SaveDate,
+			Creator:  blob.Creator,
 			Size:     blob.ByteCount,
 			Bundle:   blob.Bundle,
 		}
 		b.MD5, _ = hex.DecodeString(blob.MD5)
 		b.SHA256, _ = hex.DecodeString(blob.SHA256)
-		result.blobs = append(result.blobs, b)
+		result.Blobs = append(result.Blobs, b)
 	}
-	// TODO(dbrower): handle deleted blobs
 	return result, nil
 }
 
@@ -53,7 +52,7 @@ func writeItemInfo(w io.Writer, item *Item) error {
 		ItemID: item.ID,
 	}
 	var byteCount int64
-	for _, b := range item.blobs {
+	for _, b := range item.Blobs {
 		byteCount += b.Size
 		bTape := blobTape{
 			BlobID:    int(b.ID),
@@ -70,6 +69,15 @@ func writeItemInfo(w io.Writer, item *Item) error {
 			bTape.DeleteNote = b.DeleteNote
 		}
 		itemStore.Blobs = append(itemStore.Blobs, bTape)
+	}
+	for _, v := range item.Versions {
+		vTape := versionTape{
+			VersionID: int(v.ID),
+			SaveDate:  v.SaveDate,
+			Creator:   v.Creator,
+			Slots:     v.Slots,
+		}
+		itemStore.Versions = append(itemStore.Versions, vTape)
 	}
 	itemStore.ByteCount = byteCount
 	encoder := json.NewEncoder(w)

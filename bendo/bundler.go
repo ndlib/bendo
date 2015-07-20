@@ -23,21 +23,23 @@ It is not goroutine safe. Make sure to call Close when finished.
 type BundleWriter struct {
 	store BundleStore
 	item  *Item
-	zw    *zipwriter // target bundle file. nil if nothing is open.
+	zw    *Zipwriter // target bundle file. nil if nothing is open.
 	size  int64      // amount written to current bundle
 	n     int        // 1 + current bundle id
 }
 
-// make new bundle writer for item. n is the new bundle number to start with.
-// more than one bundle may be written.
-func NewBundler(s BundleStore, item *Item, n int) *BundleWriter {
+// NewBundler starts a new bundle writer for the given item. More than one bundle
+// file may be written. The advancement to a new bundle file happens either when
+// the current one grows larger than IdealBundleSize, or when Next() is called.
+func NewBundler(s BundleStore, item *Item) *BundleWriter {
 	return &BundleWriter{
 		store: s,
 		item:  item,
-		n:     n,
+		n:     item.MaxBundle + 1,
 	}
 }
 
+// CurrentBundle returns the id of the bundle being written to.
 func (bw *BundleWriter) CurrentBundle() int {
 	if bw.zw == nil {
 		return bw.n
@@ -45,11 +47,14 @@ func (bw *BundleWriter) CurrentBundle() int {
 	return bw.n - 1
 }
 
-// sets our zw to write to the next bundle file. Assumes no other process is
-// writting bundle files for this item.
-func (bw *BundleWriter) openNext() error {
+// Next() closes the current bundle, if any, and starts a new bundle file.
+func (bw *BundleWriter) Next() error {
 	var err error
-	bw.zw, err = openZipWriter(bw.store, bw.item.ID, bw.n)
+	err = bw.Close()
+	if err != nil {
+		return err
+	}
+	bw.zw, err = OpenZipWriter(bw.store, bw.item.ID, bw.n)
 	if err != nil {
 		return err
 	}
@@ -58,12 +63,15 @@ func (bw *BundleWriter) openNext() error {
 	return nil
 }
 
+// Close() writes out any final metadata and closes the current bundle.
+// Since the bundle file is opened in the first call to WriteBlob(), Opening a
+// BundleWriter and then closing it will not write anything to disk.
 func (bw *BundleWriter) Close() error {
 	if bw.zw == nil {
 		return nil
 	}
 	// write out the item data
-	w, err := bw.zw.makeStream("item-info.json")
+	w, err := bw.zw.MakeStream("item-info.json")
 	if err == nil {
 		err = writeItemInfo(w, bw.item)
 	}
@@ -73,27 +81,25 @@ func (bw *BundleWriter) Close() error {
 }
 
 const (
-	MB              = 1000000
+	MB = 1000000
+
+	// Start a new bundle once the current one becomes larger than this.
 	IdealBundleSize = 500 * MB
 )
 
-// assumes blob points to a blob already in the blob list for the bundle this
-// item is for
+// Write the given blob into the bundle. The blob must also be in the underlying item's
+// blob list.
 func (bw *BundleWriter) WriteBlob(blob *Blob, r io.Reader) error {
-	if bw.size >= IdealBundleSize {
-		if err := bw.Close(); err != nil {
-			return err
-		}
-	}
-	if bw.zw == nil {
-		if err := bw.openNext(); err != nil {
+	// we lazily open bw
+	if bw.size >= IdealBundleSize || bw.zw == nil {
+		if err := bw.Next(); err != nil {
 			return err
 		}
 	}
 	if bw.item.blobByID(blob.ID) == nil {
 		panic("Save blob with id not in blob list")
 	}
-	w, err := bw.zw.makeStream(fmt.Sprintf("blob/%d", blob.ID))
+	w, err := bw.zw.MakeStream(fmt.Sprintf("blob/%d", blob.ID))
 	if err != nil {
 		return err
 	}
@@ -137,13 +143,9 @@ func testhash(h hash.Hash, target *[]byte, name string) error {
 	return nil
 }
 
-// copies all the blobs in the bundle src, except for blobs with an id in except.
+// Copies all the blobs in the bundle src, except for those in the list, into the
+// current place in the bundle writer.
 func (bw *BundleWriter) CopyBundleExcept(src int, except []BlobID) error {
-	// open the source bundle
-	// NOTE: a lot of this is identical to the code which opens blobs for
-	// reading. Can this be refactored to use the same code base. The difference
-	// here is that we are scanning EVERYTHING in the bundle rather than
-	// looking for a specific file.
 	r, err := OpenBundle(bw.store, sugar(bw.item.ID, src))
 	if err != nil {
 		return err

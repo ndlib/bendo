@@ -41,49 +41,10 @@ type Version struct {
 
 type Item struct {
 	ID        string
-	maxBundle int        // largest bundle id used by this item
-	blobs     []*Blob    // list of blobs, sorted by id
-	versions  []*Version // list of versions, sorted by it
+	MaxBundle int        // largest bundle id used by this item
+	Blobs     []*Blob    // list of blobs, sorted by id
+	Versions  []*Version // list of versions, sorted by it
 }
-
-// The lower-level interface for working with Items.
-// It wraps a BundleStore and provides code to serialize and deserialize them
-// from bundles.
-//
-// The default ItemStore does not implement caching, and the caller needs to
-// ensure only one goroutine is accessing an item at a time.
-type ItemStore struct {
-	Store BundleStore
-}
-
-/*
-	// ItemList returns a list of item IDs. The channel is closed
-	// when the scanning is finished.
-	List() <-chan string
-
-	// Return a new item structure for the given item. This structure
-	// contains all the metadata about that item, including a version list
-	// and a list of blob metadata.
-	// In particular, the blob data is NOT returned
-	//
-	// This will block while the metadata is loading from the BundleStore.
-	Item(id string) (*Item, error)
-
-	// Return a stream containing the blob's contents.
-	Blob(id string, b BlobID) (io.ReadCloser, error)
-
-	// Start an update transaction on an item. It is an error to have two
-	// parallel transactions on the same item.
-	// If the item doesn't exist, it is created
-	Open(id string) Writer
-
-	// Validate all the bundles associated with the given item.
-	// Returns the total number of bytes and a list of errors found.
-	Validate(id string) (int64, []string, error)
-
-	// Returns the underlying BundleStore
-	BundleStore() BundleStore
-*/
 
 type ItemCache interface {
 	// try to return an item record with the given id.

@@ -38,7 +38,7 @@ func main() {
 	}
 }
 
-func doblob(r bendo.ItemStore, id, blob string) {
+func doblob(r *bendo.Store, id, blob string) {
 	bid, _ := strconv.Atoi(blob)
 
 	rc, err := r.Blob(id, bendo.BlobID(bid))
@@ -50,7 +50,7 @@ func doblob(r bendo.ItemStore, id, blob string) {
 	}
 }
 
-func doitem(r bendo.ItemStore, ids []string) {
+func doitem(r *bendo.Store, ids []string) {
 	for _, id := range ids {
 		item, err := r.Item(id)
 		if err != nil {
@@ -61,19 +61,19 @@ func doitem(r bendo.ItemStore, ids []string) {
 	}
 }
 
-func dolist(r bendo.ItemStore) {
+func dolist(r *bendo.Store) {
 	c := r.List()
 	for name := range c {
 		fmt.Println(name)
 	}
 }
 
-func dodummy(r bendo.ItemStore) {
+func dodummy(r *bendo.Store) {
 	data := bytes.NewBufferString("Hello There World!!")
-	tx := r.Update("qwer")
-	tx.AddBlob(data, 0, []byte{45, 67}, nil)
+	tx := r.Open("qwer")
 	tx.SetCreator("wendy")
-	err := tx.Commit()
-
+	bid, err := tx.WriteBlob(data, 0, nil, nil)
+	tx.SetSlot("hello", bid)
+	err = tx.Close()
 	fmt.Println(err)
 }
