@@ -8,7 +8,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/dbrower/bendo/bendo"
+	"github.com/ndlib/bendo/bendo"
 )
 
 var (

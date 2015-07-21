@@ -3,7 +3,7 @@ package main
 import (
 	"net/http"
 
-	"github.com/dbrower/bendo/server"
+	"github.com/ndlib/bendo/server"
 )
 
 func main() {
