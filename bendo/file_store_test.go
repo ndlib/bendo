@@ -26,29 +26,78 @@ func TestItemSubdir(t *testing.T) {
 	}
 }
 
-func TestGetPrefix(t *testing.T) {
+func TestListPrefix(t *testing.T) {
 	var files = []string{
 		"ab/",
 		"ab/cd/",
 		"ab/cd/abcd-0001.zip",
 		"ab/cd/abcd-0002.zip",
 		"ab/cd/abcdef-0001.zip",
+		"ab/ce/",
+		"ab/ce/abcez-0001.zip",
 		"ab/qw/",
 		"ab/qw/abqw-0001.zip",
+		"ac/",
+		"ac/zx/",
+		"ac/zx/aczx-0001.zip",
+		"bc/",
+		"bc/de/",
+		"bc/de/bcde-0001.zip",
 	}
-	var expected = []string{
-		"abcd-0001",
-		"abcd-0002",
-		"abcdef-0001",
+	var table = []struct {
+		prefix   string
+		expected []string
+	}{
+		{"", []string{
+			"abcd-0001",
+			"abcd-0002",
+			"abcdef-0001",
+			"abcez-0001",
+			"abqw-0001",
+			"aczx-0001",
+			"bcde-0001",
+		}},
+		{"a", []string{
+			"abcd-0001",
+			"abcd-0002",
+			"abcdef-0001",
+			"abcez-0001",
+			"abqw-0001",
+			"aczx-0001",
+		}},
+		{"ab", []string{
+			"abcd-0001",
+			"abcd-0002",
+			"abcdef-0001",
+			"abcez-0001",
+			"abqw-0001",
+		}},
+		{"abc", []string{
+			"abcd-0001",
+			"abcd-0002",
+			"abcdef-0001",
+			"abcez-0001",
+		}},
+		{"abcd", []string{
+			"abcd-0001",
+			"abcd-0002",
+			"abcdef-0001",
+		}},
+		{"abcde", []string{
+			"abcdef-0001",
+		}},
 	}
 	dir := makeTmpTree(files)
 	defer os.RemoveAll(dir)
-	s := &store{root: dir}
-	result, err := s.getprefix("abcd")
-	if err != nil {
-		t.Errorf("Got unexpected error: %s", err.Error())
-	} else if !equal(expected, result) {
-		t.Errorf("Got result %v, expected %v", result, expected)
+	s := &fileStore{root: dir}
+	for _, tab := range table {
+		t.Logf("Trying prefix %s", tab.prefix)
+		result, err := s.ListPrefix(tab.prefix)
+		if err != nil {
+			t.Errorf("Got unexpected error: %s", err.Error())
+		} else if !equal(tab.expected, result) {
+			t.Errorf("Got result %v, expected %v", result, tab.expected)
+		}
 	}
 }
 

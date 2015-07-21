@@ -18,7 +18,7 @@ var (
 func main() {
 	flag.Parse()
 
-	r := bendo.New(bendo.NewFSStore(*storeDir))
+	r := bendo.New(bendo.NewFileStore(*storeDir))
 
 	args := flag.Args()
 

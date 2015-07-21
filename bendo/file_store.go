@@ -3,42 +3,27 @@ package bendo
 import (
 	"io"
 	"log"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 )
 
-// store is used to implement both the TapeStore and the FSStore.
-// The difference is whether there is a URL to send requests to the
-// Dternity API.
-type store struct {
+// fileStore implements the simple file system based bundle store. It is
+// used by the dternity store, so make sure it doesn't open files unless
+// necessary.
+type fileStore struct {
 	root string
-	rest url.URL
 }
 
-func NewTapeStore(root string, api url.URL) BundleStore {
-	return &store{root: root, rest: api}
+func NewFileStore(root string) BundleStore {
+	return &fileStore{root}
 }
 
-func NewFSStore(root string) BundleStore {
-	return &store{root: root}
-}
-
-func (s *store) List() <-chan string {
+func (s *fileStore) List() <-chan string {
 	c := make(chan string)
 	go walkTree(c, s.root, true)
 	return c
-}
-
-func (s *store) ListPrefix(prefix string) ([]string, error) {
-	if len(prefix) < 4 {
-		// this item is stored across more than one directory
-	} else {
-		return s.getprefix(prefix)
-	}
-	return nil, nil
 }
 
 // Perform depth first walk of file tree at root, emitting all unique item
@@ -76,7 +61,32 @@ func walkTree(out chan<- string, root string, toplevel bool) {
 	}
 }
 
-func (s *store) Open(key, id string) (ReadAtCloser, int64, error) {
+func (s *fileStore) ListPrefix(prefix string) ([]string, error) {
+	var glob string
+	switch len(prefix) {
+	case 0:
+		glob = "*/*"
+	case 1:
+		glob = prefix + "*/*"
+	case 2:
+		glob = prefix[0:2] + "/*"
+	case 3:
+		glob = prefix[0:2] + "/" + prefix[2:3] + "*"
+	default:
+		glob = prefix[0:2] + "/" + prefix[2:4]
+	}
+	glob = filepath.Join(s.root, glob, prefix+"*")
+	result, err := filepath.Glob(glob)
+	if err == nil {
+		for i := range result {
+			r := path.Base(result[i])
+			result[i] = strings.TrimSuffix(r, ".zip")
+		}
+	}
+	return result, err
+}
+
+func (s *fileStore) Open(key, id string) (ReadAtCloser, int64, error) {
 	fname := filepath.Join(s.root, itemSubdir(id), key+".zip")
 	f, err := os.Open(fname)
 	if err != nil {
@@ -90,7 +100,7 @@ func (s *store) Open(key, id string) (ReadAtCloser, int64, error) {
 	return f, fi.Size(), nil
 }
 
-func (s *store) Create(key, id string) (io.WriteCloser, error) {
+func (s *fileStore) Create(key, id string) (io.WriteCloser, error) {
 	var w io.WriteCloser
 	dir := filepath.Join(s.root, itemSubdir(id))
 	err := os.MkdirAll(dir, 0775)
@@ -103,7 +113,7 @@ func (s *store) Create(key, id string) (io.WriteCloser, error) {
 	return w, err
 }
 
-func (s *store) Delete(key, id string) error {
+func (s *fileStore) Delete(key, id string) error {
 	fname := filepath.Join(s.root, itemSubdir(id), key+".zip")
 	return os.Remove(fname)
 }
@@ -111,32 +121,18 @@ func (s *store) Delete(key, id string) error {
 // Given an item id, return the subdirectory the item's file are stored in
 // e.g. "abcdd123" returns "ab/cd/"
 func itemSubdir(id string) string {
-	var result = make([]byte, 0, 8)
-	var count int
-	for j := range id {
-		result = append(result, id[j])
-		count++
-		if count == 2 {
-			result = append(result, '/')
-		}
-		if count >= 4 {
-			break
-		}
+	var result string
+	switch len(id) {
+	case 0:
+		result = "./"
+	case 1:
+		result = id + "/"
+	case 2:
+		result = id + "/"
+	case 3:
+		result = id[0:2] + "/" + id[2:3] + "/"
+	default:
+		result = id[0:2] + "/" + id[2:4] + "/"
 	}
-	if count != 2 {
-		result = append(result, '/')
-	}
-	return string(result)
-}
-
-func (s *store) getprefix(prefix string) ([]string, error) {
-	glob := filepath.Join(s.root, itemSubdir(prefix), prefix) + "*"
-	result, err := filepath.Glob(glob)
-	if err == nil {
-		for i := range result {
-			r := path.Base(result[i])
-			result[i] = strings.TrimSuffix(r, ".zip")
-		}
-	}
-	return result, err
+	return result
 }
