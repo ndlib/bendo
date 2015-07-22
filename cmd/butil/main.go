@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
+	"text/tabwriter"
 
 	"github.com/ndlib/bendo/items"
 )
@@ -54,9 +56,44 @@ func doitem(r *items.Store, ids []string) {
 		item, err := r.Item(id)
 		if err != nil {
 			fmt.Printf("%s: Error %s\n", id, err.Error())
-		} else {
-			fmt.Printf("%#v\n", item)
+			return
 		}
+		printitem(item)
+	}
+}
+
+func printitem(item *items.Item) {
+	fmt.Println("Item:", item.ID)
+	fmt.Println("MaxBundle:", item.MaxBundle)
+	for _, vers := range item.Versions {
+		fmt.Println("---")
+		w := tabwriter.NewWriter(os.Stdout, 5, 1, 3, ' ', 0)
+		fmt.Fprintf(w, "Version:\t%d\n", vers.ID)
+		fmt.Fprintf(w, "SaveDate:\t%v\n", vers.SaveDate)
+		fmt.Fprintf(w, "Creator:\t%s\n", vers.Creator)
+		fmt.Fprintf(w, "Note:\t%s\n", vers.Note)
+		w.Flush()
+		fmt.Printf(" Blob  Slot\n")
+		for slot, blob := range vers.Slots {
+			fmt.Printf("%5d  %s\n", blob, slot)
+		}
+	}
+	for _, blob := range item.Blobs {
+		fmt.Println("---")
+		w := tabwriter.NewWriter(os.Stdout, 5, 1, 3, ' ', 0)
+		fmt.Fprintf(w, "Blob:\t%d\n", blob.ID)
+		fmt.Fprintf(w, "SaveDate:\t%v\n", blob.SaveDate)
+		fmt.Fprintf(w, "Creator:\t%s\n", blob.Creator)
+		fmt.Fprintf(w, "Size:\t%d\n", blob.Size)
+		fmt.Fprintf(w, "Bundle:\t%d\n", blob.Bundle)
+		fmt.Fprintf(w, "MD5:\t%s\n", hex.EncodeToString(blob.MD5))
+		fmt.Fprintf(w, "SHA256:\t%s\n", hex.EncodeToString(blob.SHA256))
+		fmt.Fprintf(w, "ChecksumDate:\t%v\n", blob.ChecksumDate)
+		fmt.Fprintf(w, "ChecksumStatus:\t%v\n", blob.ChecksumStatus)
+		fmt.Fprintf(w, "DeleteDate:\t%v\n", blob.DeleteDate)
+		fmt.Fprintf(w, "Deleter:\t%v\n", blob.Deleter)
+		fmt.Fprintf(w, "DeleteNote:\t%v\n", blob.DeleteNote)
+		w.Flush()
 	}
 }
 
