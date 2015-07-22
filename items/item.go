@@ -1,4 +1,4 @@
-package bendo
+package items
 
 import (
 	"errors"

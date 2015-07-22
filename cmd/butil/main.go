@@ -1,14 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
 
-	"github.com/ndlib/bendo/bendo"
+	"github.com/ndlib/bendo/items"
 )
 
 var (
@@ -18,7 +17,7 @@ var (
 func main() {
 	flag.Parse()
 
-	r := bendo.New(bendo.NewFileStore(*storeDir))
+	r := items.New(items.NewFileStore(*storeDir))
 
 	args := flag.Args()
 
@@ -33,15 +32,15 @@ func main() {
 		doitem(r, args[1:])
 	case "list":
 		dolist(r)
-	case "dummy":
-		dodummy(r)
+	case "add":
+		doadd(r, args[1], args[2:])
 	}
 }
 
-func doblob(r *bendo.Store, id, blob string) {
+func doblob(r *items.Store, id, blob string) {
 	bid, _ := strconv.Atoi(blob)
 
-	rc, err := r.Blob(id, bendo.BlobID(bid))
+	rc, err := r.Blob(id, items.BlobID(bid))
 	if err != nil {
 		fmt.Printf("%s / %d: Error %s\n", id, bid, err.Error())
 	} else {
@@ -50,7 +49,7 @@ func doblob(r *bendo.Store, id, blob string) {
 	}
 }
 
-func doitem(r *bendo.Store, ids []string) {
+func doitem(r *items.Store, ids []string) {
 	for _, id := range ids {
 		item, err := r.Item(id)
 		if err != nil {
@@ -61,19 +60,28 @@ func doitem(r *bendo.Store, ids []string) {
 	}
 }
 
-func dolist(r *bendo.Store) {
+func dolist(r *items.Store) {
 	c := r.List()
 	for name := range c {
 		fmt.Println(name)
 	}
 }
 
-func dodummy(r *bendo.Store) {
-	data := bytes.NewBufferString("Hello There World!!")
-	tx := r.Open("qwer")
+func doadd(r *items.Store, id string, files []string) {
+	tx := r.Open(id)
 	tx.SetCreator("wendy")
-	bid, err := tx.WriteBlob(data, 0, nil, nil)
-	tx.SetSlot("hello", bid)
-	err = tx.Close()
-	fmt.Println(err)
+	defer tx.Close()
+	for _, name := range files {
+		in, err := os.Open(name)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		bid, err := tx.WriteBlob(in, 0, nil, nil)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		tx.SetSlot(name, bid)
+	}
 }

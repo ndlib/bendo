@@ -32,4 +32,4 @@ blob to bundle mapping.
 There is no relationship between a bundle number and the versions of an item.
 
 */
-package bendo
+package items

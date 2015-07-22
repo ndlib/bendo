@@ -8,11 +8,11 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 
-	"github.com/ndlib/bendo/bendo"
+	"github.com/ndlib/bendo/item"
 )
 
 var (
-	Items *bendo.Store
+	Items *item.Store
 )
 
 func AddRoutes() http.Handler {
