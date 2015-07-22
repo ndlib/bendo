@@ -98,4 +98,16 @@ func TestBundleWriter(t *testing.T) {
 	if ok {
 		t.Fatalf("Expected bundle 12345-0002 to not exist.")
 	}
+	helloR, err := OpenBundleStream(ms, "12345-0001", "blob/1")
+	if err != nil {
+		t.Fatalf("OpenBundleStream() == %s, expected nil", err.Error())
+	}
+	var hello = make([]byte, 20)
+	n, _ := helloR.Read(hello)
+	if n != 11 {
+		t.Fatalf("Blob/1 length = %d, expected 11", n)
+	}
+	if string(hello)[:n] != "Hello There" {
+		t.Fatalf("Blob/1 = %#v, expected \"Hello There\"", string(hello))
+	}
 }

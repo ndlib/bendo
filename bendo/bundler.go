@@ -63,7 +63,7 @@ func (bw *BundleWriter) Next() error {
 }
 
 // Close() writes out any final metadata and closes the current bundle.
-// Since the bundle file is opened in the first call to WriteBlob(), Opening a
+// Since the bundle file is opened in the first call to WriteBlob(), opening a
 // BundleWriter and then closing it will not write anything to disk.
 func (bw *BundleWriter) Close() error {
 	if bw.zw == nil {
