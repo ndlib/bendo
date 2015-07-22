@@ -8,11 +8,11 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 
-	"github.com/ndlib/bendo/item"
+	"github.com/ndlib/bendo/items"
 )
 
 var (
-	Items *item.Store
+	Items *items.Store
 )
 
 func AddRoutes() http.Handler {
@@ -20,6 +20,7 @@ func AddRoutes() http.Handler {
 	r.Handle("GET", "/blob/:id/:bid", BlobHandler)
 	r.Handle("GET", "/item/:id", ItemHandler)
 	r.Handle("GET", "/item/:id/:version/:slot", SlotHandler)
+	r.Handle("PATCH", "/item/:id", ItemPatchHandler)
 	return r
 }
 
@@ -30,7 +31,7 @@ func BlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		fmt.Fprintln(w, err)
 		return
 	}
-	src, err := Items.Blob(ps.ByName("id"), bendo.BlobID(n))
+	src, err := Items.Blob(ps.ByName("id"), items.BlobID(n))
 	if err != nil {
 		fmt.Fprintln(w, err)
 		return
@@ -40,6 +41,10 @@ func BlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 
 func ItemHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	fmt.Fprintf(w, "Hello, item %s", ps.ByName("id"))
+}
+
+func ItemPatchHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	fmt.Fprintf(w, "PATCH to item %s", ps.ByName("id"))
 }
 
 func SlotHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
