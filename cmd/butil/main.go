@@ -13,12 +13,13 @@ import (
 )
 
 var (
-	storeDir = flag.String("-s", ".", "location of the storage directory")
+	storeDir = flag.String("s", ".", "location of the storage directory")
 )
 
 func main() {
 	flag.Parse()
 
+	fmt.Printf("Using storage dir %s\n", *storeDir)
 	r := items.New(items.NewFileStore(*storeDir))
 
 	args := flag.Args()
