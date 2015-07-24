@@ -42,6 +42,10 @@ func AddRoutes() http.Handler {
 	r.Handle("GET", "/bundle/listprefix/:prefix", Bundle)
 	r.Handle("GET", "/bundle/open/:key", Bundle)
 
+	// other
+	r.Handle("GET", "/", WelcomeHandler)
+	r.Handle("GET", "/stats", NotImplementedHandler)
+
 	return r
 }
 
@@ -60,10 +64,12 @@ var (
 
 func NotImplementedHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	w.WriteHeader(http.StatusNotImplemented)
+	fmt.Fprintf(w, "Not Implemented\n")
 }
 
 func BlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	fmt.Fprintf(w, "Blob %s/%s\n", ps.ByName("id"), ps.ByName("bid"))
+	fmt.Fprintf(w, "Method: %s\n", r.Method)
 	n, err := strconv.ParseInt(ps.ByName("bid"), 10, 0)
 	if err != nil {
 		fmt.Fprintln(w, err)
@@ -90,4 +96,8 @@ func SlotHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		ps.ByName("id"),
 		ps.ByName("version"),
 		ps.ByName("slot"))
+}
+
+func WelcomeHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	fmt.Fprintf(w, "Hello")
 }
