@@ -26,7 +26,7 @@ type T struct {
 	ItemID   string    // ID of the item this tx is modifying
 	Creator  string    // ultimate committer of this tx
 	Commands []command // commands to run on commit
-	NewBlobs []blob    // track the provisional blobs
+	NewBlobs []blob    // track the provisional blobs. in decreasing order of PID
 }
 
 // [

@@ -45,5 +45,8 @@ func (c *mdcache) Set(id string, item *items.Item) {
 		return
 	}
 	// need to check for error??
-	c.db.Exec("INSERT INTO items (?, ?)", id, w.Bytes())
+	// this might error if the item is already in the database.
+	// so in that case we would then need to do an UPDATE
+	c.db.Exec("INSERT INTO items (id, gob) VALUES (?, ?)", id, w.Bytes())
+	// UPDATE items SET gob = ? WHERE id = ?
 }
