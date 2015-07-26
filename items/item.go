@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/golang/groupcache/singleflight"
+
+	"github.com/ndlib/bendo/store"
 )
 
 // We have two levels of item knowledge:
@@ -19,15 +21,15 @@ import (
 
 type Store struct {
 	cache ItemCache
-	S     BundleStore        // the underlying bundle store
+	S     store.Store        // the underlying bundle store
 	table singleflight.Group // for metadata lookups. keyed by item id
 }
 
-func New(s BundleStore) *Store {
+func New(s store.Store) *Store {
 	return &Store{S: s, cache: nullcache}
 }
 
-func NewWithCache(s BundleStore, cache ItemCache) *Store {
+func NewWithCache(s store.Store, cache ItemCache) *Store {
 	return &Store{S: s, cache: cache}
 }
 

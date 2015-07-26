@@ -10,6 +10,8 @@ import (
 	"io"
 	"strconv"
 	"strings"
+
+	"github.com/ndlib/bendo/store"
 )
 
 /*
@@ -20,7 +22,7 @@ that to save the item-info.json file when needed.
 It is not goroutine safe. Make sure to call Close when finished.
 */
 type BundleWriter struct {
-	store BundleStore
+	store store.Store
 	item  *Item
 	zw    *Zipwriter // target bundle file. nil if nothing is open.
 	size  int64      // amount written to current bundle
@@ -30,7 +32,7 @@ type BundleWriter struct {
 // NewBundler starts a new bundle writer for the given item. More than one bundle
 // file may be written. The advancement to a new bundle file happens either when
 // the current one grows larger than IdealBundleSize, or when Next() is called.
-func NewBundler(s BundleStore, item *Item) *BundleWriter {
+func NewBundler(s store.Store, item *Item) *BundleWriter {
 	return &BundleWriter{
 		store: s,
 		item:  item,

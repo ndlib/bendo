@@ -1,4 +1,4 @@
-package items
+package store
 
 import (
 	"fmt"
@@ -89,7 +89,7 @@ func TestListPrefix(t *testing.T) {
 	}
 	dir := makeTmpTree(files)
 	defer os.RemoveAll(dir)
-	s := &fileStore{root: dir}
+	s := &FileSystem{root: dir}
 	for _, tab := range table {
 		t.Logf("Trying prefix %s", tab.prefix)
 		result, err := s.ListPrefix(tab.prefix)

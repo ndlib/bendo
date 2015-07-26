@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"errors"
 	"io"
+
+	"github.com/ndlib/bendo/store"
 )
 
 type ZipreaderCloser struct {
@@ -15,8 +17,8 @@ func (z *ZipreaderCloser) Close() error {
 	return z.f.Close()
 }
 
-func OpenBundle(store BundleStore, key string) (*ZipreaderCloser, error) {
-	stream, size, err := store.Open(key, key)
+func OpenBundle(s store.Store, key string) (*ZipreaderCloser, error) {
+	stream, size, err := s.Open(key)
 	if err != nil {
 		return nil, err
 	}
@@ -48,8 +50,8 @@ var (
 )
 
 // Return a io.ReadCloser which contains the contents of the file sname in the bundle key.
-func OpenBundleStream(store BundleStore, key, sname string) (io.ReadCloser, error) {
-	r, err := OpenBundle(store, key)
+func OpenBundleStream(s store.Store, key, sname string) (io.ReadCloser, error) {
+	r, err := OpenBundle(s, key)
 	if err != nil {
 		return nil, err
 	}
@@ -81,8 +83,8 @@ type Zipwriter struct {
 	*zip.Writer                // the zip interface over the bundle file
 }
 
-func OpenZipWriter(s BundleStore, id string, n int) (*Zipwriter, error) {
-	f, err := s.Create(sugar(id, n), id)
+func OpenZipWriter(s store.Store, id string, n int) (*Zipwriter, error) {
+	f, err := s.Create(sugar(id, n))
 	if err != nil {
 		return nil, err
 	}

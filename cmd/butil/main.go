@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/ndlib/bendo/items"
+	"github.com/ndlib/bendo/store"
 )
 
 var (
@@ -20,7 +21,7 @@ func main() {
 	flag.Parse()
 
 	fmt.Printf("Using storage dir %s\n", *storeDir)
-	r := items.New(items.NewFileStore(*storeDir))
+	r := items.New(store.NewFileSystem(*storeDir))
 
 	args := flag.Args()
 

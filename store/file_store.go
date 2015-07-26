@@ -1,4 +1,4 @@
-package items
+package store
 
 import (
 	"io"
@@ -9,25 +9,31 @@ import (
 	"strings"
 )
 
-// fileStore implements the simple file system based bundle store. It is
-// used by the dternity store, so make sure it doesn't open files unless
-// necessary.
-type fileStore struct {
+// FileSystem implements the simple file system based store. It tries to
+// only open files when necessary, so it could be backed by a tape system,
+// for example.
+type FileSystem struct {
 	root string
 }
 
-func NewFileStore(root string) BundleStore {
-	return &fileStore{root}
+var (
+	// make sure it implements the Store interface
+	_ Store = &FileSystem{}
+)
+
+// Create a new FileSystem store based at the given root path.
+func NewFileSystem(root string) *FileSystem {
+	return &FileSystem{root}
 }
 
-func (s *fileStore) List() <-chan string {
+func (s *FileSystem) List() <-chan string {
 	c := make(chan string)
 	go walkTree(c, s.root, true)
 	return c
 }
 
 // Perform depth first walk of file tree at root, emitting all unique item
-// identifiers on channel out. Be careful to only open directories and stat
+// keys on channel out. Be careful to only open directories and stat
 // files. Otherwise we might trigger a blocking request on the tape system.
 //
 // If toplevel is true, the channel is closed when the function exits.
@@ -61,7 +67,7 @@ func walkTree(out chan<- string, root string, toplevel bool) {
 	}
 }
 
-func (s *fileStore) ListPrefix(prefix string) ([]string, error) {
+func (s *FileSystem) ListPrefix(prefix string) ([]string, error) {
 	var glob string
 	switch len(prefix) {
 	case 0:
@@ -86,8 +92,8 @@ func (s *fileStore) ListPrefix(prefix string) ([]string, error) {
 	return result, err
 }
 
-func (s *fileStore) Open(key, id string) (ReadAtCloser, int64, error) {
-	fname := filepath.Join(s.root, itemSubdir(id), key+".zip")
+func (s *FileSystem) Open(key string) (ReadAtCloser, int64, error) {
+	fname := filepath.Join(s.root, itemSubdir(key), key+".zip")
 	f, err := os.Open(fname)
 	if err != nil {
 		return nil, 0, err
@@ -100,9 +106,9 @@ func (s *fileStore) Open(key, id string) (ReadAtCloser, int64, error) {
 	return f, fi.Size(), nil
 }
 
-func (s *fileStore) Create(key, id string) (io.WriteCloser, error) {
+func (s *FileSystem) Create(key string) (io.WriteCloser, error) {
 	var w io.WriteCloser
-	dir := filepath.Join(s.root, itemSubdir(id))
+	dir := filepath.Join(s.root, itemSubdir(key))
 	err := os.MkdirAll(dir, 0775)
 	if err == nil {
 		fname := filepath.Join(dir, key+".zip")
@@ -113,26 +119,26 @@ func (s *fileStore) Create(key, id string) (io.WriteCloser, error) {
 	return w, err
 }
 
-func (s *fileStore) Delete(key, id string) error {
-	fname := filepath.Join(s.root, itemSubdir(id), key+".zip")
+func (s *FileSystem) Delete(key string) error {
+	fname := filepath.Join(s.root, itemSubdir(key), key+".zip")
 	return os.Remove(fname)
 }
 
-// Given an item id, return the subdirectory the item's file are stored in
+// Given an item key, return the subdirectory the item's file are stored in
 // e.g. "abcdd123" returns "ab/cd/"
-func itemSubdir(id string) string {
+func itemSubdir(key string) string {
 	var result string
-	switch len(id) {
+	switch len(key) {
 	case 0:
 		result = "./"
 	case 1:
-		result = id + "/"
+		result = key + "/"
 	case 2:
-		result = id + "/"
+		result = key + "/"
 	case 3:
-		result = id[0:2] + "/" + id[2:3] + "/"
+		result = key[0:2] + "/" + key[2:3] + "/"
 	default:
-		result = id[0:2] + "/" + id[2:4] + "/"
+		result = key[0:2] + "/" + key[2:4] + "/"
 	}
 	return result
 }
