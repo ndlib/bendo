@@ -23,6 +23,11 @@ type Store struct {
 // file fragments. They are distinguished by the prefix of their keys:
 // metadata keys start with "md" and file fragments start with "f".
 
+const (
+	fileKeyPrefix     = "md"
+	fragmentKeyPrefix = "f"
+)
+
 // we keep the metadata info in the store to allow resumption after server restarts.
 // but the source of record will be the in memory version of the data.
 
@@ -31,9 +36,37 @@ type File struct {
 	Size int64
 }
 
-// Open the given store.Store and return a fragment store wrapping it
-func Open(s store.Store) *Store {
-	return nil
+// Open the given store.Store and return a fragment store wrapping it. It will
+// load its metadata from the store before returning, possibly with an error.
+func New(s store.Store) (*Store, error) {
+	news := &Store{
+		s:     s,
+		files: make(map[string]*File),
+	}
+	err := news.load()
+	return news, err
+}
+
+// initialize our in memory data from the store.
+func (s *Store) load() error {
+	s.m.Lock()
+	defer s.m.Unlock()
+	metadata, err := s.s.ListPrefix(fileKeyPrefix)
+	if err != nil {
+		return err
+	}
+	// we could deconstruct the ID from the key, but
+	// it is easier to just unmarshal it from the json
+	for _, key := range metadata {
+		r, _, err := s.s.Open(key)
+		if err != nil {
+			return err
+		}
+
+		r.Close()
+		s.files[f.ID] = f
+	}
+
 }
 
 // creates a new file, and returns a pointer to the file object.
@@ -51,3 +84,25 @@ func (f *File) Append()   {}
 func (f *File) Open()     {}
 func (f *File) Info()     {}
 func (f *File) Rollback() {}
+
+func load(r io.ReaderAt) (*File, error) {
+
+}
+
+func (f *File) save() error {
+	err := f.store.Delete(frag.ID)
+	if err != nil {
+		return err
+	}
+	w, err := f.store.Create(frag.ID)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+	enc := json.NewEncoder(w)
+	err = enc.Encode(f)
+	return err
+}
+
+// defer opening the given key until Read is called.
+// close the stream when EOF is reached
