@@ -38,9 +38,9 @@ func AddRoutes() http.Handler {
 	r.Handle("POST", "/transaction/:tid/cancel", CancelTx)
 
 	// the read only bundle stuff
-	r.Handle("GET", "/bundle/list/", Bundle)
-	r.Handle("GET", "/bundle/listprefix/:prefix", Bundle)
-	r.Handle("GET", "/bundle/open/:key", Bundle)
+	r.Handle("GET", "/bundle/list/", BundleListHandler)
+	r.Handle("GET", "/bundle/listprefix/:prefix", BundleListPrefixHandler)
+	r.Handle("GET", "/bundle/open/:key", BundleOpenHandler)
 
 	// other
 	r.Handle("GET", "/", WelcomeHandler)
@@ -96,8 +96,4 @@ func SlotHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		ps.ByName("id"),
 		ps.ByName("version"),
 		ps.ByName("slot"))
-}
-
-func WelcomeHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	fmt.Fprintf(w, "Hello")
 }
