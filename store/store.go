@@ -33,3 +33,25 @@ type Store interface {
 	Create(key string) (io.WriteCloser, error)
 	Delete(key string) error
 }
+
+type reader struct {
+	r   io.ReaderAt
+	off int64
+}
+
+// Turns a ReaderAt into a io.Reader. It is here as a utility to help work with
+// the ReadAtCloser returned by Open.
+func NewReader(r io.ReaderAt) io.Reader {
+	return &reader{r: r}
+}
+
+func (r *reader) Read(p []byte) (n int, err error) {
+	n, err = r.r.ReadAt(p, r.off)
+	r.off += int64(n)
+	if err == io.EOF && n > 0 {
+		// reading less than a full buffer is not an error for
+		// an io.Reader
+		err = nil
+	}
+	return
+}

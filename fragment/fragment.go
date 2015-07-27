@@ -37,21 +37,22 @@ const (
 )
 
 type File struct {
+	// what kind of locking is needed on a File?
 	s    store.Store
 	ID   string // does not include fileKeyPrefix
 	Size int64
 	// Children ids, in the order to read them.
 	// They already include the fragmentKeyPrefix
-	Children []*fragment
+	Children []*Fragment
 }
 
-type fragment struct {
+type Fragment struct {
 	ID   string // includes fragmentKeyPrefix
 	Size int64
 }
 
-// Create a new fragment store wrapping a store.Store. It will try to load its
-// metadata from the store before returning.
+// Create a new fragment store wrapping a store.Store. The metadata will be
+// loaded from the store before returning.
 func New(s store.Store) (*Store, error) {
 	news := &Store{
 		s:     s,
@@ -129,7 +130,7 @@ func (s *Store) Delete(id string) {
 	}
 }
 
-// Open a file for writing. Any writes are appended to the end.
+// Open a file for writing. The writes are appended to the end.
 func (f *File) Append() (io.WriteCloser, error) {
 	fragkey := fmt.Sprintf("%s%s%04d",
 		fragmentKeyPrefix,
@@ -139,12 +140,12 @@ func (f *File) Append() (io.WriteCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	frag := &fragment{ID: fragkey}
+	frag := &Fragment{ID: fragkey}
 	return &fragwriter{frag: frag, file: f, w: w}, nil
 }
 
 type fragwriter struct {
-	frag *fragment
+	frag *Fragment
 	file *File
 	w    io.WriteCloser
 }
@@ -165,35 +166,40 @@ func (fw *fragwriter) Close() error {
 	return err
 }
 
-// open a file for reading
+// Open a file for reading from the beginning.
 func (f *File) Open() io.ReadCloser {
 	return &fragreader{
-		s:     f.s,
-		frags: f.Children[:],
+		s:         f.s,
+		fragments: f.Children[:],
 	}
 }
 
+// fragreader provides an io.Reader which will span a list of fragments.
+// Each fragment is opened and closed in turn, so there is at most one
+// file descriptor open at any time.
 type fragreader struct {
-	s     store.Store
-	frags []*fragment
-	r     store.ReadAtCloser
-	off   int64
+	s         store.Store
+	fragments []*Fragment
+	r         store.ReadAtCloser // nil if no reader is open
+	off       int64              // offset into r to read from next
 }
 
 func (fr *fragreader) Read(p []byte) (int, error) {
-	var err error
-	for len(fr.frags) > 0 {
+	for len(fr.fragments) > 0 {
+		var err error
 		if fr.r == nil {
-			fr.r, _, err = fr.s.Open(fr.frags[0].ID)
+			// need to open a new reader
+			fr.r, _, err = fr.s.Open(fr.fragments[0].ID)
 			if err != nil {
 				return 0, err
 			}
 			fr.off = 0
-			fr.frags = fr.frags[1:]
+			fr.fragments = fr.fragments[1:]
 		}
 		n, err := fr.r.ReadAt(p, fr.off)
 		fr.off += int64(n)
 		if err == io.EOF {
+			// need to check rest of list before sending EOF
 			fr.r.Close()
 			fr.r = nil
 			err = nil
@@ -212,11 +218,25 @@ func (fr *fragreader) Close() error {
 	return nil
 }
 
-func (f *File) Info()     {}
-func (f *File) Rollback() {}
+// Remove the last fragment from this file.
+// It may be better to provide a way to remove an arbitrary fragment.
+func (f *File) Rollback() error {
+	n := len(f.Children)
+	if n == 0 {
+		return nil
+	}
+	last := f.Children[n-1]
+	err := f.s.Delete(last.ID)
+	if err != nil {
+		return err
+	}
+	f.Children = f.Children[:n-1]
+	f.Size -= last.Size
+	return f.save()
+}
 
 func load(r io.ReaderAt) (*File, error) {
-	dec := json.NewDecoder(&reader{r: r})
+	dec := json.NewDecoder(store.NewReader(r))
 	f := new(File)
 	err := dec.Decode(f)
 	if err != nil {
@@ -238,24 +258,4 @@ func (f *File) save() error {
 	defer w.Close()
 	enc := json.NewEncoder(w)
 	return enc.Encode(f)
-}
-
-// defer opening the given key until Read is called.
-// close the stream when EOF is reached
-
-// Turn a ReaderAt into a io.Reader
-type reader struct {
-	r   io.ReaderAt
-	off int64
-}
-
-func (r *reader) Read(p []byte) (n int, err error) {
-	n, err = r.r.ReadAt(p, r.off)
-	r.off += int64(n)
-	if err == io.EOF && n > 0 {
-		// reading less than a full buffer is not an error for
-		// an io.Reader
-		err = nil
-	}
-	return
 }
