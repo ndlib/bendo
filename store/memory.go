@@ -64,9 +64,9 @@ type buf struct {
 	b []byte
 }
 
-func (r *buf) Close() error { return nil }
+func (r buf) Close() error { return nil }
 
-func (r *buf) ReadAt(p []byte, off int64) (int, error) {
+func (r buf) ReadAt(p []byte, off int64) (int, error) {
 	if int(off) >= len(r.b) {
 		return 0, io.EOF
 	}
@@ -92,4 +92,17 @@ func (ms *Memory) Delete(key string) error {
 	delete(ms.store, key)
 	ms.m.Unlock()
 	return nil
+}
+
+// for testing and debugging
+func (ms *Memory) Dump(w io.Writer) {
+	ms.m.RLock()
+	for k, v := range ms.store {
+		s := v.b
+		if len(s) > 300 {
+			s = s[:50]
+		}
+		fmt.Fprintf(w, "%s: %s\n", k, string(s))
+	}
+	ms.m.RUnlock()
 }
