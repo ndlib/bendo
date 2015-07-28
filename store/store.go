@@ -27,22 +27,28 @@ type ReadAtCloser interface {
 //
 // TODO: is a Close() method needed?
 type Store interface {
-	List() <-chan string
-	ListPrefix(prefix string) ([]string, error)
-	Open(key string) (ReadAtCloser, int64, error)
+	ROStore
 	Create(key string) (io.WriteCloser, error)
 	Delete(key string) error
 }
 
-type reader struct {
-	r   io.ReaderAt
-	off int64
+// ROStore is the read-only pieces of a Store. It allows one to list contents,
+// and to retreive data.
+type ROStore interface {
+	List() <-chan string
+	ListPrefix(prefix string) ([]string, error)
+	Open(key string) (ReadAtCloser, int64, error)
 }
 
 // Turns a ReaderAt into a io.Reader. It is here as a utility to help work with
 // the ReadAtCloser returned by Open.
 func NewReader(r io.ReaderAt) io.Reader {
 	return &reader{r: r}
+}
+
+type reader struct {
+	r   io.ReaderAt
+	off int64
 }
 
 func (r *reader) Read(p []byte) (n int, err error) {
