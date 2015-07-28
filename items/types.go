@@ -1,7 +1,6 @@
 package items
 
 import (
-	"io"
 	"time"
 )
 
@@ -52,17 +51,4 @@ type ItemCache interface {
 	Lookup(id string) *Item
 
 	Set(id string, item *Item)
-}
-
-type ReadAtCloser interface {
-	io.ReaderAt
-	io.Closer
-}
-
-type BundleStore interface {
-	List() <-chan string
-	ListPrefix(prefix string) ([]string, error)
-	Open(key string, id string) (ReadAtCloser, int64, error)
-	Create(key, id string) (io.WriteCloser, error)
-	Delete(key, id string) error
 }

@@ -7,22 +7,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/golang/groupcache/singleflight"
-
 	"github.com/ndlib/bendo/store"
 )
 
-// We have two levels of item knowledge:
-//   1. We know an item exists and the extent of its bundle numbers
-//   2. We have read a bundle and know the full item metadata
-// We can get (1) by just stating files. So that is what we use to begin with.
-// Knowledge of type (2) requires reading from tape. So we will fill it in
-// on demand and selectively in the background.
-
 type Store struct {
 	cache ItemCache
-	S     store.Store        // the underlying bundle store
-	table singleflight.Group // for metadata lookups. keyed by item id
+	S     store.Store // the underlying bundle store
 }
 
 func New(s store.Store) *Store {
@@ -54,20 +44,20 @@ func (s *Store) List() <-chan string {
 	return out
 }
 
-// turn an item id and a bundle number n into a string key
+// Turn an item id and a bundle number n into a string key.
 func sugar(id string, n int) string {
 	return fmt.Sprintf("%s-%04d", id, n)
 }
 
-// extract an item id and a bundle number from a string key
-// return an id of "" if the key could not be decoded
+// Extract an item id and a bundle number from a string key.
+// Returns an id of "" if the key could not be decoded.
 func desugar(s string) (id string, n int) {
-	z := strings.Split(s, "-")
-	if len(z) != 2 {
+	pieces := strings.Split(s, "-")
+	if len(pieces) != 2 {
 		return "", 0
 	}
-	id = z[0]
-	n64, err := strconv.ParseInt(z[1], 10, 0)
+	id = pieces[0]
+	n64, err := strconv.ParseInt(pieces[1], 10, 0)
 	if err != nil {
 		return "", 0
 	}
@@ -87,15 +77,9 @@ func (s *Store) Item(id string) (*Item, error) {
 	if result != nil && len(result.Versions) > 0 {
 		return result, nil // a complete item record
 	}
-	val, err := s.table.Do(id, func() (interface{}, error) {
-		v, err := s.itemload(id)
-		if err == nil {
-			s.cache.Set(id, v)
-		}
-		return v, err
-	})
-	if val != nil {
-		result = val.(*Item)
+	result, err := s.itemload(id)
+	if err == nil {
+		s.cache.Set(id, result)
 	}
 	return result, err
 }
@@ -118,7 +102,7 @@ func (s *Store) itemload(id string) (*Item, error) {
 }
 
 // Find the maximum bundle for the given id.
-// Returns 0 if the item does not exist in the BundleStore.
+// Returns 0 if the item does not exist in the store.
 func (s *Store) findMaxBundle(id string) int {
 	bundles, err := s.S.ListPrefix(id)
 	if err != nil {
@@ -163,6 +147,28 @@ func (item Item) blobByID(id BlobID) *Blob {
 	return nil
 }
 
+// Given a version identifier and a slot name, returns the corresponding blob
+// identifier. Returns 0 if the vid, slot pair does not resolve to anything.
+func (item Item) BlobByVersionSlot(vid VersionID, slot string) BlobID {
+	var ver *Version
+	for _, v := range item.Versions {
+		if v.ID == vid {
+			ver = v
+			break
+		}
+	}
+	if ver == nil {
+		return 0
+	}
+	for name, bid := range ver.Slots {
+		if name == slot {
+			return bid
+		}
+	}
+	return 0
+}
+
+// used to implement a no-op cache
 type cache struct{}
 
 var nullcache cache

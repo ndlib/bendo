@@ -14,7 +14,7 @@ Items do not share blobs between them. Bundle files do not contain information
 from more than one item.
 
 A Store provides the logic to do the serialization and deserialization of items
-to bundles. It wraps a BundleStore interface. It will block. It is possible to
+to bundles. It wraps a store.Store interface. It will block. It is possible to
 add a cache to store item metadata. The data retreival paths of a store are
 safe to be accessed from multiple goroutines. However, an open Writer for any
 given item should only be used by one gouroutine at a time.
