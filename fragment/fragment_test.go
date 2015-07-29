@@ -19,7 +19,8 @@ func TestFileWriting(t *testing.T) {
 		{"d", "quite a number| of appends| in a row^maybe some^extra|writes for good measure"},
 	}
 	memory := store.NewMemory()
-	registry, err := New(memory)
+	registry := New(memory)
+	err := registry.Load()
 	if err != nil {
 		t.Fatalf("received %s, expected nil", err.Error())
 	}
@@ -37,7 +38,8 @@ func TestFileWriting(t *testing.T) {
 		}
 	}
 	// Now test reloading
-	registry, err = New(memory)
+	registry = New(memory)
+	err = registry.Load()
 	if err != nil {
 		t.Fatalf("received %s, expected nil", err.Error())
 	}
@@ -105,7 +107,8 @@ func TestRollback(t *testing.T) {
 		{"aaaaad", "quite a number| of appends| in a row^maybe some^extra|writes for good measure"},
 	}
 	memory := store.NewMemory()
-	registry, err := New(memory)
+	registry := New(memory)
+	err := registry.Load()
 	if err != nil {
 		t.Fatalf("received %s, expected nil", err.Error())
 	}

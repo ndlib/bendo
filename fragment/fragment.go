@@ -26,11 +26,11 @@ type Store struct {
 }
 
 const (
-	// we store two kinds of information in the store: file metadata and
+	// There are two kinds of information in the store: file metadata and
 	// file fragments. They are distinguished by the prefix of their keys:
 	// metadata keys start with "md" and file fragments start with "f".
 	//
-	// we keep the metadata info in the store to allow resumption after
+	// The metadata info is in the store to allow reloading after
 	// server restarts.
 	fileKeyPrefix     = "md"
 	fragmentKeyPrefix = "f"
@@ -38,12 +38,11 @@ const (
 
 type File struct {
 	// what kind of locking is needed on a File?
-	s    store.Store
-	ID   string // does not include fileKeyPrefix
-	Size int64
-	// Children ids, in the order to read them.
-	// They already include the fragmentKeyPrefix
-	Children []*Fragment
+	s        store.Store
+	ID       string      // does not include fileKeyPrefix
+	Size     int64       // sum of all the children sizes
+	N        int         // the id number to use for the next fragment
+	Children []*Fragment // Children ids, in the order to read them.
 }
 
 type Fragment struct {
@@ -53,17 +52,16 @@ type Fragment struct {
 
 // Create a new fragment store wrapping a store.Store. The metadata will be
 // loaded from the store before returning.
-func New(s store.Store) (*Store, error) {
-	news := &Store{
+func New(s store.Store) *Store {
+	return &Store{
 		s:     s,
 		files: make(map[string]*File),
 	}
-	err := news.load()
-	return news, err
 }
 
-// initialize our in memory data from the store.
-func (s *Store) load() error {
+// Initialize our in-memory data from the store. This must be called before
+// using the structure.
+func (s *Store) Load() error {
 	metadata, err := s.s.ListPrefix(fileKeyPrefix)
 	if err != nil {
 		return err
@@ -90,6 +88,17 @@ func (s *Store) load() error {
 	return nil
 }
 
+// Return a list of all the stored file names.
+func (s *Store) List() []string {
+	s.m.RLock()
+	defer s.m.RUnlock()
+	result := make([]string, 0, len(s.files))
+	for k := range s.files {
+		result = append(result, k)
+	}
+	return result
+}
+
 // Create a new file with the given name, and return a pointer to it.
 // the file is not persisted until its first fragment has been written.
 // It is an error to create a file which already exists.
@@ -104,8 +113,8 @@ func (s *Store) New(id string) *File {
 	return newfile
 }
 
-// Lookup a file. Returns nil if none exists with that id. Files returned
-// from here are not goroutine safe.
+// Lookup a file. Returns nil if none exists with that id.
+// Returned pointers are not safe to be accessed by more than one goroutine.
 func (s *Store) Lookup(id string) *File {
 	s.m.RLock()
 	defer s.m.RUnlock()
@@ -135,7 +144,8 @@ func (f *File) Append() (io.WriteCloser, error) {
 	fragkey := fmt.Sprintf("%s%s%04d",
 		fragmentKeyPrefix,
 		f.ID,
-		len(f.Children))
+		f.N)
+	f.N++
 	w, err := f.s.Create(fragkey)
 	if err != nil {
 		return nil, err
@@ -219,19 +229,24 @@ func (fr *fragreader) Close() error {
 }
 
 // Remove the last fragment from this file.
-// It may be better to provide a way to remove an arbitrary fragment.
+// Use RemoveFragment to remove a specific fragment.
 func (f *File) Rollback() error {
-	n := len(f.Children)
-	if n == 0 {
+	return f.RemoveFragment(len(f.Children) - 1)
+}
+
+// Remove the given fragment from a file. The first fragment is
+// 0, the next is 1, etc. Use Rollback() to remove the last fragment.
+func (f *File) RemoveFragment(n int) error {
+	if n < 0 || n >= len(f.Children) {
 		return nil
 	}
-	last := f.Children[n-1]
-	err := f.s.Delete(last.ID)
+	frag := f.Children[n]
+	err := f.s.Delete(frag.ID)
 	if err != nil {
 		return err
 	}
-	f.Children = f.Children[:n-1]
-	f.Size -= last.Size
+	f.Children = append(f.Children[:n], f.Children[n+1:]...)
+	f.Size -= frag.Size
 	return f.save()
 }
 
