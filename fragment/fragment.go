@@ -20,9 +20,10 @@ import (
 // to be uploaded in pieces, "fragments", and then read back as a single
 // unit.
 type Store struct {
-	s     store.Store
-	m     sync.RWMutex // protects files
-	files map[string]*File
+	meta   store.Store  // for the metadata
+	fstore store.Store  // for the file fragments
+	m      sync.RWMutex // protects files
+	files  map[string]*File
 }
 
 const (
@@ -38,7 +39,8 @@ const (
 
 type File struct {
 	// what kind of locking is needed on a File?
-	s        store.Store
+	meta     store.Store // for metadata
+	fstore   store.Store // for fragments
 	ID       string      // does not include fileKeyPrefix
 	Size     int64       // sum of all the children sizes
 	N        int         // the id number to use for the next fragment
@@ -46,7 +48,7 @@ type File struct {
 }
 
 type Fragment struct {
-	ID   string // includes fragmentKeyPrefix
+	ID   string
 	Size int64
 }
 
@@ -54,22 +56,23 @@ type Fragment struct {
 // loaded from the store before returning.
 func New(s store.Store) *Store {
 	return &Store{
-		s:     s,
-		files: make(map[string]*File),
+		meta:   store.NewWithPrefix(s, fileKeyPrefix),
+		fstore: store.NewWithPrefix(s, fragmentKeyPrefix),
+		files:  make(map[string]*File),
 	}
 }
 
 // Initialize our in-memory data from the store. This must be called before
 // using the structure.
 func (s *Store) Load() error {
-	metadata, err := s.s.ListPrefix(fileKeyPrefix)
+	metadata, err := s.meta.ListPrefix("")
 	if err != nil {
 		return err
 	}
 	s.m.Lock()
 	defer s.m.Unlock()
 	for _, key := range metadata {
-		r, _, err := s.s.Open(key)
+		r, _, err := s.meta.Open(key)
 		if err != nil {
 			return err
 		}
@@ -80,9 +83,8 @@ func (s *Store) Load() error {
 			// probably just skip this file
 			return err
 		}
-		f.s = s.s
-		// we could deconstruct the ID from the key, but
-		// it is easier to just unmarshal it from the json
+		f.meta = s.meta
+		f.fstore = s.fstore
 		s.files[f.ID] = f
 	}
 	return nil
@@ -101,14 +103,14 @@ func (s *Store) List() []string {
 
 // Create a new file with the given name, and return a pointer to it.
 // the file is not persisted until its first fragment has been written.
-// It is an error to create a file which already exists.
+// If the file already exists, nil is returned.
 func (s *Store) New(id string) *File {
 	s.m.Lock()
 	defer s.m.Unlock()
 	if _, ok := s.files[id]; ok {
-		panic("File already exists")
+		return nil
 	}
-	newfile := &File{ID: id, s: s.s}
+	newfile := &File{ID: id, meta: s.meta, fstore: s.fstore}
 	s.files[id] = newfile
 	return newfile
 }
@@ -133,20 +135,17 @@ func (s *Store) Delete(id string) {
 	}
 
 	// don't need the lock for the following
-	s.s.Delete(fileKeyPrefix + f.ID)
+	s.meta.Delete(fileKeyPrefix + f.ID)
 	for _, child := range f.Children {
-		s.s.Delete(child.ID)
+		s.fstore.Delete(child.ID)
 	}
 }
 
 // Open a file for writing. The writes are appended to the end.
 func (f *File) Append() (io.WriteCloser, error) {
-	fragkey := fmt.Sprintf("%s%s%04d",
-		fragmentKeyPrefix,
-		f.ID,
-		f.N)
+	fragkey := fmt.Sprintf("%s%04d", f.ID, f.N)
 	f.N++
-	w, err := f.s.Create(fragkey)
+	w, err := f.fstore.Create(fragkey)
 	if err != nil {
 		return nil, err
 	}
@@ -178,9 +177,13 @@ func (fw *fragwriter) Close() error {
 
 // Open a file for reading from the beginning.
 func (f *File) Open() io.ReadCloser {
+	var list = make([]string, len(f.Children))
+	for i := range f.Children {
+		list[i] = f.Children[i].ID
+	}
 	return &fragreader{
-		s:         f.s,
-		fragments: f.Children[:],
+		s:         f.fstore,
+		fragments: list,
 	}
 }
 
@@ -188,8 +191,8 @@ func (f *File) Open() io.ReadCloser {
 // Each fragment is opened and closed in turn, so there is at most one
 // file descriptor open at any time.
 type fragreader struct {
-	s         store.Store
-	fragments []*Fragment
+	s         store.Store // containing the fragments
+	fragments []string
 	r         store.ReadAtCloser // nil if no reader is open
 	off       int64              // offset into r to read from next
 }
@@ -198,8 +201,8 @@ func (fr *fragreader) Read(p []byte) (int, error) {
 	for len(fr.fragments) > 0 {
 		var err error
 		if fr.r == nil {
-			// need to open a new reader
-			fr.r, _, err = fr.s.Open(fr.fragments[0].ID)
+			// open a new reader
+			fr.r, _, err = fr.s.Open(fr.fragments[0])
 			if err != nil {
 				return 0, err
 			}
@@ -210,9 +213,8 @@ func (fr *fragreader) Read(p []byte) (int, error) {
 		fr.off += int64(n)
 		if err == io.EOF {
 			// need to check rest of list before sending EOF
-			fr.r.Close()
+			err = fr.r.Close()
 			fr.r = nil
-			err = nil
 		}
 		if n > 0 || err != nil {
 			return n, err
@@ -241,7 +243,7 @@ func (f *File) RemoveFragment(n int) error {
 		return nil
 	}
 	frag := f.Children[n]
-	err := f.s.Delete(frag.ID)
+	err := f.fstore.Delete(frag.ID)
 	if err != nil {
 		return err
 	}
@@ -261,12 +263,12 @@ func load(r io.ReaderAt) (*File, error) {
 }
 
 func (f *File) save() error {
-	key := fileKeyPrefix + f.ID
-	err := f.s.Delete(key)
+	key := f.ID
+	err := f.meta.Delete(key)
 	if err != nil {
 		return err
 	}
-	w, err := f.s.Create(key)
+	w, err := f.meta.Create(key)
 	if err != nil {
 		return err
 	}
