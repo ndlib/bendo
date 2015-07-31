@@ -37,10 +37,11 @@ func SlotHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		fmt.Fprintf(w, "Invalid version")
 		return
 	}
+	// the star parameter in httprouter returns the leading slash
 	slot := strings.TrimPrefix(ps.ByName("slot"), "/")
 	bid := item.BlobByVersionSlot(items.VersionID(vid), slot)
 	if bid == 0 {
-		fmt.Fprintf(w, "Cannot resolve version/slot pair")
+		fmt.Fprintf(w, "Cannot resolve (%d, %s) pair", vid, slot)
 		return
 	}
 	getblob(w, r, id, items.BlobID(bid))

@@ -41,7 +41,7 @@ type File struct {
 	// what kind of locking is needed on a File?
 	meta     store.Store // for metadata
 	fstore   store.Store // for fragments
-	ID       string      // does not include fileKeyPrefix
+	ID       string      // name in the fstore
 	Size     int64       // sum of all the children sizes
 	N        int         // the id number to use for the next fragment
 	Children []*Fragment // Children ids, in the order to read them.
@@ -135,7 +135,7 @@ func (s *Store) Delete(id string) {
 	}
 
 	// don't need the lock for the following
-	s.meta.Delete(fileKeyPrefix + f.ID)
+	s.meta.Delete(f.ID)
 	for _, child := range f.Children {
 		s.fstore.Delete(child.ID)
 	}
@@ -150,27 +150,27 @@ func (f *File) Append() (io.WriteCloser, error) {
 		return nil, err
 	}
 	frag := &Fragment{ID: fragkey}
-	return &fragwriter{frag: frag, file: f, w: w}, nil
+	return &fragwriter{Fragment: frag, parent: f, w: w}, nil
 }
 
 type fragwriter struct {
-	frag *Fragment
-	file *File
-	w    io.WriteCloser
+	*Fragment
+	parent *File
+	w      io.WriteCloser
 }
 
 func (fw *fragwriter) Write(p []byte) (int, error) {
 	n, err := fw.w.Write(p)
-	fw.frag.Size += int64(n)
+	fw.Size += int64(n)
 	return n, err
 }
 
 func (fw *fragwriter) Close() error {
 	err := fw.w.Close()
 	if err == nil {
-		fw.file.Children = append(fw.file.Children, fw.frag)
-		fw.file.Size += fw.frag.Size
-		err = fw.file.save()
+		fw.parent.Children = append(fw.parent.Children, fw.Fragment)
+		fw.parent.Size += fw.Size
+		err = fw.parent.save()
 	}
 	return err
 }
@@ -182,32 +182,32 @@ func (f *File) Open() io.ReadCloser {
 		list[i] = f.Children[i].ID
 	}
 	return &fragreader{
-		s:         f.fstore,
-		fragments: list,
+		s:    f.fstore,
+		keys: list,
 	}
 }
 
-// fragreader provides an io.Reader which will span a list of fragments.
+// fragreader provides an io.Reader which will span a list of keys.
 // Each fragment is opened and closed in turn, so there is at most one
 // file descriptor open at any time.
 type fragreader struct {
-	s         store.Store // containing the fragments
-	fragments []string
-	r         store.ReadAtCloser // nil if no reader is open
-	off       int64              // offset into r to read from next
+	s    store.Store        // the store containing the keys
+	keys []string           // next one to open is at index 0
+	r    store.ReadAtCloser // nil if no reader is open
+	off  int64              // offset into r to read from next
 }
 
 func (fr *fragreader) Read(p []byte) (int, error) {
-	for len(fr.fragments) > 0 {
+	for len(fr.keys) > 0 {
 		var err error
 		if fr.r == nil {
 			// open a new reader
-			fr.r, _, err = fr.s.Open(fr.fragments[0])
+			fr.r, _, err = fr.s.Open(fr.keys[0])
 			if err != nil {
 				return 0, err
 			}
 			fr.off = 0
-			fr.fragments = fr.fragments[1:]
+			fr.keys = fr.keys[1:]
 		}
 		n, err := fr.r.ReadAt(p, fr.off)
 		fr.off += int64(n)
