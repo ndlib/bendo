@@ -1,6 +1,7 @@
 package transaction
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"math/rand"
@@ -9,22 +10,23 @@ import (
 	"time"
 
 	"github.com/ndlib/bendo/fragment"
+	"github.com/ndlib/bendo/items"
 	"github.com/ndlib/bendo/store"
 )
 
 // Given a store, create a new registry.
 // Use the Load() option to reload the metadata from the store.
 func New(s store.Store) *Registry {
-	return Registry{
+	return &Registry{
 		Files:   fragment.New(s),
 		TxStore: store.NewWithPrefix(s, "tx:"),
-		files:   make(map[string]*T),
+		txs:     make(map[string]*T),
 	}
 }
 
 type Registry struct {
 	Files   *fragment.Store
-	TxStore *store.Store
+	TxStore store.Store
 	m       sync.RWMutex  // protects txs
 	txs     map[string]*T // transaction ID to transaction
 }
@@ -34,9 +36,9 @@ func (r *Registry) Load() error {
 	if err != nil {
 		return err
 	}
-	s.m.Lock()
-	defer s.m.Unlock()
-	for _, key := range r.TxStore.List() {
+	r.m.Lock()
+	defer r.m.Unlock()
+	for key := range r.TxStore.List() {
 		f, _, err := r.TxStore.Open(key)
 		if f == nil || err != nil {
 			// huh?
@@ -47,7 +49,7 @@ func (r *Registry) Load() error {
 		if err != nil {
 			continue
 		}
-		tx.r = r
+		tx.files = r.Files
 		r.txs[tx.ID] = tx
 	}
 	return nil
@@ -69,13 +71,13 @@ var (
 )
 
 // Create a new transaction in this registry to update item itemid.
-func (r *Registry) Create(itemid string) *T {
+func (r *Registry) Create(itemid string) (*T, error) {
 	r.m.Lock()
 	defer r.m.Unlock()
 	// is there currently a transaction for the item?
 	for _, tx := range r.txs {
 		if tx.ItemID == itemid {
-			return ErrExistingTransaction
+			return nil, ErrExistingTransaction
 		}
 	}
 	tx := &T{
@@ -84,11 +86,10 @@ func (r *Registry) Create(itemid string) *T {
 		Started:  time.Now(),
 		Modified: time.Now(),
 		ItemID:   itemid,
-		Slots:    make(map[string]int),
-		r:        r,
+		files:    r.Files,
 	}
 	r.txs[tx.ID] = tx
-	return tx
+	return tx, nil
 }
 
 // generate a new transaction id. Assumes caller holds r.m lock (either R or W)
@@ -119,7 +120,7 @@ func (r *Registry) Delete(id string) {
 	r.m.Lock()
 	tx := r.txs[id]
 	delete(r.txs, id)
-	s.m.Unlock()
+	r.m.Unlock()
 
 	if tx == nil {
 		return
@@ -127,8 +128,8 @@ func (r *Registry) Delete(id string) {
 
 	// don't need the lock for the following
 	r.TxStore.Delete(tx.ID)
-	for _, child := range tx.NewBlobs {
-		r.Files.Delete(child.ID)
+	for _, bl := range tx.NewBlobs {
+		r.Files.Delete(bl.PID)
 	}
 }
 
@@ -183,6 +184,7 @@ const (
 
 type blob struct {
 	PID    string // provisional id, good until we ingest it
+	ID     items.BlobID
 	MD5    []byte
 	SHA256 []byte
 }
@@ -198,9 +200,9 @@ func (tx *T) NewFile(md5, sha256 []byte) *fragment.File {
 		}
 	}
 	nb := &blob{
-		PID: id,
-		MD5: md5,
-		SHA: sha256,
+		PID:    id,
+		MD5:    md5,
+		SHA256: sha256,
 	}
 	tx.m.Lock()
 	defer tx.m.Unlock()
@@ -210,23 +212,54 @@ func (tx *T) NewFile(md5, sha256 []byte) *fragment.File {
 }
 
 // [
-// ["DELETE", 56],
-// ["SLOT", "/asdf/45", 4],
-// ["NOTE", "blah blah"]
+// ["delete", 56],
+// ["slot", "/asdf/45", 4],
+// ["note", "blah blah"]
 // ]
 //
-// update item 78f7d8s (
-//  add blob tr78s (
-//     SHA256 43gahfg3g4ga9989898a88b
-//     MD5 4323434b3b4b342
-//  )
-//  set slot "hello there" tr78s
-//  set slot "/volume" 0
-//  set slot "accessRights" 2
-//  delete 4
-// )
-//
+// (update 78f7d8s (
+// 		(add tr78s
+//     		(SHA256 43gahfg3g4ga9989898a88b)
+//     		(MD5 4323434b3b4b342))
+//  	(slot "hello there" tr78s)
+//  	(slot "/volume" 0)
+//  	(slot "accessRights" 2)
+//  	(delete 4)
+// ))
 type command []string
+
+func (c command) Execute(iw *items.Writer, tx *T) {
+	cmd := []string(c)
+	if len(cmd) == 0 {
+		return
+	}
+	switch {
+	case cmd[0] == "delete" && len(cmd) == 2:
+		id, err := strconv.Atoi(cmd[1])
+		if err == nil {
+			iw.DeleteBlob(items.BlobID(id))
+		}
+	case cmd[0] == "slot" && len(cmd) == 3:
+		id, err := strconv.Atoi(cmd[2])
+		if err != nil {
+			// can we resolve the id to a new blob?
+			for _, bl := range tx.NewBlobs {
+				if bl.PID == cmd[2] {
+					id = int(bl.ID)
+					err = nil
+					break
+				}
+			}
+		}
+		if err == nil {
+			iw.SetSlot(cmd[1], items.BlobID(id))
+		}
+	case cmd[0] == "note" && len(cmd) == 2:
+		iw.SetNote(cmd[1])
+	default:
+		tx.Err = append(tx.Err, errors.New("Bad command "+cmd[0]))
+	}
+}
 
 func (tx *T) SetSlot(slot, value string) {
 	tx.m.Lock()
@@ -238,39 +271,50 @@ func (tx *T) SetSlot(slot, value string) {
 func (tx *T) SetNote(note string) {
 }
 
-func (tx *T) addcommand(...cmd []string) {
+func (tx *T) addcommand(cmd ...string) {
 	tx.m.Lock()
 	defer tx.m.Unlock()
-	tx.Commands = append(tx.Commands, cmd)
+	tx.Commands = append(tx.Commands, command(cmd))
 	tx.Modified = time.Now()
 }
 
-func (tx *T) Update(s items.Store) {
-	if !tx.VerifyFiles() {
-		return
-	}
-	// now create or update the item
-	itmWriter := s.Open(tx.ItemID)
-	itmWriter.SetCreator(tx.Creator)
+// Commit this transaction to the store, and create or update the underlying
+// item.
+func (tx *T) CommitTo(s items.Store, Creator string) {
+	tx.m.Lock()
+	defer tx.m.Unlock()
+	tx.Status = StatusIngest
+	iw := s.Open(tx.ItemID)
+	iw.SetCreator(Creator)
 	for _, bl := range tx.NewBlobs {
-		f := tx.fstore.Lookup()
-
-		bid, err := itmWriter.WriteBlob(f, 0, bl.MD5, bl.SHA256)
+		f := tx.files.Lookup(bl.PID)
+		reader := f.Open()
+		bid, err := iw.WriteBlob(reader, f.Size, bl.MD5, bl.SHA256)
+		reader.Close()
 		if err != nil {
-			//
+			tx.Err = append(tx.Err, err)
 		}
 		bl.ID = bid
 	}
-
+	// execute commands. Do this second so any new blobs would have
+	// been given IDs already.
+	for _, cmd := range tx.Commands {
+		cmd.Execute(iw, tx)
+	}
+	iw.Close()
+	tx.Status = StatusFinished
+	if len(tx.Err) > 0 {
+		tx.Status = StatusError
+	}
 }
 
 func (tx *T) VerifyFiles() {
 	tx.m.Lock()
 	tx.Status = StatusChecking
 	for _, bl := range tx.NewBlobs {
-		f := tx.r.Files.Open(bl.ID)
-		f.Close()
+		_ = tx.files.Lookup(bl.PID)
 	}
+	tx.Status = StatusWaiting
 	if len(tx.Err) > 0 {
 		tx.Status = StatusError
 	}
