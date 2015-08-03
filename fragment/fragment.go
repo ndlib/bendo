@@ -8,7 +8,6 @@ and error, that fragment is deleted, and the upload can try again.
 package fragment
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"sync"
@@ -20,7 +19,7 @@ import (
 // to be uploaded in pieces, "fragments", and then read back as a single
 // unit.
 type Store struct {
-	meta   store.Store  // for the metadata
+	meta   *JSONStore   // for the metadata
 	fstore store.Store  // for the file fragments
 	m      sync.RWMutex // protects files
 	files  map[string]*File
@@ -39,12 +38,13 @@ const (
 
 type File struct {
 	// what kind of locking is needed on a File?
-	meta     store.Store // for metadata
-	fstore   store.Store // for fragments
-	ID       string      // name in the fstore
-	Size     int64       // sum of all the children sizes
-	N        int         // the id number to use for the next fragment
-	Children []*Fragment // Children ids, in the order to read them.
+	meta     *JSONStore   // for metadata
+	fstore   store.Store  // for fragments
+	m        sync.RWMutex // protects everything below
+	ID       string       // name in the fstore
+	Size     int64        // sum of all the children sizes
+	N        int          // the id number to use for the next fragment
+	Children []*Fragment  // Children ids, in the order to read them.
 }
 
 type Fragment struct {
@@ -56,7 +56,7 @@ type Fragment struct {
 // loaded from the store before returning.
 func New(s store.Store) *Store {
 	return &Store{
-		meta:   store.NewWithPrefix(s, fileKeyPrefix),
+		meta:   NewJSON(store.NewWithPrefix(s, fileKeyPrefix)),
 		fstore: store.NewWithPrefix(s, fragmentKeyPrefix),
 		files:  make(map[string]*File),
 	}
@@ -72,12 +72,8 @@ func (s *Store) Load() error {
 	s.m.Lock()
 	defer s.m.Unlock()
 	for _, key := range metadata {
-		r, _, err := s.meta.Open(key)
-		if err != nil {
-			return err
-		}
-		f, err := load(r)
-		r.Close()
+		f := new(File)
+		err := s.meta.Open(key, &f)
 		if err != nil {
 			// TODO(dbrower): this is probably too strict. We should
 			// probably just skip this file
@@ -143,6 +139,8 @@ func (s *Store) Delete(id string) {
 
 // Open a file for writing. The writes are appended to the end.
 func (f *File) Append() (io.WriteCloser, error) {
+	f.m.Lock()
+	defer f.m.Unlock()
 	fragkey := fmt.Sprintf("%s%04d", f.ID, f.N)
 	f.N++
 	w, err := f.fstore.Create(fragkey)
@@ -168,15 +166,19 @@ func (fw *fragwriter) Write(p []byte) (int, error) {
 func (fw *fragwriter) Close() error {
 	err := fw.w.Close()
 	if err == nil {
+		fw.parent.m.Lock()
 		fw.parent.Children = append(fw.parent.Children, fw.Fragment)
 		fw.parent.Size += fw.Size
 		err = fw.parent.save()
+		fw.parent.m.Unlock()
 	}
 	return err
 }
 
 // Open a file for reading from the beginning.
 func (f *File) Open() io.ReadCloser {
+	f.m.RLock()
+	defer f.m.RUnlock()
 	var list = make([]string, len(f.Children))
 	for i := range f.Children {
 		list[i] = f.Children[i].ID
@@ -233,7 +235,9 @@ func (fr *fragreader) Close() error {
 // Remove the last fragment from this file.
 // Use RemoveFragment to remove a specific fragment.
 func (f *File) Rollback() error {
-	return f.RemoveFragment(len(f.Children) - 1)
+	f.m.Lock()
+	defer f.m.Unlock()
+	return f.removefragment(len(f.Children) - 1)
 }
 
 // Remove the given fragment from a file. The first fragment is
@@ -242,6 +246,13 @@ func (f *File) RemoveFragment(n int) error {
 	if n < 0 || n >= len(f.Children) {
 		return nil
 	}
+	f.m.Lock()
+	defer f.m.Unlock()
+	return f.removefragment(n)
+}
+
+// must hold m.Lock() when calling
+func (f *File) removefragment(n int) error {
 	frag := f.Children[n]
 	err := f.fstore.Delete(frag.ID)
 	if err != nil {
@@ -252,27 +263,7 @@ func (f *File) RemoveFragment(n int) error {
 	return f.save()
 }
 
-func load(r io.ReaderAt) (*File, error) {
-	dec := json.NewDecoder(store.NewReader(r))
-	f := new(File)
-	err := dec.Decode(f)
-	if err != nil {
-		f = nil
-	}
-	return f, err
-}
-
+// must hold at least a read lock to call this
 func (f *File) save() error {
-	key := f.ID
-	err := f.meta.Delete(key)
-	if err != nil {
-		return err
-	}
-	w, err := f.meta.Create(key)
-	if err != nil {
-		return err
-	}
-	defer w.Close()
-	enc := json.NewEncoder(w)
-	return enc.Encode(f)
+	return f.meta.Save(f.ID, f)
 }
