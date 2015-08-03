@@ -121,7 +121,12 @@ func (s *FileSystem) Create(key string) (io.WriteCloser, error) {
 
 func (s *FileSystem) Delete(key string) error {
 	fname := filepath.Join(s.root, itemSubdir(key), key+".zip")
-	return os.Remove(fname)
+	err := os.Remove(fname)
+	// don't report a missing file as an error
+	if err != nil && os.IsNotExist(err) {
+		err = nil
+	}
+	return err
 }
 
 // Given an item key, return the subdirectory the item's file are stored in

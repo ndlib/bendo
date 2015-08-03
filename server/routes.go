@@ -7,10 +7,12 @@ import (
 	"github.com/julienschmidt/httprouter"
 
 	"github.com/ndlib/bendo/items"
+	"github.com/ndlib/bendo/transaction"
 )
 
 var (
-	Items *items.Store
+	Items   *items.Store
+	TxStore *transaction.Registry
 )
 
 var (

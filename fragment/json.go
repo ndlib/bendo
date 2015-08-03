@@ -13,11 +13,11 @@ type JSONStore struct {
 	store.Store
 }
 
-func NewJSON(s store.Store) *JSONStore {
-	return &JSONStore{s}
+func NewJSON(s store.Store) JSONStore {
+	return JSONStore{s}
 }
 
-func (js *JSONStore) Open(key string, val interface{}) error {
+func (js JSONStore) Open(key string, val interface{}) error {
 	r, _, err := js.Store.Open(key)
 	if err != nil {
 		return err
@@ -28,14 +28,14 @@ func (js *JSONStore) Open(key string, val interface{}) error {
 }
 
 // Synomym for Save().
-func (js *JSONStore) Create(key string, val interface{}) error {
+func (js JSONStore) Create(key string, val interface{}) error {
 	// this is here to overried js.Store.Create()
 	return js.Save(key, val)
 }
 
 // Save the value val under the given key. It will delete any existing value
 // for the key before doing the save.
-func (js *JSONStore) Save(key string, val interface{}) error {
+func (js JSONStore) Save(key string, val interface{}) error {
 	err := js.Delete(key)
 	if err != nil {
 		return err

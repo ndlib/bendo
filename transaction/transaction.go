@@ -1,9 +1,7 @@
 package transaction
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -19,14 +17,14 @@ import (
 func New(s store.Store) *Registry {
 	return &Registry{
 		Files:   fragment.New(s),
-		TxStore: store.NewWithPrefix(s, "tx:"),
+		TxStore: fragment.NewJSON(store.NewWithPrefix(s, "tx:")),
 		txs:     make(map[string]*T),
 	}
 }
 
 type Registry struct {
 	Files   *fragment.Store
-	TxStore store.Store
+	TxStore fragment.JSONStore
 	m       sync.RWMutex  // protects txs
 	txs     map[string]*T // transaction ID to transaction
 }
@@ -39,13 +37,8 @@ func (r *Registry) Load() error {
 	r.m.Lock()
 	defer r.m.Unlock()
 	for key := range r.TxStore.List() {
-		f, _, err := r.TxStore.Open(key)
-		if f == nil || err != nil {
-			// huh?
-			continue
-		}
-		tx, err := load(f)
-		f.Close()
+		tx := new(T)
+		err := r.TxStore.Open(key, tx)
 		if err != nil {
 			continue
 		}
@@ -70,7 +63,8 @@ var (
 	ErrExistingTransaction = errors.New("existing transaction for that item")
 )
 
-// Create a new transaction in this registry to update item itemid.
+// Create a new transaction to update itemid. There can only be at most one
+// transaction per itemid.
 func (r *Registry) Create(itemid string) (*T, error) {
 	r.m.Lock()
 	defer r.m.Unlock()
@@ -104,8 +98,7 @@ func (r *Registry) makenewid() string {
 }
 
 func randomid() string {
-	var day int64 = int64(time.Now().YearDay())
-	var n = day<<32 | int64(rand.Int31())
+	var n = rand.Int63()
 	return strconv.FormatInt(n, 36)
 }
 
@@ -131,32 +124,6 @@ func (r *Registry) Delete(id string) {
 	for _, bl := range tx.NewBlobs {
 		r.Files.Delete(bl.PID)
 	}
-}
-
-func load(r io.ReaderAt) (*T, error) {
-	dec := json.NewDecoder(store.NewReader(r))
-	tx := new(T)
-	err := dec.Decode(tx)
-	if err != nil {
-		tx = nil
-	}
-	return tx, err
-}
-
-// assumes lock is being held on call
-func (tx *T) save(dest store.Store) error {
-	key := tx.ID
-	err := dest.Delete(key)
-	if err != nil {
-		return err
-	}
-	w, err := dest.Create(key)
-	if err != nil {
-		return err
-	}
-	defer w.Close()
-	enc := json.NewEncoder(w)
-	return enc.Encode(tx)
 }
 
 type T struct {
@@ -262,13 +229,11 @@ func (c command) Execute(iw *items.Writer, tx *T) {
 }
 
 func (tx *T) SetSlot(slot, value string) {
-	tx.m.Lock()
-	defer tx.m.Unlock()
-	tx.Commands = append(tx.Commands, command{"slot", slot, value})
-	tx.Modified = time.Now()
+	tx.addcommand("slot", slot, value)
 }
 
 func (tx *T) SetNote(note string) {
+	tx.addcommand("note", note)
 }
 
 func (tx *T) addcommand(cmd ...string) {
@@ -278,9 +243,9 @@ func (tx *T) addcommand(cmd ...string) {
 	tx.Modified = time.Now()
 }
 
-// Commit this transaction to the store, and create or update the underlying
-// item.
-func (tx *T) CommitTo(s items.Store, Creator string) {
+// Commit this transaction to the given store, creating or updating the
+// underlying item.
+func (tx *T) Commit(s items.Store, Creator string) {
 	tx.m.Lock()
 	defer tx.m.Unlock()
 	tx.Status = StatusIngest
@@ -293,12 +258,14 @@ func (tx *T) CommitTo(s items.Store, Creator string) {
 		reader.Close()
 		if err != nil {
 			tx.Err = append(tx.Err, err)
+			continue
 		}
 		bl.ID = bid
 	}
-	// execute commands. Do this second so any new blobs would have
-	// been given IDs already.
+	// execute commands. Do this after adding any new blobs, so that they
+	// will have already been given IDs.
 	for _, cmd := range tx.Commands {
+		// Execute will append errors to tx.Err
 		cmd.Execute(iw, tx)
 	}
 	iw.Close()
@@ -309,7 +276,7 @@ func (tx *T) CommitTo(s items.Store, Creator string) {
 }
 
 func (tx *T) VerifyFiles() {
-	tx.m.Lock()
+	/* needs to be implemented */
 	tx.Status = StatusChecking
 	for _, bl := range tx.NewBlobs {
 		_ = tx.files.Lookup(bl.PID)

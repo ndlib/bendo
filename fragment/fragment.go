@@ -19,7 +19,7 @@ import (
 // to be uploaded in pieces, "fragments", and then read back as a single
 // unit.
 type Store struct {
-	meta   *JSONStore   // for the metadata
+	meta   JSONStore    // for the metadata
 	fstore store.Store  // for the file fragments
 	m      sync.RWMutex // protects files
 	files  map[string]*File
@@ -38,7 +38,7 @@ const (
 
 type File struct {
 	// what kind of locking is needed on a File?
-	meta     *JSONStore   // for metadata
+	meta     JSONStore    // for metadata
 	fstore   store.Store  // for fragments
 	m        sync.RWMutex // protects everything below
 	ID       string       // name in the fstore
@@ -141,14 +141,16 @@ func (s *Store) Delete(id string) {
 func (f *File) Append() (io.WriteCloser, error) {
 	f.m.Lock()
 	defer f.m.Unlock()
-	fragkey := fmt.Sprintf("%s%04d", f.ID, f.N)
+	fragkey := fmt.Sprintf("%s+%04d", f.ID, f.N)
 	f.N++
 	w, err := f.fstore.Create(fragkey)
 	if err != nil {
 		return nil, err
 	}
 	frag := &Fragment{ID: fragkey}
-	return &fragwriter{Fragment: frag, parent: f, w: w}, nil
+	f.Children = append(f.Children, frag)
+	err = f.save()
+	return &fragwriter{Fragment: frag, parent: f, w: w}, err
 }
 
 type fragwriter struct {
@@ -167,7 +169,6 @@ func (fw *fragwriter) Close() error {
 	err := fw.w.Close()
 	if err == nil {
 		fw.parent.m.Lock()
-		fw.parent.Children = append(fw.parent.Children, fw.Fragment)
 		fw.parent.Size += fw.Size
 		err = fw.parent.save()
 		fw.parent.m.Unlock()

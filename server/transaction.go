@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
@@ -10,11 +11,10 @@ import (
 	"github.com/ndlib/bendo/fragment"
 )
 
-var (
-	TxStore fragment.Store
-)
-
 func NewTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	id := ps.ByName("id")
+	tx, _ := TxStore.Create(id)
+	w.Header().Set("Location", "/transaction/"+tx.ID)
 }
 
 func ListTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
@@ -25,6 +25,10 @@ func ListTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params)
 func TxInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("tid")
 	tx := TxStore.Lookup(id)
+	if tx == nil {
+		fmt.Fprintln(w, "cannot find transaction")
+		return
+	}
 	enc := json.NewEncoder(w)
 	enc.Encode(tx)
 }
@@ -37,11 +41,31 @@ func AddBlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params
 		fmt.Fprintln(w, "cannot find transaction")
 		return
 	}
+	var f *fragment.File
 	if bid == "" {
-		// make a new blob
-		//tx := TxStore.New("a")
+		var nohash []byte
+		f = tx.NewFile(nohash, nohash)
 	} else {
-		// append to find existing one
+		f = TxStore.Files.Lookup(bid)
+		if f == nil {
+			fmt.Fprintln(w, "Bad file id")
+			return
+		}
+	}
+	if r.Body == nil {
+		fmt.Fprintln(w, "No Body")
+		return
+	}
+	wr, err := f.Append()
+	if err != nil {
+		fmt.Fprintln(w, err.Error())
+		return
+	}
+	io.Copy(wr, r.Body)
+	err = wr.Close()
+	w.Header().Set("Location", "/transaction/"+tx.ID+"/blob/"+f.ID)
+	if err != nil {
+		fmt.Fprintln(w, err.Error())
 	}
 }
 
