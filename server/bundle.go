@@ -13,7 +13,7 @@ import (
 
 func BundleListHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	c := Items.S.List()
-	// we encode this as JSON ourselves....how could this go wrong?
+	// we encode this as JSON ourselves....how could it go wrong?
 	w.Write([]byte("["))
 	var needcomma bool
 	for key := range c {

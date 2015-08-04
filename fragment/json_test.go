@@ -28,4 +28,17 @@ func TestJSON(t *testing.T) {
 	if second.Name != "Petra" || second.Age != 30 {
 		t.Fatalf("Got %#v, expected %#v", second, first)
 	}
+	// directly inject some JSON and see if it is read correctly
+	thirdString := `{"Name":"John","Age":50}`
+	w, _ := memory.Create("john-2")
+	w.Write([]byte(thirdString))
+	w.Close()
+	third := new(JTest)
+	err = js.Open("john-2", &third)
+	if err != nil {
+		t.Fatalf("Got err = %s, expected nil", err.Error())
+	}
+	if third.Name != "John" || third.Age != 50 {
+		t.Fatalf("Got %#v, expected %#v", third, JTest{"John", 50})
+	}
 }

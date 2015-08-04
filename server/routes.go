@@ -30,12 +30,12 @@ var (
 		{"GET", "/transaction", ListTxHandler},
 		{"GET", "/transaction/:tid", TxInfoHandler},
 		{"POST", "/transaction/:tid", AddBlobHandler},
-		{"GET", "/transaction/:tid/commands", GetCommands},
-		{"PUT", "/transaction/:tid/commands", AddCommands},
-		{"GET", "/transaction/:tid/blob/:bid", ListBlobInfo},
+		{"GET", "/transaction/:tid/commands", GetCommandsHandler},
+		{"PUT", "/transaction/:tid/commands", AddCommandsHandler},
+		{"GET", "/transaction/:tid/blob/:bid", ListBlobInfoHandler},
 		{"PUT", "/transaction/:tid/blob/:bid", AddBlobHandler},
-		{"POST", "/transaction/:tid/commit", CommitTx},
-		{"POST", "/transaction/:tid/cancel", CancelTx},
+		{"POST", "/transaction/:tid/commit", CommitTxHandler},
+		{"POST", "/transaction/:tid/cancel", CancelTxHandler},
 		// the read only bundle stuff
 		{"GET", "/bundle/list/", BundleListHandler},
 		{"GET", "/bundle/listprefix/:prefix", BundleListPrefixHandler},
@@ -54,14 +54,6 @@ func AddRoutes() http.Handler {
 	}
 	return r
 }
-
-var (
-	GetCommands  = NotImplementedHandler
-	AddCommands  = NotImplementedHandler
-	ListBlobInfo = NotImplementedHandler
-	CommitTx     = NotImplementedHandler
-	CancelTx     = NotImplementedHandler
-)
 
 func NotImplementedHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	w.WriteHeader(http.StatusNotImplemented)

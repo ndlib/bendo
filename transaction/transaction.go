@@ -43,6 +43,7 @@ func (r *Registry) Load() error {
 			continue
 		}
 		tx.files = r.Files
+		tx.txstore = &r.TxStore
 		r.txs[tx.ID] = tx
 	}
 	return nil
@@ -81,8 +82,10 @@ func (r *Registry) Create(itemid string) (*T, error) {
 		Modified: time.Now(),
 		ItemID:   itemid,
 		files:    r.Files,
+		txstore:  &r.TxStore,
 	}
 	r.txs[tx.ID] = tx
+	r.TxStore.Save(tx.ID, tx)
 	return tx, nil
 }
 
@@ -109,34 +112,39 @@ func (r *Registry) Lookup(txid string) *T {
 }
 
 // Delete a transaction
-func (r *Registry) Delete(id string) {
+func (r *Registry) Delete(id string) error {
 	r.m.Lock()
 	tx := r.txs[id]
 	delete(r.txs, id)
 	r.m.Unlock()
 
 	if tx == nil {
-		return
+		return nil
 	}
 
 	// don't need the lock for the following
-	r.TxStore.Delete(tx.ID)
+	err := r.TxStore.Delete(tx.ID)
 	for _, bl := range tx.NewBlobs {
-		r.Files.Delete(bl.PID)
+		er := r.Files.Delete(bl.PID)
+		if err == nil {
+			err = er
+		}
 	}
+	return err
 }
 
 type T struct {
-	files    *fragment.Store // Where files are stored
-	m        sync.RWMutex    // protects everything below
-	ID       string          // the id of this transaction
-	Status   int             // one of Status*
-	Started  time.Time       // time tx was created
-	Modified time.Time       // last time user touch or added a file
-	Err      []error         // list of errors (for StatusError)
-	ItemID   string          // ID of the item this tx is modifying
-	Commands []command       // commands to run on commit
-	NewBlobs []*blob         // track the provisional blobs.
+	txstore  *fragment.JSONStore // where this structure is stored
+	files    *fragment.Store     // Where files are stored
+	m        sync.RWMutex        // protects everything below
+	ID       string              // the id of this transaction
+	Status   int                 // one of Status*
+	Started  time.Time           // time tx was created
+	Modified time.Time           // last time user touch or added a file
+	Err      []error             // list of errors (for StatusError)
+	ItemID   string              // ID of the item this tx is modifying
+	Commands []command           // commands to run on commit
+	NewBlobs []*blob             // track the provisional blobs.
 }
 
 const (
@@ -175,7 +183,76 @@ func (tx *T) NewFile(md5, sha256 []byte) *fragment.File {
 	defer tx.m.Unlock()
 	tx.NewBlobs = append(tx.NewBlobs, nb)
 	tx.Modified = time.Now()
+	tx.save()
 	return f
+}
+
+func (tx *T) SetSlot(slot, value string) {
+	tx.addcommand("slot", slot, value)
+}
+
+func (tx *T) SetNote(note string) {
+	tx.addcommand("note", note)
+}
+
+func (tx *T) addcommand(cmd ...string) {
+	tx.m.Lock()
+	defer tx.m.Unlock()
+	tx.Commands = append(tx.Commands, command(cmd))
+	tx.Modified = time.Now()
+	tx.save()
+}
+
+// Commit this transaction to the given store, creating or updating the
+// underlying item.
+func (tx *T) Commit(s items.Store, Creator string) {
+	tx.m.Lock()
+	defer tx.m.Unlock()
+	tx.Status = StatusIngest
+	iw := s.Open(tx.ItemID)
+	iw.SetCreator(Creator)
+	for _, bl := range tx.NewBlobs {
+		f := tx.files.Lookup(bl.PID)
+		reader := f.Open()
+		bid, err := iw.WriteBlob(reader, f.Size, bl.MD5, bl.SHA256)
+		reader.Close()
+		if err != nil {
+			tx.Err = append(tx.Err, err)
+			continue
+		}
+		bl.ID = bid
+	}
+	// execute commands. Do this after adding any new blobs, so that they
+	// will have already been given IDs.
+	for _, cmd := range tx.Commands {
+		// Execute will append errors to tx.Err
+		cmd.Execute(iw, tx)
+	}
+	iw.Close()
+	tx.Status = StatusFinished
+	if len(tx.Err) > 0 {
+		tx.Status = StatusError
+	}
+	tx.save()
+}
+
+func (tx *T) VerifyFiles() {
+	/* needs to be implemented */
+	tx.Status = StatusChecking
+	for _, bl := range tx.NewBlobs {
+		_ = tx.files.Lookup(bl.PID)
+	}
+	tx.Status = StatusWaiting
+	if len(tx.Err) > 0 {
+		tx.Status = StatusError
+	}
+}
+
+// must hold lock tx.m to call this
+func (tx *T) save() {
+	if tx.txstore != nil {
+		tx.txstore.Save(tx.ID, tx)
+	}
 }
 
 // [
@@ -185,16 +262,17 @@ func (tx *T) NewFile(md5, sha256 []byte) *fragment.File {
 // ]
 //
 // (update 78f7d8s (
-// 		(add tr78s
-//     		(SHA256 43gahfg3g4ga9989898a88b)
-//     		(MD5 4323434b3b4b342))
-//  	(slot "hello there" tr78s)
-//  	(slot "/volume" 0)
-//  	(slot "accessRights" 2)
-//  	(delete 4)
+//	(add tr78s
+//		(SHA256 43gahfg3g4ga9989898a88b)
+//		(MD5 4323434b3b4b342))
+//	(slot "hello there" tr78s)
+//	(slot "/volume" 0)
+//	(slot "accessRights" 2)
+//	(delete 4)
 // ))
 type command []string
 
+// assumes lock tx.m is held for writing
 func (c command) Execute(iw *items.Writer, tx *T) {
 	cmd := []string(c)
 	if len(cmd) == 0 {
@@ -228,61 +306,25 @@ func (c command) Execute(iw *items.Writer, tx *T) {
 	}
 }
 
-func (tx *T) SetSlot(slot, value string) {
-	tx.addcommand("slot", slot, value)
-}
-
-func (tx *T) SetNote(note string) {
-	tx.addcommand("note", note)
-}
-
-func (tx *T) addcommand(cmd ...string) {
-	tx.m.Lock()
-	defer tx.m.Unlock()
-	tx.Commands = append(tx.Commands, command(cmd))
-	tx.Modified = time.Now()
-}
-
-// Commit this transaction to the given store, creating or updating the
-// underlying item.
-func (tx *T) Commit(s items.Store, Creator string) {
-	tx.m.Lock()
-	defer tx.m.Unlock()
-	tx.Status = StatusIngest
-	iw := s.Open(tx.ItemID)
-	iw.SetCreator(Creator)
-	for _, bl := range tx.NewBlobs {
-		f := tx.files.Lookup(bl.PID)
-		reader := f.Open()
-		bid, err := iw.WriteBlob(reader, f.Size, bl.MD5, bl.SHA256)
-		reader.Close()
-		if err != nil {
-			tx.Err = append(tx.Err, err)
-			continue
+// Is the given command well formed? This is a weaker condition than
+// being semantically meaningful. For example, the slot command may refer
+// to a blob which doesn't exist. WellFormed() does not attempt to figure
+// that out.
+func (c command) WellFormed() bool {
+	cmd := []string(c)
+	if len(cmd) == 0 {
+		return false
+	}
+	switch {
+	case cmd[0] == "delete" && len(cmd) == 2:
+		_, err := strconv.Atoi(cmd[1])
+		if err == nil {
+			return true
 		}
-		bl.ID = bid
+	case cmd[0] == "slot" && len(cmd) == 3:
+		return true
+	case cmd[0] == "note" && len(cmd) == 2:
+		return true
 	}
-	// execute commands. Do this after adding any new blobs, so that they
-	// will have already been given IDs.
-	for _, cmd := range tx.Commands {
-		// Execute will append errors to tx.Err
-		cmd.Execute(iw, tx)
-	}
-	iw.Close()
-	tx.Status = StatusFinished
-	if len(tx.Err) > 0 {
-		tx.Status = StatusError
-	}
-}
-
-func (tx *T) VerifyFiles() {
-	/* needs to be implemented */
-	tx.Status = StatusChecking
-	for _, bl := range tx.NewBlobs {
-		_ = tx.files.Lookup(bl.PID)
-	}
-	tx.Status = StatusWaiting
-	if len(tx.Err) > 0 {
-		tx.Status = StatusError
-	}
+	return false
 }
