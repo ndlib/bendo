@@ -120,21 +120,25 @@ func (s *Store) Lookup(id string) *File {
 }
 
 // Delete a file
-func (s *Store) Delete(id string) {
+func (s *Store) Delete(id string) error {
 	s.m.Lock()
 	f := s.files[id]
 	delete(s.files, id)
 	s.m.Unlock()
 
 	if f == nil {
-		return
+		return nil
 	}
 
 	// don't need the lock for the following
-	s.meta.Delete(f.ID)
+	err := s.meta.Delete(f.ID)
 	for _, child := range f.Children {
-		s.fstore.Delete(child.ID)
+		er := s.fstore.Delete(child.ID)
+		if err == nil {
+			err = er
+		}
 	}
+	return err
 }
 
 // Open a file for writing. The writes are appended to the end.
@@ -201,7 +205,7 @@ type fragreader struct {
 }
 
 func (fr *fragreader) Read(p []byte) (int, error) {
-	for len(fr.keys) > 0 {
+	for len(fr.keys) > 0 || fr.r != nil {
 		var err error
 		if fr.r == nil {
 			// open a new reader

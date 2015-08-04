@@ -133,3 +133,24 @@ func TestRollback(t *testing.T) {
 		}
 	}
 }
+
+func TestLargeFile(t *testing.T) {
+	memory := store.NewMemory()
+	registry := New(memory)
+	err := registry.Load()
+	if err != nil {
+		t.Fatalf("received %s, expected nil", err.Error())
+	}
+	f := registry.New("large")
+	// must be larger than 32k
+	text := strings.Repeat("hello world", 5000)
+	insertString(t, f, text)
+	r := f.Open()
+	result, _ := ioutil.ReadAll(r)
+	if string(result) != text {
+		t.Fatalf("Read (len = %d), expected (len = %d)", len(result), len(text))
+	}
+	if int64(len(result)) != f.Size {
+		t.Fatalf("Got f.Size = %d, expected %d", f.Size, len(result))
+	}
+}
