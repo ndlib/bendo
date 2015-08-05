@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"io"
 	"net/http"
 
@@ -16,29 +17,76 @@ func NewTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) 
 	id := ps.ByName("id")
 	tx, err := TxStore.Create(id)
 	if err != nil {
+		// the err is probably that there is already a transaction open
+		// on the item
+		w.WriteHeader(409)
 		fmt.Fprintln(w, err.Error())
 		return
 	}
 	w.Header().Set("Location", "/transaction/"+tx.ID)
 }
 
+func writeHTMLorJSON(w http.ResponseWriter,
+	r *http.Request,
+	tmpl *template.Template,
+	val interface{}) {
+	if r.Header.Get("Content-Type") == "application/json" {
+		json.NewEncoder(w).Encode(val)
+		return
+	}
+	tmpl.Execute(w, val)
+}
+
 //r.Handle("GET", "/transaction", ListTx)
 func ListTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	enc := json.NewEncoder(w)
-	enc.Encode(TxStore.List())
+	writeHTMLorJSON(w, r, listTxTemplate, TxStore.List())
 }
+
+var (
+	listTxTemplate = template.Must(template.New("listtx").Parse(`<html>
+<h1>Transactions</h1>
+<ol>
+{{range .}}
+	<li><a href="/transaction/{{.}}">{{.}}</a></li>
+{{else}}
+	<li>No Transactions</li>
+{{end}}
+</ol>
+</html>`))
+)
 
 //r.Handle("GET", "/transaction/:tid", ListTxInfo)
 func TxInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("tid")
 	tx := TxStore.Lookup(id)
 	if tx == nil {
+		w.WriteHeader(404)
 		fmt.Fprintln(w, "cannot find transaction")
 		return
 	}
-	enc := json.NewEncoder(w)
-	enc.Encode(tx)
+	writeHTMLorJSON(w, r, txInfoTemplate, tx)
 }
+
+var (
+	txInfoTemplate = template.Must(template.New("txinfo").Parse(`<html>
+	<h1>Transaction Info</h1>
+	<dl>
+	<dt>ID</dt><dd>{{.ID}}</dd>
+	<dt>For Item</dt><dd>{{.ItemID}}</dd>
+	<dt>Status</dt><dd>{{.Status}}</dd>
+	<dt>Started</dt><dd>{{.Started}}</dd>
+	<dt>Errors</dt><dd>{{range .Err}}{{.}}<br/>{{end}}</dd>
+	<dt>Commands</dt><dd>{{range .Commands}}{{.}}<br/>{{end}}</dd>
+	<dt>New Blobs</dt><dd>
+		{{range .NewBlobs}}
+			<b>PID</b> {{.PID}}
+			<b>md5</b> {{.MD5}}<br/>
+		{{end}}
+		</dd>
+	</dl>
+	<a href="/transaction">Back</a>
+	</html>`))
+)
 
 //r.Handle("POST", "/transaction/:tid", AddBlobHandler)
 //r.Handle("PUT", "/transaction/:tid/blob/:bid", AddBlobHandler)
@@ -95,20 +143,24 @@ func AddCommandsHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Pa
 	tid := ps.ByName("tid")
 	tx := TxStore.Lookup(tid)
 	if tx == nil {
+		w.WriteHeader(404)
 		fmt.Fprintln(w, "cannot find transaction")
 		return
 	}
 	// TODO(dbrower): use a limit reader to 1MB(?) for this
 	var cmds [][]string
-	dec := json.NewDecoder(r.Body)
-	err := dec.Decode(&cmds)
+	err := json.NewDecoder(r.Body).Decode(&cmds)
 	if err != nil {
+		w.WriteHeader(400)
 		fmt.Fprintln(w, err.Error())
 		return
 	}
-	//for _,cmd := range cmds {
-	//	c :=
-	//}
+	err = tx.AddCommandList(cmds)
+	if err != nil {
+		w.WriteHeader(400)
+		fmt.Fprintln(w, err.Error())
+		return
+	}
 }
 
 //r.Handle("GET", "/transaction/:tid/blob/:bid", ListBlobInfo)

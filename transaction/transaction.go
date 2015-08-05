@@ -187,12 +187,37 @@ func (tx *T) NewFile(md5, sha256 []byte) *fragment.File {
 	return f
 }
 
+var (
+	ErrBadCommand = errors.New("Bad command")
+)
+
+func (tx *T) AddCommandList(cmds [][]string) error {
+	// first make sure commands are okay
+	for _, cmd := range cmds {
+		c := command(cmd)
+		if !c.WellFormed() {
+			return ErrBadCommand
+		}
+	}
+	tx.m.Lock()
+	for _, cmd := range cmds {
+		tx.Commands = append(tx.Commands, command(cmd))
+	}
+	tx.Modified = time.Now()
+	tx.m.Unlock()
+	return nil
+}
+
 func (tx *T) SetSlot(slot, value string) {
 	tx.addcommand("slot", slot, value)
 }
 
 func (tx *T) SetNote(note string) {
 	tx.addcommand("note", note)
+}
+
+func (tx *T) DeleteBlob(blobid string) {
+	tx.addcommand("delete", blobid)
 }
 
 func (tx *T) addcommand(cmd ...string) {

@@ -16,10 +16,9 @@ import (
 
 func BlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
-	fmt.Fprintf(w, "Blob %s/%s\n", id, ps.ByName("bid"))
-	fmt.Fprintf(w, "Method: %s\n", r.Method)
 	bid, err := strconv.ParseInt(ps.ByName("bid"), 10, 0)
 	if err != nil || bid <= 0 {
+		w.WriteHeader(404)
 		fmt.Fprintln(w, err)
 		return
 	}
@@ -32,24 +31,34 @@ func SlotHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	if err != nil {
 		fmt.Fprintln(w, err.Error())
 	}
-	vid, err := strconv.ParseInt(ps.ByName("version"), 10, 0)
-	if err != nil || vid <= 0 {
-		fmt.Fprintf(w, "Invalid version")
-		return
+	version := ps.ByName("version")
+	var vid int64
+	if version == "latest" {
+		vid = int64(item.Versions[len(item.Versions)-1].ID)
+	} else {
+		vid, err = strconv.ParseInt(ps.ByName("version"), 10, 0)
+		if err != nil || vid <= 0 {
+			w.WriteHeader(404)
+			fmt.Fprintf(w, "Invalid version")
+			return
+		}
 	}
 	// the star parameter in httprouter returns the leading slash
 	slot := strings.TrimPrefix(ps.ByName("slot"), "/")
 	bid := item.BlobByVersionSlot(items.VersionID(vid), slot)
 	if bid == 0 {
+		w.WriteHeader(404)
 		fmt.Fprintf(w, "Cannot resolve (%d, %s) pair", vid, slot)
 		return
 	}
+	w.Header().Set("Location", fmt.Sprintf("/blob/%s/%d", item.ID, bid))
 	getblob(w, r, id, items.BlobID(bid))
 }
 
 func getblob(w http.ResponseWriter, r *http.Request, id string, bid items.BlobID) {
 	src, err := Items.Blob(id, bid)
 	if err != nil {
+		w.WriteHeader(404)
 		fmt.Fprintln(w, err)
 		return
 	}
@@ -60,6 +69,7 @@ func ItemHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
 	item, err := Items.Item(id)
 	if err != nil {
+		w.WriteHeader(404)
 		fmt.Fprintln(w, err.Error())
 	}
 	enc := json.NewEncoder(w)
