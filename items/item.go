@@ -128,7 +128,7 @@ func (s *Store) Blob(id string, bid BlobID) (io.ReadCloser, error) {
 	}
 	b := item.blobByID(bid)
 	if b == nil {
-		return nil, fmt.Errorf("No blob (%s, %s)", id, bid)
+		return nil, fmt.Errorf("No blob (%s, %d)", id, bid)
 	}
 	sname := fmt.Sprintf("blob/%d", bid)
 	return OpenBundleStream(s.S, sugar(id, b.Bundle), sname)
