@@ -33,11 +33,14 @@ type BundleWriter struct {
 // file may be written. The advancement to a new bundle file happens either when
 // the current one grows larger than IdealBundleSize, or when Next() is called.
 func NewBundler(s store.Store, item *Item) *BundleWriter {
-	return &BundleWriter{
+	bw := &BundleWriter{
 		store: s,
 		item:  item,
 		n:     item.MaxBundle + 1,
 	}
+	// force us to open a blob file.
+	bw.Next() // ignore error. next call to WriteBlob will retrigger it
+	return bw
 }
 
 // CurrentBundle returns the id of the bundle being written to.
@@ -65,8 +68,6 @@ func (bw *BundleWriter) Next() error {
 }
 
 // Close() writes out any final metadata and closes the current bundle.
-// Since the bundle file is opened in the first call to WriteBlob(), opening a
-// BundleWriter and then closing it will not write anything to disk.
 func (bw *BundleWriter) Close() error {
 	if bw.zw == nil {
 		return nil

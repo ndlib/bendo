@@ -45,3 +45,20 @@ func TestBundleWriter(t *testing.T) {
 		t.Fatalf("Blob/1 = %#v, expected \"Hello There\"", string(hello))
 	}
 }
+
+func TestOpenAtCreation(t *testing.T) {
+	ms := store.NewMemory()
+	item := &Item{ID: "12345"}
+	bw := NewBundler(ms, item)
+	if bw.CurrentBundle() != 1 {
+		t.Fatalf("CurrentBundle() == %d, expected 1", bw.CurrentBundle())
+	}
+	err := bw.Close()
+	if err != nil {
+		t.Fatalf("Close() == %s, expected nil", err.Error())
+	}
+	_, _, err = ms.Open("12345-0001")
+	if err != nil {
+		t.Fatalf("Expected bundle 12345-0001 to exist")
+	}
+}
