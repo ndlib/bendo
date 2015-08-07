@@ -83,6 +83,33 @@ func TestUploadHash(t *testing.T) {
 	uploadstringhash(t, "PUT", blobpath, "hello world", "nothexnumber", 400)
 	uploadstringhash(t, "PUT", blobpath, "hello world", "abcdef0123456789", 412)
 	uploadstringhash(t, "PUT", blobpath, "hello world", "5eb63bbbe01eeed093cb22bb8f5acdc3", 200)
+	// now check that the uploads with a bad hash were rollbacked
+	checkStatus(t, "POST", txpath+"/commit", 200)
+	// the first blob is the bad POST. it should be empty
+	text := getbody(t, "GET", "/blob/uploadhash/1", 200)
+	if text != "" {
+		t.Fatalf("Received %#v, expected %#v", text, "")
+	}
+	// the second blob should have one good POST and one good PUT
+	text = getbody(t, "GET", "/blob/uploadhash/2", 200)
+	const expected = "hello worldhello world"
+	if text != expected {
+		t.Fatalf("Received %#v, expected %#v", text, expected)
+	}
+}
+
+func TestDeleteBlob(t *testing.T) {
+	// make a transaction, add blob, then delete it. upon save there should be
+	// no new blobs
+	checkStatus(t, "GET", "/item/deleteblob", 404)
+	txpath := getlocation(t, "POST", "/item/deleteblob/transaction", 200)
+	t.Log("got tx path", txpath)
+	blobpath := uploadstring(t, "POST", txpath, "hello world")
+	t.Log("got blob path", blobpath)
+	checkStatus(t, "DELETE", blobpath, 200)
+	checkStatus(t, "POST", txpath+"/commit", 200)
+	// There should be no new blob
+	checkStatus(t, "GET", "/blob/deleteblob/1", 404)
 }
 
 func uploadstring(t *testing.T, verb, route string, s string) string {

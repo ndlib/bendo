@@ -187,6 +187,22 @@ func (tx *T) NewFile(md5, sha256 []byte) *fragment.File {
 	return f
 }
 
+// Delete a blob from this transaction. It is not an error to delete a blob
+// which does not exist. The error indicates a problem with actually removing
+// the data from the store.
+func (tx *T) DeleteFile(id string) error {
+	tx.m.Lock()
+	defer tx.m.Unlock()
+	for i := 0; i < len(tx.NewBlobs); i++ {
+		if tx.NewBlobs[i].PID == id {
+			tx.NewBlobs = append(tx.NewBlobs[:i], tx.NewBlobs[i+1:]...)
+			break
+		}
+	}
+
+	return tx.files.Delete(id)
+}
+
 var (
 	ErrBadCommand = errors.New("Bad command")
 )

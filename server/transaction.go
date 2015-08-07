@@ -101,8 +101,18 @@ func AddBlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params
 	sha256hash64 := r.Header.Get("X-Upload-Sha256")
 	if md5hash64 == "" && sha256hash64 == "" {
 		w.WriteHeader(400)
-		fmt.Fprintf(w, "Need at least one of X-Upload-Md5 and X-Upload-Sha256")
+		fmt.Fprintf(w, "Need at least one of X-Upload-Md5 or X-Upload-Sha256")
 		return
+	}
+	var md5bytes []byte
+	var err error
+	if md5hash64 != "" {
+		md5bytes, err = hex.DecodeString(md5hash64)
+		if err != nil {
+			w.WriteHeader(400)
+			fmt.Fprintf(w, "bad MD5 string")
+			return
+		}
 	}
 	tid := ps.ByName("tid")
 	bid := ps.ByName("bid")
@@ -150,19 +160,34 @@ func AddBlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params
 		fmt.Fprintln(w, err2.Error())
 		return
 	}
-	if md5hash64 != "" {
-		h, err := hex.DecodeString(md5hash64)
-		if err != nil {
-			w.WriteHeader(400)
-			fmt.Fprintf(w, "bad MD5 string")
-			return
-		}
-		_, ok := hw.CheckMD5(h)
+	if len(md5bytes) > 0 {
+		_, ok := hw.CheckMD5(md5bytes)
 		if !ok {
 			w.WriteHeader(412)
 			fmt.Fprintln(w, "MD5 mismatch")
+			f.Rollback()
 			return
 		}
+	}
+}
+
+// {"DELETE", "/transaction/:tid/blob/:bid", DeleteBlobHandler},
+// This deletes a blob which has been uploaded to a transactions, but not committed
+// into an item yet. If an item has already been committed, then a "delete"
+// command is needed instead. I know, it is confusing.
+func DeleteBlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	tid := ps.ByName("tid")
+	bid := ps.ByName("bid")
+	tx := TxStore.Lookup(tid)
+	if tx == nil {
+		w.WriteHeader(404)
+		fmt.Fprintln(w, "cannot find transaction")
+		return
+	}
+	err := tx.DeleteFile(bid)
+	if err != nil {
+		w.WriteHeader(500)
+		fmt.Fprintln(w, err.Error())
 	}
 }
 

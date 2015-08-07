@@ -34,6 +34,7 @@ var (
 		{"PUT", "/transaction/:tid/commands", AddCommandsHandler},
 		{"GET", "/transaction/:tid/blob/:bid", ListBlobInfoHandler},
 		{"PUT", "/transaction/:tid/blob/:bid", AddBlobHandler},
+		{"DELETE", "/transaction/:tid/blob/:bid", DeleteBlobHandler},
 		{"POST", "/transaction/:tid/commit", CommitTxHandler},
 		{"POST", "/transaction/:tid/cancel", CancelTxHandler},
 		// the read only bundle stuff
