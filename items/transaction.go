@@ -7,12 +7,13 @@ import (
 )
 
 type Writer struct {
-	store   *Store // need only for cache.Set()
-	item    *Item
-	bw      *BundleWriter
-	bnext   BlobID   // the next available blob id
-	del     []BlobID // list of blobs to delete at Close
-	version Version  // version info for this write
+	store   *Store        // need for cache.Set() and Deletes
+	item    *Item         // item we are writing out
+	bw      *BundleWriter //
+	bnext   BlobID        // the next available blob id
+	del     []BlobID      // list of blobs to delete at Close
+	version Version       // version info for this write
+	bdel    []int         // bundles files to delete. generated from del
 }
 
 // Open the item id for writing. This will add a single new version to id.
@@ -76,6 +77,12 @@ func (wr *Writer) Close() error {
 	}
 
 	// TODO(dbrower): delete bundles which contain purged items
+	for _, bundleid := range wr.bdel {
+		err = wr.store.S.Delete(sugar(wr.item.ID, bundleid))
+		if err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
@@ -102,6 +109,7 @@ func (wr *Writer) doDeletes() error {
 		if err != nil {
 			return err
 		}
+		wr.bdel = append(wr.bdel, bundleid)
 	}
 	return nil
 }
