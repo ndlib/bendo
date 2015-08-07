@@ -1,6 +1,8 @@
 package server
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -14,10 +16,10 @@ import (
 
 func TestTransaction1(t *testing.T) {
 	checkStatus(t, "GET", "/item/zxcv", 404)
-	txpath := getlocation(t, "POST", "/item/zxcv", 200)
+	txpath := getlocation(t, "POST", "/item/zxcv/transaction", 200)
 	t.Log("got tx path", txpath)
 	// cannot open two transactions on one item
-	checkStatus(t, "POST", "/item/zxcv", 409)
+	checkStatus(t, "POST", "/item/zxcv/transaction", 409)
 
 	// bad transaction ids are rejected
 	checkStatus(t, "GET", "/transaction/abc", 404)
@@ -37,10 +39,10 @@ func TestTransaction1(t *testing.T) {
 	}
 }
 
-func TestTransactionCommands2(t *testing.T) {
+func TestTransactionCommands(t *testing.T) {
 	// add two blobs, and then delete one
 	checkStatus(t, "GET", "/item/zxcvbnm", 404)
-	txpath := getlocation(t, "POST", "/item/zxcvbnm", 200)
+	txpath := getlocation(t, "POST", "/item/zxcvbnm/transaction", 200)
 	t.Log("got tx path", txpath)
 	blob1 := uploadstring(t, "POST", txpath, "hello world")
 	t.Log("got blob path", blob1)
@@ -52,7 +54,7 @@ func TestTransactionCommands2(t *testing.T) {
 		t.Fatalf("Received %#v, expected %#v", text, "delete me")
 	}
 	// now delete blob 2
-	txpath = getlocation(t, "POST", "/item/zxcvbnm", 200)
+	txpath = getlocation(t, "POST", "/item/zxcvbnm/transaction", 200)
 	t.Log("got tx path", txpath)
 	uploadstring(t, "PUT", txpath+"/commands", `[["delete", "2"]]`)
 	checkStatus(t, "POST", txpath+"/commit", 200)
@@ -66,44 +68,46 @@ func TestTransactionCommands2(t *testing.T) {
 	}
 }
 
-func TestTransactionCommands(t *testing.T) {
-	// add one blob, and then delete it
-	checkStatus(t, "GET", "/item/zxcvasdf", 404)
-	txpath := getlocation(t, "POST", "/item/zxcvasdf", 200)
+func TestUploadHash(t *testing.T) {
+	// upload blob with no hashes and with a wrong hash
+	checkStatus(t, "GET", "/item/uploadhash", 404)
+	txpath := getlocation(t, "POST", "/item/uploadhash/transaction", 200)
 	t.Log("got tx path", txpath)
-	blob := uploadstring(t, "POST", txpath, "delete me")
-	t.Log("got blob path", blob)
-	checkStatus(t, "POST", txpath+"/commit", 200)
-	text := getbody(t, "GET", "/blob/zxcvasdf/1", 200)
-	if text != "delete me" {
-		t.Fatalf("Received %#v, expected %#v", text, "delete me")
-	}
-	// now delete blob it
-	txpath = getlocation(t, "POST", "/item/zxcvasdf", 200)
-	t.Log("got tx path", txpath)
-	uploadstring(t, "PUT", txpath+"/commands", `[["delete", "1"]]`)
-	checkStatus(t, "POST", txpath+"/commit", 200)
-	text = getbody(t, "GET", "/blob/zxcvasdf/1", 404)
-	if text == "delete me" {
-		t.Fatalf("Received %#v, expected %#v", text, "")
-	}
+	uploadstringhash(t, "POST", txpath, "hello world", "", 400)
+	uploadstringhash(t, "POST", txpath, "hello world", "nothexnumber", 400)
+	uploadstringhash(t, "POST", txpath, "hello world", "abcdef0123456789", 412)
+	blobpath := uploadstringhash(t, "POST", txpath, "hello world", "5eb63bbbe01eeed093cb22bb8f5acdc3", 200)
+	t.Log("got blob path", blobpath)
+	// do same thing again, only now extending previous upload
+	uploadstringhash(t, "PUT", blobpath, "hello world", "", 400)
+	uploadstringhash(t, "PUT", blobpath, "hello world", "nothexnumber", 400)
+	uploadstringhash(t, "PUT", blobpath, "hello world", "abcdef0123456789", 412)
+	uploadstringhash(t, "PUT", blobpath, "hello world", "5eb63bbbe01eeed093cb22bb8f5acdc3", 200)
 }
 
 func uploadstring(t *testing.T, verb, route string, s string) string {
+	md5hash := md5.Sum([]byte(s))
+	return uploadstringhash(t, verb, route, s, hex.EncodeToString(md5hash[:]), 200)
+}
+
+func uploadstringhash(t *testing.T, verb, route, s, hash string, statuscode int) string {
+
 	req, err := http.NewRequest(verb, testServer.URL+route, strings.NewReader(s))
 	if err != nil {
 		t.Fatal("Problem creating request", err)
 	}
+	req.Header.Set("X-Upload-Md5", hash)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(route, err)
 		return ""
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		t.Errorf("%s: Received status %d",
+	if resp.StatusCode != statuscode {
+		t.Errorf("%s: Received status %d, expected %d",
 			route,
-			resp.StatusCode)
+			resp.StatusCode,
+			statuscode)
 		return ""
 	}
 	return resp.Header.Get("Location")

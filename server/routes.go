@@ -26,7 +26,7 @@ var (
 		{"HEAD", "/item/:id/:version/*slot", SlotHandler},
 		{"GET", "/item/:id", ItemHandler},
 		// all the transaction things. Sooo many transaction things.
-		{"POST", "/item/:id", NewTxHandler},
+		{"POST", "/item/:id/transaction", NewTxHandler},
 		{"GET", "/transaction", ListTxHandler},
 		{"GET", "/transaction/:tid", TxInfoHandler},
 		{"POST", "/transaction/:tid", AddBlobHandler},

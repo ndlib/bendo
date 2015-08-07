@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -10,6 +11,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 
 	"github.com/ndlib/bendo/fragment"
+	"github.com/ndlib/bendo/util"
 )
 
 //r.Handle("POST", "/item/:id", NewTxHandler)
@@ -46,11 +48,11 @@ var (
 	listTxTemplate = template.Must(template.New("listtx").Parse(`<html>
 <h1>Transactions</h1>
 <ol>
-{{range .}}
-	<li><a href="/transaction/{{.}}">{{.}}</a></li>
-{{else}}
+{{ range . }}
+	<li><a href="/transaction/{{ . }}">{{ . }}</a></li>
+{{ else }}
 	<li>No Transactions</li>
-{{end}}
+{{ end }}
 </ol>
 </html>`))
 )
@@ -71,19 +73,23 @@ var (
 	txInfoTemplate = template.Must(template.New("txinfo").Parse(`<html>
 	<h1>Transaction Info</h1>
 	<dl>
-	<dt>ID</dt><dd>{{.ID}}</dd>
-	<dt>For Item</dt><dd>{{.ItemID}}</dd>
-	<dt>Status</dt><dd>{{.Status}}</dd>
-	<dt>Started</dt><dd>{{.Started}}</dd>
-	<dt>Errors</dt><dd>{{range .Err}}{{.}}<br/>{{end}}</dd>
-	<dt>Commands</dt><dd>{{range .Commands}}{{.}}<br/>{{end}}</dd>
+	<dt>ID</dt><dd>{{ .ID }}</dd>
+	<dt>For Item</dt><dd>{{ .ItemID }}</dd>
+	<dt>Status</dt><dd>{{ .Status }}</dd>
+	<dt>Started</dt><dd>{{ .Started }}</dd>
+	<dt>Errors</dt><dd>{{ range .Err }}{{ . }}<br/>{{ end }}</dd>
+	<dt>Commands</dt><dd>{{ range .Commands }}{{ . }}<br/>{{ end }}</dd>
 	<dt>New Blobs</dt><dd>
-		{{range .NewBlobs}}
-			<b>PID</b> {{.PID}}
-			<b>md5</b> {{.MD5}}<br/>
-		{{end}}
+		{{ range .NewBlobs }}
+			<b>PID</b> {{ .PID }}
+			<b>md5</b> {{ .MD5 }}
+			<b>sha256</b> {{ .SHA256 }}<br/>
+		{{ end }}
 		</dd>
 	</dl>
+	<form action="/transaction/{{ .ID }}/commit" method="post">
+		<button type="submit">Commit</button>
+	</form>
 	<a href="/transaction">Back</a>
 	</html>`))
 )
@@ -91,10 +97,18 @@ var (
 //r.Handle("POST", "/transaction/:tid", AddBlobHandler)
 //r.Handle("PUT", "/transaction/:tid/blob/:bid", AddBlobHandler)
 func AddBlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	md5hash64 := r.Header.Get("X-Upload-Md5")
+	sha256hash64 := r.Header.Get("X-Upload-Sha256")
+	if md5hash64 == "" && sha256hash64 == "" {
+		w.WriteHeader(400)
+		fmt.Fprintf(w, "Need at least one of X-Upload-Md5 and X-Upload-Sha256")
+		return
+	}
 	tid := ps.ByName("tid")
 	bid := ps.ByName("bid")
 	tx := TxStore.Lookup(tid)
 	if tx == nil {
+		w.WriteHeader(404)
 		fmt.Fprintln(w, "cannot find transaction")
 		return
 	}
@@ -105,24 +119,50 @@ func AddBlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params
 	} else {
 		f = TxStore.Files.Lookup(bid)
 		if f == nil {
-			fmt.Fprintln(w, "Bad file id")
+			w.WriteHeader(404)
+			fmt.Fprintln(w, "bad file id")
 			return
 		}
 	}
 	if r.Body == nil {
-		fmt.Fprintln(w, "No Body")
+		w.WriteHeader(400)
+		fmt.Fprintln(w, "no body")
 		return
 	}
 	wr, err := f.Append()
 	if err != nil {
+		w.WriteHeader(500)
 		fmt.Fprintln(w, err.Error())
 		return
 	}
-	io.Copy(wr, r.Body)
-	err = wr.Close()
+	hw := util.NewMD5Writer(wr)
+	_, err = io.Copy(hw, r.Body)
+	err2 := wr.Close()
+	r.Body.Close()
 	w.Header().Set("Location", "/transaction/"+tx.ID+"/blob/"+f.ID)
 	if err != nil {
+		w.WriteHeader(500)
 		fmt.Fprintln(w, err.Error())
+		return
+	}
+	if err2 != nil {
+		w.WriteHeader(500)
+		fmt.Fprintln(w, err2.Error())
+		return
+	}
+	if md5hash64 != "" {
+		h, err := hex.DecodeString(md5hash64)
+		if err != nil {
+			w.WriteHeader(400)
+			fmt.Fprintf(w, "bad MD5 string")
+			return
+		}
+		_, ok := hw.CheckMD5(h)
+		if !ok {
+			w.WriteHeader(412)
+			fmt.Fprintln(w, "MD5 mismatch")
+			return
+		}
 	}
 }
 
