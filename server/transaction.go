@@ -72,6 +72,7 @@ func TxInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params)
 var (
 	txInfoTemplate = template.Must(template.New("txinfo").Parse(`<html>
 	<h1>Transaction Info</h1>
+	{{ $txid := .ID }}
 	<dl>
 	<dt>ID</dt><dd>{{ .ID }}</dd>
 	<dt>For Item</dt><dd>{{ .ItemID }}</dd>
@@ -81,7 +82,7 @@ var (
 	<dt>Commands</dt><dd>{{ range .Commands }}{{ . }}<br/>{{ end }}</dd>
 	<dt>New Blobs</dt><dd>
 		{{ range .NewBlobs }}
-			<b>PID</b> {{ .PID }}
+			<b>PID</b> <a href="/transaction/{{ $txid }}/blob/{{ .PID }}">{{ .PID }}</a>
 			<b>md5</b> {{ .MD5 }}
 			<b>sha256</b> {{ .SHA256 }}<br/>
 		{{ end }}
