@@ -101,8 +101,8 @@ func (r *Registry) makenewid() string {
 }
 
 func randomid() string {
-	var n = rand.Int63()
-	return strconv.FormatInt(n, 36)
+	var n = rand.Int31()
+	return strconv.FormatInt(int64(n), 36)
 }
 
 func (r *Registry) Lookup(txid string) *T {
@@ -138,7 +138,7 @@ type T struct {
 	files    *fragment.Store     // Where files are stored
 	m        sync.RWMutex        // protects everything below
 	ID       string              // the id of this transaction
-	Status   int                 // one of Status*
+	Status   status              // one of Status*
 	Started  time.Time           // time tx was created
 	Modified time.Time           // last time user touch or added a file
 	Err      []error             // list of errors (for StatusError)
@@ -147,15 +147,23 @@ type T struct {
 	NewBlobs []*blob             // track the provisional blobs.
 }
 
+type status int
+
 const (
-	StatusUnknown  = iota
-	StatusOpen     // transaction is being modified by user
-	StatusChecking // files are being checksummed and verified
-	StatusWaiting  // transaction has been submitted to be committed
-	StatusIngest   // files are being written into bundles
-	StatusFinished // transaction is over, successful
-	StatusError    // transaction had an error
+	StatusUnknown  status = iota
+	StatusOpen            // transaction is being modified by user
+	StatusChecking        // files are being checksummed and verified
+	StatusWaiting         // transaction has been submitted to be committed
+	StatusIngest          // files are being written into bundles
+	StatusFinished        // transaction is over, successful
+	StatusError           // transaction had an error
 )
+
+//go:generate stringer -type=status
+
+func (s status) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + s.String() + `"`), nil
+}
 
 type blob struct {
 	PID    string // provisional id, good until we ingest it
