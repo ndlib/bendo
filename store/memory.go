@@ -57,14 +57,29 @@ func (ms *Memory) Open(key string) (ReadAtCloser, int64, error) {
 	if !ok {
 		return nil, 0, fmt.Errorf("No item %s", key)
 	}
+	v.m.RLock()
 	return v, int64(len(v.b)), nil
 }
 
+// Need to support a RWMutex instead of a Mutex, since some code path
+// in reading a bundle opens a buf twice for reading.
+// Because the same Close() is used in both cases, we need a flag to
+// remember which unlock method to use.
 type buf struct {
-	b []byte
+	m       sync.RWMutex
+	iswrite bool
+	b       []byte
 }
 
-func (r buf) Close() error { return nil }
+func (r *buf) Close() error {
+	if r.iswrite {
+		r.iswrite = false
+		r.m.Unlock()
+	} else {
+		r.m.RUnlock()
+	}
+	return nil
+}
 
 func (r buf) ReadAt(p []byte, off int64) (int, error) {
 	if int(off) >= len(r.b) {
@@ -81,6 +96,8 @@ func (r *buf) Write(p []byte) (int, error) {
 
 func (ms *Memory) Create(key string) (io.WriteCloser, error) {
 	r := &buf{}
+	r.m.Lock()
+	r.iswrite = true
 	ms.m.Lock()
 	ms.store[key] = r
 	ms.m.Unlock()

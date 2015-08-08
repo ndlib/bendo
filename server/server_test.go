@@ -29,7 +29,7 @@ func TestTransaction1(t *testing.T) {
 	blobpath = uploadstring(t, "PUT", blobpath, " and hello sun")
 	checkStatus(t, "GET", blobpath, 200)
 	checkStatus(t, "POST", blobpath, 405)
-	checkStatus(t, "POST", txpath+"/commit", 200)
+	checkStatus(t, "POST", txpath+"/commit", 202)
 	checkStatus(t, "GET", "/item/zxcv", 200)
 	checkStatus(t, "GET", "/blob/zxcv/1", 200)
 	checkStatus(t, "GET", "/blob/zxcv/2", 404)
@@ -48,7 +48,7 @@ func TestTransactionCommands(t *testing.T) {
 	t.Log("got blob path", blob1)
 	blob2 := uploadstring(t, "POST", txpath, "delete me")
 	t.Log("got blob path", blob2)
-	checkStatus(t, "POST", txpath+"/commit", 200)
+	checkStatus(t, "POST", txpath+"/commit", 202)
 	text := getbody(t, "GET", "/blob/zxcvbnm/2", 200)
 	if text != "delete me" {
 		t.Fatalf("Received %#v, expected %#v", text, "delete me")
@@ -57,7 +57,7 @@ func TestTransactionCommands(t *testing.T) {
 	txpath = getlocation(t, "POST", "/item/zxcvbnm/transaction", 200)
 	t.Log("got tx path", txpath)
 	uploadstring(t, "PUT", txpath+"/commands", `[["delete", "2"]]`)
-	checkStatus(t, "POST", txpath+"/commit", 200)
+	checkStatus(t, "POST", txpath+"/commit", 202)
 	text = getbody(t, "GET", "/blob/zxcvbnm/1", 200)
 	if text != "hello world" {
 		t.Fatalf("Received %#v, expected %#v", text, "hello world")
@@ -84,7 +84,7 @@ func TestUploadHash(t *testing.T) {
 	uploadstringhash(t, "PUT", blobpath, "hello world", "abcdef0123456789", 412)
 	uploadstringhash(t, "PUT", blobpath, "hello world", "5eb63bbbe01eeed093cb22bb8f5acdc3", 200)
 	// now check that the uploads with a bad hash were rollbacked
-	checkStatus(t, "POST", txpath+"/commit", 200)
+	checkStatus(t, "POST", txpath+"/commit", 202)
 	// the first blob is the bad POST. it should be empty
 	text := getbody(t, "GET", "/blob/uploadhash/1", 200)
 	if text != "" {
@@ -107,7 +107,7 @@ func TestDeleteBlob(t *testing.T) {
 	blobpath := uploadstring(t, "POST", txpath, "hello world")
 	t.Log("got blob path", blobpath)
 	checkStatus(t, "DELETE", blobpath, 200)
-	checkStatus(t, "POST", txpath+"/commit", 200)
+	checkStatus(t, "POST", txpath+"/commit", 202)
 	// There should be no new blob
 	checkStatus(t, "GET", "/blob/deleteblob/1", 404)
 }

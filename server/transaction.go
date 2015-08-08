@@ -252,21 +252,23 @@ func CommitTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Param
 	tid := ps.ByName("tid")
 	tx := TxStore.Lookup(tid)
 	if tx == nil {
+		w.WriteHeader(404)
 		fmt.Fprintln(w, "cannot find transaction")
 		return
 	}
-	tx.Commit(*Items, "nobody")
-	if len(tx.Err) == 0 {
-		err := TxStore.Delete(tid)
-		if err != nil {
-			fmt.Fprintln(w, err.Error())
+	go func() {
+		gate.Enter()
+		defer gate.Leave()
+		tx.Commit(*Items, "nobody")
+		if len(tx.Err) == 0 {
+			// TODO(dbrower): what to do with this error? log it?
+			_ = TxStore.Delete(tid)
 		}
-	} else {
-		for _, err := range tx.Err {
-			fmt.Fprintln(w, err.Error())
-		}
-	}
+	}()
+	w.WriteHeader(202)
 }
+
+var gate = util.NewGate(10) // at most 10 concurrent commits
 
 //r.Handle("POST", "/transaction/:tid/cancel", CancelTx)
 func CancelTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
