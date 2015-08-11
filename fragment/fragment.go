@@ -8,6 +8,7 @@ and error, that fragment is deleted, and the upload can try again.
 package fragment
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"sync"
@@ -37,7 +38,6 @@ const (
 )
 
 type File struct {
-	// what kind of locking is needed on a File?
 	meta     JSONStore    // for metadata
 	fstore   store.Store  // for fragments
 	m        sync.RWMutex // protects everything below
@@ -154,18 +154,20 @@ func (f *File) Append() (io.WriteCloser, error) {
 	frag := &Fragment{ID: fragkey}
 	f.Children = append(f.Children, frag)
 	err = f.save()
-	return &fragwriter{Fragment: frag, parent: f, w: w}, err
+	return &fragwriter{frag: frag, parent: f, w: w}, err
 }
 
 type fragwriter struct {
-	*Fragment
+	w    io.WriteCloser
+	size int64
+	// must hold lock in parent to access these
 	parent *File
-	w      io.WriteCloser
+	frag   *Fragment // make it easy to update when we are closed
 }
 
 func (fw *fragwriter) Write(p []byte) (int, error) {
 	n, err := fw.w.Write(p)
-	fw.Size += int64(n)
+	fw.size += int64(n)
 	return n, err
 }
 
@@ -173,7 +175,8 @@ func (fw *fragwriter) Close() error {
 	err := fw.w.Close()
 	if err == nil {
 		fw.parent.m.Lock()
-		fw.parent.Size += fw.Size
+		fw.parent.Size += fw.size
+		fw.frag.Size = fw.size
 		err = fw.parent.save()
 		fw.parent.m.Unlock()
 	}
@@ -271,4 +274,12 @@ func (f *File) removefragment(n int) error {
 // must hold at least a read lock to call this
 func (f *File) save() error {
 	return f.meta.Save(f.ID, f)
+}
+
+// this is used to write json back to any server requests.
+// It needs to be here since we must hold a read lock to call json.Encode()
+func (f *File) OutputJSON(w io.Writer) error {
+	f.m.RLock()
+	defer f.m.RUnlock()
+	return json.NewEncoder(w).Encode(f)
 }

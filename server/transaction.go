@@ -243,8 +243,7 @@ func ListBlobInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.P
 		fmt.Fprintln(w, "Bad file id")
 		return
 	}
-	enc := json.NewEncoder(w)
-	enc.Encode(f)
+	f.OutputJSON(w)
 }
 
 //r.Handle("POST", "/transaction/:tid/commit", CommitTx)
@@ -268,7 +267,10 @@ func CommitTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Param
 	w.WriteHeader(202)
 }
 
-var gate = util.NewGate(10) // at most 10 concurrent commits
+// the number of active commits onto tape we allow at a given time
+const MaxConcurrentCommits = 10
+
+var gate = util.NewGate(MaxConcurrentCommits)
 
 //r.Handle("POST", "/transaction/:tid/cancel", CancelTx)
 func CancelTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
