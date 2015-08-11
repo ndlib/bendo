@@ -31,7 +31,7 @@ func main() {
 	wg := sync.WaitGroup{}
 	gate := util.NewGate(*NumGoroutines)
 	for i := 0; i < 10000; i++ {
-		id := fmt.Sprintf("id%5dx", i)
+		id := fmt.Sprintf("id%05dx", i)
 		wg.Add(1)
 		go func() {
 			gate.Enter()
@@ -62,43 +62,75 @@ var (
 	}
 )
 
+func dumpbody(resp *http.Response) {
+	b := new(bytes.Buffer)
+	io.Copy(b, resp.Body)
+	log.Printf("   > %s", b.String())
+}
+
 // Upload a few files to make a new item.
 
 func CreateItem(id string) {
-	resp, _ := http.Post(*urlpath+"/item/"+id+"/transaction", "", nil)
-	resp.Body.Close()
+	var totalsize int64
+	starttime := time.Now()
+	resp, err := http.Post(*urlpath+"/item/"+id+"/transaction", "", nil)
+	if err != nil {
+		log.Println(err)
+		return
+	}
 	txpath := resp.Header.Get("Location")
+	if txpath == "" {
+		log.Printf("Transaction for %s couldn't be started", id)
+		dumpbody(resp)
+		return
+	}
+	resp.Body.Close()
 
-	nfiles := rand.Intn(10)
+	log.Printf("Starting transaction for %s at %s", id, txpath)
+	nfiles := rand.Intn(10) + 1
 	slots := [][]string{}
 	for i := 0; i < nfiles; i++ {
-		tempname := uploadfile(txpath)
+		tempname, size := uploadfile(txpath)
+		totalsize += size
 		slots = append(slots, []string{"slot", slotnames[i], tempname})
 	}
 	// TODO: upload slot names
 	buf, _ := json.Marshal(slots)
-	Put(*urlpath+txpath+"/commands", bytes.NewReader(buf))
-	resp, _ = http.Post(*urlpath+txpath+"/commit", "", nil)
+	resp = Put(*urlpath+txpath+"/commands", bytes.NewReader(buf))
 	resp.Body.Close()
-	if resp.StatusCode != 200 {
-		log.Printf("Received status %d: %s", resp.Status, id)
+	resp, _ = http.Post(*urlpath+txpath+"/commit", "", nil)
+	if resp.StatusCode != 202 {
+		log.Printf("Received status %d: %s", resp.StatusCode, id)
+		dumpbody(resp)
 	}
+	resp.Body.Close()
+	runDuration := time.Since(starttime)
+	log.Printf("Created %s: %v bytes, %v time, %f MB/s", id, totalsize,
+		runDuration,
+		float64(totalsize/1000000)/runDuration.Seconds())
+
 }
 
-func uploadfile(txpath string) string {
+func uploadfile(txpath string) (string, int64) {
 	// upload content in chunks. first time is special
-	var firsttime = true
-	var route = txpath
-	var verb = "POST"
-	size := rand.Intn(*MaxUpload)
-	chunk := chunks.Get().(*Chunk)
-	for size > 0 {
+	var (
+		firsttime = true
+		route     = txpath
+		verb      = "POST"
+		size      = rand.Intn(*MaxUpload * 1000000)
+		sz        = size // use sz for loop, and size to return
+		chunk     = chunks.Get().(*Chunk)
+	)
+	for sz > 0 {
 		req, _ := http.NewRequest(verb,
 			*urlpath+route,
 			bytes.NewReader(chunk.Data))
 		req.Header.Set("X-Upload-Md5", hex.EncodeToString(chunk.MD5))
-		resp, _ := http.DefaultClient.Do(req)
-		resp.Body.Close()
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			time.Sleep(1 * time.Millisecond)
+			continue
+		}
 		if firsttime {
 			firsttime = false
 			verb = "PUT"
@@ -106,20 +138,23 @@ func uploadfile(txpath string) string {
 		}
 		if resp.StatusCode != 200 {
 			log.Printf("Received HTTP status %d for %s", resp.StatusCode, route)
+			dumpbody(resp)
+			break
 		}
-		size -= len(chunk.Data)
+		resp.Body.Close()
+		sz -= len(chunk.Data)
 	}
 	chunks.Put(chunk)
 
 	// figure out this file's id
 	routePieces := strings.Split(route, "/")
-	return routePieces[len(routePieces)-1]
+	return routePieces[len(routePieces)-1], int64(size - sz)
 }
 
-func Put(path string, r io.Reader) {
+func Put(path string, r io.Reader) *http.Response {
 	req, _ := http.NewRequest("PUT", path, r)
 	resp, _ := http.DefaultClient.Do(req)
-	resp.Body.Close()
+	return resp
 }
 
 /************************/
@@ -134,7 +169,7 @@ var (
 )
 
 const (
-	chunksize = 1 << 16
+	chunksize = 1 << 20
 )
 
 func NewChunk() interface{} {
