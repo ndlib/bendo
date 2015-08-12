@@ -30,19 +30,19 @@ func TestListPrefix(t *testing.T) {
 	var files = []string{
 		"ab/",
 		"ab/cd/",
-		"ab/cd/abcd-0001.zip",
-		"ab/cd/abcd-0002.zip",
-		"ab/cd/abcdef-0001.zip",
+		"ab/cd/abcd-0001",
+		"ab/cd/abcd-0002",
+		"ab/cd/abcdef-0001",
 		"ab/ce/",
-		"ab/ce/abcez-0001.zip",
+		"ab/ce/abcez-0001",
 		"ab/qw/",
-		"ab/qw/abqw-0001.zip",
+		"ab/qw/abqw-0001",
 		"ac/",
 		"ac/zx/",
-		"ac/zx/aczx-0001.zip",
+		"ac/zx/aczx-0001",
 		"bc/",
 		"bc/de/",
-		"bc/de/bcde-0001.zip",
+		"bc/de/bcde-0001",
 	}
 	var table = []struct {
 		prefix   string
@@ -105,14 +105,14 @@ func TestWalkTree(t *testing.T) {
 	var files = []string{
 		"a/",
 		"a/b/",
-		"a/b/xyz-0001-1.zip",
-		"a/b/xyz-0002-1.zip",
-		"a/b/qwe-0001-2.zip",
-		"a/b/qwe-0002-1.zip",
+		"a/b/xyz-0001-1",
+		"a/b/xyz-0002-1",
+		"a/b/qwe-0001-2",
+		"a/b/qwe-0002-1",
 		"a/c/",
-		"a/c/asd-0001-1.zip",
-		"a/c/asd-0002-1.zip",
-		"a/c/asd-0003-2.zip",
+		"a/c/asd-0001-1",
+		"a/c/asd-0002-1",
+		"a/c/asd-0003-2",
 	}
 	var goal = []string{
 		"xyz-0001-1",

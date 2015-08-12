@@ -24,15 +24,15 @@ func TestBundleWriter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Close() == %s, expected nil", err.Error())
 	}
-	_, _, err = ms.Open("12345-0001")
+	_, _, err = ms.Open("12345-0001.zip")
 	if err != nil {
-		t.Fatalf("Expected bundle 12345-0001 to exist")
+		t.Fatalf("Expected bundle 12345-0001.zip to exist")
 	}
-	_, _, err = ms.Open("12345-0002")
+	_, _, err = ms.Open("12345-0002.zip")
 	if err == nil {
-		t.Fatalf("Expected bundle 12345-0002 to not exist.")
+		t.Fatalf("Expected bundle 12345-0002.zip to not exist.")
 	}
-	helloR, err := OpenBundleStream(ms, "12345-0001", "blob/1")
+	helloR, err := OpenBundleStream(ms, "12345-0001.zip", "blob/1")
 	if err != nil {
 		t.Fatalf("OpenBundleStream() == %s, expected nil", err.Error())
 	}
@@ -57,8 +57,8 @@ func TestOpenAtCreation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Close() == %s, expected nil", err.Error())
 	}
-	_, _, err = ms.Open("12345-0001")
+	_, _, err = ms.Open("12345-0001.zip")
 	if err != nil {
-		t.Fatalf("Expected bundle 12345-0001 to exist")
+		t.Fatalf("Expected bundle 12345-0001.zip to exist")
 	}
 }

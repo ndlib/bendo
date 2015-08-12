@@ -46,12 +46,13 @@ func (s *Store) List() <-chan string {
 
 // Turn an item id and a bundle number n into a string key.
 func sugar(id string, n int) string {
-	return fmt.Sprintf("%s-%04d", id, n)
+	return fmt.Sprintf("%s-%04d.zip", id, n)
 }
 
 // Extract an item id and a bundle number from a string key.
 // Returns an id of "" if the key could not be decoded.
 func desugar(s string) (id string, n int) {
+	s = strings.TrimSuffix(s, ".zip")
 	pieces := strings.Split(s, "-")
 	if len(pieces) != 2 {
 		return "", 0

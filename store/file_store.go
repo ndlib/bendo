@@ -6,12 +6,14 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 )
 
 // FileSystem implements the simple file system based store. It tries to
 // only open files when necessary, so it could be backed by a tape system,
 // for example.
+// The keys are used as file names. This means keys should not contain a
+// forward slash character '/'. Also, if you want the files to have a
+// specific file extension, you need to add it to your key.
 type FileSystem struct {
 	root string
 }
@@ -62,7 +64,7 @@ func walkTree(out chan<- string, root string, toplevel bool) {
 				walkTree(out, p, false)
 				continue
 			}
-			out <- strings.TrimSuffix(e.Name(), ".zip")
+			out <- e.Name()
 		}
 	}
 }
@@ -85,15 +87,14 @@ func (s *FileSystem) ListPrefix(prefix string) ([]string, error) {
 	result, err := filepath.Glob(glob)
 	if err == nil {
 		for i := range result {
-			r := path.Base(result[i])
-			result[i] = strings.TrimSuffix(r, ".zip")
+			result[i] = path.Base(result[i])
 		}
 	}
 	return result, err
 }
 
 func (s *FileSystem) Open(key string) (ReadAtCloser, int64, error) {
-	fname := filepath.Join(s.root, itemSubdir(key), key+".zip")
+	fname := filepath.Join(s.root, itemSubdir(key), key)
 	f, err := os.Open(fname)
 	if err != nil {
 		return nil, 0, err
@@ -111,7 +112,7 @@ func (s *FileSystem) Create(key string) (io.WriteCloser, error) {
 	dir := filepath.Join(s.root, itemSubdir(key))
 	err := os.MkdirAll(dir, 0775)
 	if err == nil {
-		fname := filepath.Join(dir, key+".zip")
+		fname := filepath.Join(dir, key)
 		// pass the O_EXCL flag explicitly to prevent overwriting
 		// already existing files
 		w, err = os.OpenFile(fname, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
@@ -120,7 +121,7 @@ func (s *FileSystem) Create(key string) (io.WriteCloser, error) {
 }
 
 func (s *FileSystem) Delete(key string) error {
-	fname := filepath.Join(s.root, itemSubdir(key), key+".zip")
+	fname := filepath.Join(s.root, itemSubdir(key), key)
 	err := os.Remove(fname)
 	// don't report a missing file as an error
 	if err != nil && os.IsNotExist(err) {
