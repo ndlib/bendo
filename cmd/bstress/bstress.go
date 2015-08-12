@@ -96,9 +96,17 @@ func CreateItem(id string) {
 	}
 	// TODO: upload slot names
 	buf, _ := json.Marshal(slots)
-	resp = Put(*urlpath+txpath+"/commands", bytes.NewReader(buf))
+	resp, err = Put(*urlpath+txpath+"/commands", bytes.NewReader(buf))
+	if err != nil {
+		log.Println(err)
+		return
+	}
 	resp.Body.Close()
-	resp, _ = http.Post(*urlpath+txpath+"/commit", "", nil)
+	resp, err = http.Post(*urlpath+txpath+"/commit", "", nil)
+	if err != nil {
+		log.Println(err)
+		return
+	}
 	if resp.StatusCode != 202 {
 		log.Printf("Received status %d: %s", resp.StatusCode, id)
 		dumpbody(resp)
@@ -135,6 +143,10 @@ func uploadfile(txpath string) (string, int64) {
 			firsttime = false
 			verb = "PUT"
 			route = resp.Header.Get("Location")
+			if route == "" {
+				log.Printf("No Location returned on POST: %s", txapth)
+				break
+			}
 		}
 		if resp.StatusCode != 200 {
 			log.Printf("Received HTTP status %d for %s", resp.StatusCode, route)
@@ -151,10 +163,9 @@ func uploadfile(txpath string) (string, int64) {
 	return routePieces[len(routePieces)-1], int64(size - sz)
 }
 
-func Put(path string, r io.Reader) *http.Response {
+func Put(path string, r io.Reader) (*http.Response, error) {
 	req, _ := http.NewRequest("PUT", path, r)
-	resp, _ := http.DefaultClient.Do(req)
-	return resp
+	return http.DefaultClient.Do(req)
 }
 
 /************************/
