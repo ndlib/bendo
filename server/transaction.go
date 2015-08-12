@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"log"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
 
 	"github.com/ndlib/bendo/fragment"
+	"github.com/ndlib/bendo/transaction"
 	"github.com/ndlib/bendo/util"
 )
 
@@ -123,6 +125,11 @@ func AddBlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params
 		fmt.Fprintln(w, "cannot find transaction")
 		return
 	}
+	if !tx.IsModifiable() {
+		w.WriteHeader(400)
+		fmt.Fprintln(w, "transaction is not modifiable")
+		return
+	}
 	var f *fragment.File // the file to append to
 	if bid == "" {
 		var nohash []byte
@@ -185,6 +192,11 @@ func DeleteBlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Par
 		fmt.Fprintln(w, "cannot find transaction")
 		return
 	}
+	if !tx.IsModifiable() {
+		w.WriteHeader(400)
+		fmt.Fprintln(w, "transaction is not modifiable")
+		return
+	}
 	err := tx.DeleteFile(bid)
 	if err != nil {
 		w.WriteHeader(500)
@@ -211,6 +223,11 @@ func AddCommandsHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Pa
 	if tx == nil {
 		w.WriteHeader(404)
 		fmt.Fprintln(w, "cannot find transaction")
+		return
+	}
+	if !tx.IsModifiable() {
+		w.WriteHeader(400)
+		fmt.Fprintln(w, "transaction is not modifiable")
 		return
 	}
 	// TODO(dbrower): use a limit reader to 1MB(?) for this
@@ -255,16 +272,26 @@ func CommitTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Param
 		fmt.Fprintln(w, "cannot find transaction")
 		return
 	}
-	go func() {
-		gate.Enter()
-		defer gate.Leave()
-		tx.Commit(*Items, "nobody")
-		if len(tx.Err) == 0 {
-			// TODO(dbrower): what to do with this error? log it?
-			_ = TxStore.Delete(tid)
-		}
-	}()
+	if !tx.IsModifiable() {
+		w.WriteHeader(400)
+		fmt.Fprintln(w, "transaction is not modifiable")
+		return
+	}
+	tx.SetStatus(transaction.StatusWaiting)
+	go processCommit(tx)
 	w.WriteHeader(202)
+}
+
+func processCommit(tx *transaction.T) {
+	gate.Enter()
+	defer gate.Leave()
+	tx.Commit(*Items, "nobody")
+	if len(tx.Err) == 0 {
+		err := TxStore.Delete(tx.ID)
+		if err != nil {
+			log.Println(err)
+		}
+	}
 }
 
 // the number of active commits onto tape we allow at a given time
@@ -275,6 +302,7 @@ var gate = util.NewGate(MaxConcurrentCommits)
 //r.Handle("POST", "/transaction/:tid/cancel", CancelTx)
 func CancelTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	tid := ps.ByName("tid")
+	// TODO(dbrower): only delete tx if it is modifiable
 	err := TxStore.Delete(tid)
 	fmt.Fprintf(w, err.Error())
 }

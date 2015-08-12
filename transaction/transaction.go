@@ -62,6 +62,7 @@ func (r *Registry) List() []string {
 
 var (
 	ErrExistingTransaction = errors.New("existing transaction for that item")
+	ErrBadCommand          = errors.New("Bad command")
 )
 
 // Create a new transaction to update itemid. There can only be at most one
@@ -138,7 +139,7 @@ type T struct {
 	files    *fragment.Store     // Where files are stored
 	m        sync.RWMutex        // protects everything below
 	ID       string              // the id of this transaction
-	Status   status              // one of Status*
+	Status   Status              // one of Status*
 	Started  time.Time           // time tx was created
 	Modified time.Time           // last time user touch or added a file
 	Err      []error             // list of errors (for StatusError)
@@ -147,10 +148,10 @@ type T struct {
 	NewBlobs []*blob             // track the provisional blobs.
 }
 
-type status int
+type Status int
 
 const (
-	StatusUnknown  status = iota
+	StatusUnknown  Status = iota
 	StatusOpen            // transaction is being modified by user
 	StatusChecking        // files are being checksummed and verified
 	StatusWaiting         // transaction has been submitted to be committed
@@ -161,7 +162,7 @@ const (
 
 //go:generate stringer -type=status
 
-func (s status) MarshalJSON() ([]byte, error) {
+func (s Status) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + s.String() + `"`), nil
 }
 
@@ -211,10 +212,6 @@ func (tx *T) DeleteFile(id string) error {
 	return tx.files.Delete(id)
 }
 
-var (
-	ErrBadCommand = errors.New("Bad command")
-)
-
 func (tx *T) AddCommandList(cmds [][]string) error {
 	// first make sure commands are okay
 	for _, cmd := range cmds {
@@ -250,6 +247,21 @@ func (tx *T) addcommand(cmd ...string) {
 	tx.Commands = append(tx.Commands, command(cmd))
 	tx.Modified = time.Now()
 	tx.save()
+}
+
+func (tx *T) SetStatus(s Status) {
+	tx.m.Lock()
+	defer tx.m.Unlock()
+	tx.Status = s
+	tx.save()
+}
+
+// Is this transaction ok to be modified? Returns true if it is,
+// false it not.
+func (tx *T) IsModifiable() bool {
+	tx.m.RLock()
+	defer tx.m.RUnlock()
+	return tx.Status == StatusOpen || tx.Status == StatusError
 }
 
 // Commit this transaction to the given store, creating or updating the

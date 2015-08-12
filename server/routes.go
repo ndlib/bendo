@@ -47,6 +47,24 @@ var (
 	}
 )
 
+func Run() {
+	TxStore.Load()
+	initCommitQueue()
+	http.ListenAndServe(":14000", AddRoutes())
+}
+
+func initCommitQueue() {
+	// for each commit, if in StateWaiting or StateCommit, start a
+	for _, tid := range TxStore.List() {
+		tx := TxStore.Lookup(tid)
+		if tx.Status == transaction.StatusWaiting || tx.Status == transaction.StatusIngest {
+			tx.SetStatus(transaction.StatusWaiting)
+			go processCommit(tx)
+		}
+	}
+	// also! put username into tx record
+}
+
 func AddRoutes() http.Handler {
 	r := httprouter.New()
 

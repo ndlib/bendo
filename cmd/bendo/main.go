@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"net/http"
 	"os"
 
 	"github.com/ndlib/bendo/items"
@@ -22,6 +21,5 @@ func main() {
 	os.MkdirAll(*uploadDir, 0664)
 	server.Items = items.New(store.NewFileSystem(*storeDir))
 	server.TxStore = transaction.New(store.NewFileSystem(*uploadDir))
-	server.TxStore.Load()
-	http.ListenAndServe(":14000", server.AddRoutes())
+	server.Run()
 }
