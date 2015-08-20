@@ -89,17 +89,12 @@ const (
 	IdealBundleSize = 500 * MB
 )
 
-// Write the given blob into the bundle. The blob must also be in the
-// underlying item's blob list.
+// Write the given blob into the bundle.
 func (bw *BundleWriter) WriteBlob(blob *Blob, r io.Reader) error {
-	// we lazily open bw
 	if bw.size >= IdealBundleSize || bw.zw == nil {
 		if err := bw.Next(); err != nil {
 			return err
 		}
-	}
-	if bw.item.blobByID(blob.ID) == nil {
-		panic("Save blob with id not in blob list")
 	}
 	w, err := bw.zw.MakeStream(fmt.Sprintf("blob/%d", blob.ID))
 	if err != nil {

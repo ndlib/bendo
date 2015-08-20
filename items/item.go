@@ -85,6 +85,7 @@ func (s *Store) Item(id string) (*Item, error) {
 	return result, err
 }
 
+// load an item into memory from the store
 func (s *Store) itemload(id string) (*Item, error) {
 	n := s.findMaxBundle(id)
 	if n == 0 {
@@ -133,10 +134,6 @@ func (s *Store) Blob(id string, bid BlobID) (io.ReadCloser, error) {
 	}
 	sname := fmt.Sprintf("blob/%d", bid)
 	return OpenBundleStream(s.S, sugar(id, b.Bundle), sname)
-}
-
-func (s *Store) Validate(id string) (int64, []string, error) {
-	return 0, nil, nil
 }
 
 func (item Item) blobByID(id BlobID) *Blob {

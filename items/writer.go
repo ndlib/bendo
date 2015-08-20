@@ -13,7 +13,7 @@ type Writer struct {
 	bnext   BlobID        // the next available blob id
 	del     []BlobID      // list of blobs to delete at Close
 	version Version       // version info for this write
-	bdel    []int         // bundles files to delete. generated from del
+	bdel    []int         // bundle files to delete. generated from del
 }
 
 // Open the item id for writing. This will add a single new version to id.
@@ -121,8 +121,11 @@ func (wr *Writer) doDeletes() error {
 // The creator needs to have been set previously with a call to SetCreator.
 // A panic will happen if there is no creator.
 //
-// The data in r is written immeadately to the bundle file. The id of the new
-// blob is returned.
+// The data in r is written immediately to the bundle file. The id of the new
+// blob is returned. If there is an error writing the blob, the blob is not
+// added to the item's blob list, and the id of 0 is returned. There may be a
+// remnant "blob/{id}" entry in the zip file, so it is best to close this Writer
+// and reopen to retry.
 func (wr *Writer) WriteBlob(r io.Reader, size int64, md5, sha256 []byte) (BlobID, error) {
 	if wr.version.Creator == "" {
 		panic("WriteBlob() called before call to SetCreator()")
@@ -136,22 +139,31 @@ func (wr *Writer) WriteBlob(r io.Reader, size int64, md5, sha256 []byte) (BlobID
 			wr.bnext = wr.item.Blobs[blen-1].ID + 1
 		}
 	}
+	// write the blob before appending the blob info to our blob list.
+	// If there are any errors, we don't add the blob information.
+	// We won't reuse the blob number this time, but it may get reused
+	// in a subsequent call to Open().
 	blob := &Blob{
 		ID:       wr.bnext,
 		SaveDate: time.Now(),
 		Creator:  wr.version.Creator,
-		// the following are updated by WriteBlob
+		// The following are updated by WriteBlob
+		// Store what we expect so WriteBlob can compare
 		Size:   size,
 		MD5:    md5,
 		SHA256: sha256,
 	}
-	wr.bnext++
+	wr.bnext++ // prevent duplicate blob names inside this bundle
+	err := wr.bw.WriteBlob(blob, r)
+	if err != nil {
+		return 0, err
+	}
+	// now add the blob to the item's blob list
 	wr.item.Blobs = append(wr.item.Blobs, blob)
 	// ensure blobs are always sorted by increasing ID
 	sort.Stable(byID(wr.item.Blobs))
 	wr.item.MaxBundle = wr.bw.CurrentBundle()
-	err := wr.bw.WriteBlob(blob, r)
-	return blob.ID, err
+	return blob.ID, nil
 }
 
 type byID []*Blob
