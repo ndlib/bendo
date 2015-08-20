@@ -2,7 +2,9 @@ package server
 
 import (
 	"fmt"
+	"log"
 	"net/http"
+	_ "net/http/pprof"
 
 	"github.com/julienschmidt/httprouter"
 
@@ -50,6 +52,11 @@ var (
 func Run() {
 	TxStore.Load()
 	initCommitQueue()
+
+	// for pprof
+	go func() {
+		log.Println(http.ListenAndServe("localhost:14001", nil))
+	}()
 	http.ListenAndServe(":14000", AddRoutes())
 }
 
@@ -77,8 +84,4 @@ func AddRoutes() http.Handler {
 func NotImplementedHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	w.WriteHeader(http.StatusNotImplemented)
 	fmt.Fprintf(w, "Not Implemented\n")
-}
-
-func ItemPatchHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	fmt.Fprintf(w, "PATCH to item %s", ps.ByName("id"))
 }
