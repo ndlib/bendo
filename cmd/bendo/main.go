@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/ndlib/bendo/fragment"
 	"github.com/ndlib/bendo/items"
 	"github.com/ndlib/bendo/server"
 	"github.com/ndlib/bendo/store"
@@ -21,5 +22,6 @@ func main() {
 	os.MkdirAll(*uploadDir, 0664)
 	server.Items = items.New(store.NewFileSystem(*storeDir))
 	server.TxStore = transaction.New(store.NewFileSystem(*uploadDir))
+	server.FileStore = fragment.New(store.NewFileSystem(*uploadDir))
 	server.Run()
 }

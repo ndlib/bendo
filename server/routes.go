@@ -8,19 +8,22 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 
+	"github.com/ndlib/bendo/fragment"
 	"github.com/ndlib/bendo/items"
 	"github.com/ndlib/bendo/transaction"
 )
 
 var (
-	Items   *items.Store
-	TxStore *transaction.Registry
+	Items     *items.Store
+	TxStore   *transaction.Registry
+	FileStore *fragment.Store
 )
 
 var (
 	routes = []struct {
-		method, route string
-		handler       httprouter.Handle
+		method  string
+		route   string
+		handler httprouter.Handle
 	}{
 		{"GET", "/blob/:id/:bid", BlobHandler},
 		{"HEAD", "/blob/:id/:bid", BlobHandler},
@@ -39,6 +42,14 @@ var (
 		{"DELETE", "/transaction/:tid/blob/:bid", DeleteBlobHandler},
 		{"POST", "/transaction/:tid/commit", CommitTxHandler},
 		{"POST", "/transaction/:tid/cancel", CancelTxHandler},
+		// file upload things
+		{"GET", "/upload", ListFileHandler},
+		{"POST", "/upload", AppendFileHandler},
+		{"GET", "/upload/:fileid", GetFileHandler},
+		{"POST", "/upload/:fileid", AppendFileHandler},
+		{"DELETE", "/upload/:fileid", DeleteFileHandler},
+		{"GET", "/upload/:fileid/metadata", GetFileInfoHandler},
+		{"PUT", "/upload/:fileid/metadata", SetFileInfoHandler},
 		// the read only bundle stuff
 		{"GET", "/bundle/list/", BundleListHandler},
 		{"GET", "/bundle/listprefix/:prefix", BundleListPrefixHandler},
@@ -51,6 +62,7 @@ var (
 
 func Run() {
 	TxStore.Load()
+	FileStore.Load()
 	initCommitQueue()
 
 	// for pprof
