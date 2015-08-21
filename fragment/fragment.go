@@ -11,7 +11,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"sync"
+	"time"
 
 	"github.com/ndlib/bendo/store"
 )
@@ -24,6 +26,7 @@ type Store struct {
 	fstore store.Store  // for the file fragments
 	m      sync.RWMutex // protects files
 	files  map[string]*File
+	labels map[string][]string
 }
 
 const (
@@ -38,13 +41,17 @@ const (
 )
 
 type File struct {
-	meta     JSONStore    // for metadata
-	fstore   store.Store  // for fragments
+	parent   *Store
 	m        sync.RWMutex // protects everything below
-	ID       string       // name in the fstore
+	ID       string       // name in the parent.fstore
 	Size     int64        // sum of all the children sizes
 	N        int          // the id number to use for the next fragment
 	Children []*Fragment  // Children ids, in the order to read them.
+	Created  time.Time    // time this record was created
+	Modified time.Time    // last time this record was modified
+	Labels   []string     // list of labels for this file
+	Creator  string       // the "user" (aka API key) who created this file
+	Payload  []byte       // application defined data
 }
 
 type Fragment struct {
@@ -59,6 +66,7 @@ func New(s store.Store) *Store {
 		meta:   NewJSON(store.NewWithPrefix(s, fileKeyPrefix)),
 		fstore: store.NewWithPrefix(s, fragmentKeyPrefix),
 		files:  make(map[string]*File),
+		labels: make(map[string][]string),
 	}
 }
 
@@ -79,11 +87,32 @@ func (s *Store) Load() error {
 			// probably just skip this file
 			return err
 		}
-		f.meta = s.meta
-		f.fstore = s.fstore
+		f.parent = s
 		s.files[f.ID] = f
+		s.indexRecord(f)
 	}
 	return nil
+}
+
+// index the labels for f
+// locks must be held on both s AND f to call this.
+func (s *Store) indexRecord(f *File) {
+	for _, label := range f.Labels {
+		s.labels[label] = append(s.labels[label], f.ID)
+		sort.Strings(s.labels[label])
+	}
+}
+
+// remove a record from our label indices
+// locks must be held on both s and f to call this
+func (s *Store) unindexRecord(f *File) {
+	for _, label := range f.Labels {
+		list := s.labels[label]
+		i := sort.SearchStrings(list, f.ID)
+		if list[i] == f.ID {
+			s.labels[label] = append(list[:i], list[i+1:]...)
+		}
+	}
 }
 
 // Return a list of all the stored file names.
@@ -97,6 +126,61 @@ func (s *Store) List() []string {
 	return result
 }
 
+// Return a list of the file ids matching a given set of labels
+func (s *Store) ListFiltered(labels []string) []string {
+	s.m.RLock()
+	defer s.m.RUnlock()
+	var lists [][]string
+	for _, label := range labels {
+		lists = append(lists, s.labels[label])
+	}
+	return combineCommon(lists)
+}
+
+// return the common elements from a sequence of lists. Each list must be
+// in sorted order already.
+func combineCommon(lists [][]string) []string {
+	if len(lists) == 0 {
+		return nil
+	}
+	var idxs = make([]int, len(lists))
+	var result []string
+	// this is similar to an n-way merge sort
+	// first set bar to the maximum of what we need to scan for
+	var bar string
+	var current_list int
+	var equal_count int
+	for {
+		// advance current_list until it is >= bar
+		list := lists[current_list]
+		for {
+			// exit if we come to the end of this list
+			if idxs[current_list] >= len(list) {
+				return result
+			}
+			// if current list is == bar, see if other lists agree
+			if list[idxs[current_list]] == bar {
+				equal_count++
+				if equal_count < len(lists) {
+					break
+				}
+				// a match accross every list!
+				result = append(result, bar)
+				equal_count = 0
+			} else if list[idxs[current_list]] > bar {
+				bar = list[idxs[current_list]]
+				equal_count = 0
+				break
+			}
+			idxs[current_list]++
+		}
+		current_list++
+		if current_list >= len(lists) {
+			current_list = 0
+		}
+	}
+}
+
 // Create a new file with the given name, and return a pointer to it.
 // the file is not persisted until its first fragment has been written.
 // If the file already exists, nil is returned.
@@ -106,7 +190,12 @@ func (s *Store) New(id string) *File {
 	if _, ok := s.files[id]; ok {
 		return nil
 	}
-	newfile := &File{ID: id, meta: s.meta, fstore: s.fstore}
+	newfile := &File{
+		ID:       id,
+		parent:   s,
+		Created:  time.Now(),
+		Modified: time.Now(),
+	}
 	s.files[id] = newfile
 	return newfile
 }
@@ -124,6 +213,9 @@ func (s *Store) Delete(id string) error {
 	s.m.Lock()
 	f := s.files[id]
 	delete(s.files, id)
+	if f != nil {
+		s.unindexRecord(f)
+	}
 	s.m.Unlock()
 
 	if f == nil {
@@ -147,7 +239,7 @@ func (f *File) Append() (io.WriteCloser, error) {
 	defer f.m.Unlock()
 	fragkey := fmt.Sprintf("%s+%04d", f.ID, f.N)
 	f.N++
-	w, err := f.fstore.Create(fragkey)
+	w, err := f.parent.fstore.Create(fragkey)
 	if err != nil {
 		return nil, err
 	}
@@ -175,6 +267,7 @@ func (fw *fragwriter) Close() error {
 	err := fw.w.Close()
 	if err == nil {
 		fw.parent.m.Lock()
+		fw.parent.Modified = time.Now()
 		fw.parent.Size += fw.size
 		fw.frag.Size = fw.size
 		err = fw.parent.save()
@@ -192,7 +285,7 @@ func (f *File) Open() io.ReadCloser {
 		list[i] = f.Children[i].ID
 	}
 	return &fragreader{
-		s:    f.fstore,
+		s:    f.parent.fstore,
 		keys: list,
 	}
 }
@@ -262,7 +355,7 @@ func (f *File) RemoveFragment(n int) error {
 // must hold m.Lock() when calling
 func (f *File) removefragment(n int) error {
 	frag := f.Children[n]
-	err := f.fstore.Delete(frag.ID)
+	err := f.parent.fstore.Delete(frag.ID)
 	if err != nil {
 		return err
 	}
@@ -271,9 +364,43 @@ func (f *File) removefragment(n int) error {
 	return f.save()
 }
 
-// must hold at least a read lock to call this
+// Save the metadata for this file object.
+// must hold at least a read lock on f to call this
 func (f *File) save() error {
-	return f.meta.Save(f.ID, f)
+	return f.parent.meta.Save(f.ID, f)
+}
+
+// set the labels on the given file to those passed in.
+// We overwrite the list of labels currently applied to the file.
+func (f *File) SetLabels(labels []string) {
+	//TODO: is this reversing the order to acquire these locks?
+	// maybe this needs to be hoisted to a function on the Store?
+	f.m.Lock()
+	defer f.m.Unlock()
+	f.parent.m.Lock()
+	defer f.parent.m.Unlock()
+	f.parent.unindexRecord(f)
+	f.Labels = make([]string, len(labels))
+	for i := range labels {
+		f.Labels[i] = labels[i]
+	}
+	f.parent.indexRecord(f)
+	f.save()
+}
+
+func (f *File) SetCreator(name string) {
+	f.m.Lock()
+	defer f.m.Unlock()
+	f.Creator = name
+	f.save()
+}
+
+func (f *File) SetPayload(p []byte) {
+	f.m.Lock()
+	defer f.m.Unlock()
+	f.Payload = make([]byte, len(p))
+	copy(f.Payload, p)
+	f.save()
 }
 
 // this is used to write json back to any server requests.

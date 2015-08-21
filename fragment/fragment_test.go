@@ -154,3 +154,80 @@ func TestLargeFile(t *testing.T) {
 		t.Fatalf("Got f.Size = %d, expected %d", f.Size, len(result))
 	}
 }
+
+func TestCombineCommon(t *testing.T) {
+	var tests = []struct {
+		input  [][]string
+		output []string
+	}{
+		{
+			input:  [][]string{},
+			output: []string{},
+		},
+		{
+			input:  [][]string{{"a", "b", "c"}},
+			output: []string{"a", "b", "c"},
+		},
+		{
+			input: [][]string{{"a", "c", "e"},
+				{"b", "c", "e"}},
+			output: []string{"c", "e"},
+		},
+		{
+			input: [][]string{{"a", "c", "e"},
+				{"b", "d", "f"}},
+			output: []string{},
+		},
+		{
+			input: [][]string{{"a", "c", "e"},
+				{"f", "g", "h"}},
+			output: []string{},
+		},
+		{
+			input: [][]string{{"a", "c", "e"},
+				{"b", "c", "e"},
+				{"c", "d"}},
+			output: []string{"c"},
+		},
+		{
+			input: [][]string{{"a", "c", "e"},
+				{"b", "c", "e"},
+				{"d", "e"},
+				{"d"}},
+			output: []string{},
+		},
+		{
+			input: [][]string{{"a", "e", "i", "o", "u"},
+				{"b", "c", "h", "i", "l", "z"},
+				{"c", "d", "i"},
+				{"i", "j", "l", "z"}},
+			output: []string{"i"},
+		},
+		{
+			input: [][]string{{"a", "b"},
+				{"a", "b"},
+				{"a", "c"},
+				{"b"}},
+			output: []string{},
+		},
+	}
+
+	for _, test := range tests {
+		result := combineCommon(test.input)
+		ok := true
+		if len(result) != len(test.output) {
+			ok = false
+		} else {
+			for i := range result {
+				if result[i] != test.output[i] {
+					ok = false
+					break
+				}
+			}
+		}
+		if !ok {
+			t.Fatalf("On input %v, got %v, expected %v",
+				test.input, result, test.output)
+		}
+	}
+}
