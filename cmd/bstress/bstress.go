@@ -144,7 +144,7 @@ func uploadfile(txpath string) (string, int64) {
 			verb = "PUT"
 			route = resp.Header.Get("Location")
 			if route == "" {
-				log.Printf("No Location returned on POST: %s", txapth)
+				log.Printf("No Location returned on POST: %s", route)
 				break
 			}
 		}
