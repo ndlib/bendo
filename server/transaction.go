@@ -130,7 +130,7 @@ func AddBlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params
 		fmt.Fprintln(w, "transaction is not modifiable")
 		return
 	}
-	var f *fragment.File // the file to append to
+	var f fragment.FileEntry // the file to append to
 	if bid == "" {
 		var nohash []byte
 		f = tx.NewFile(nohash, nohash)
@@ -157,7 +157,7 @@ func AddBlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params
 	_, err = io.Copy(hw, r.Body)
 	err2 := wr.Close()
 	r.Body.Close()
-	w.Header().Set("Location", "/transaction/"+tx.ID+"/blob/"+f.ID)
+	w.Header().Set("Location", "/transaction/"+tx.ID+"/blob/"+f.Stat().ID)
 	if err != nil {
 		w.WriteHeader(500)
 		fmt.Fprintln(w, err.Error())
@@ -260,7 +260,8 @@ func ListBlobInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.P
 		fmt.Fprintln(w, "Bad file id")
 		return
 	}
-	f.OutputJSON(w)
+	fstat := f.Stat()
+	json.NewEncoder(w).Encode(fstat)
 }
 
 //r.Handle("POST", "/transaction/:tid/commit", CommitTx)

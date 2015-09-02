@@ -8,7 +8,6 @@ and error, that fragment is deleted, and the upload can try again.
 package fragment
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -24,8 +23,8 @@ import (
 type Store struct {
 	meta   JSONStore    // for the metadata
 	fstore store.Store  // for the file fragments
-	m      sync.RWMutex // protects files
-	files  map[string]*File
+	m      sync.RWMutex // protects everything below
+	files  map[string]*file
 	labels map[string][]string
 }
 
@@ -40,32 +39,51 @@ const (
 	fragmentKeyPrefix = "f"
 )
 
-type File struct {
+type FileEntry interface {
+	Append() (io.WriteCloser, error)
+	Open() io.ReadCloser
+	Stat() Stat
+	Rollback() error
+	SetLabels(labels []string)
+	SetCreator(name string)
+}
+
+type Stat struct {
+	ID         string
+	Size       int64
+	NFragments int
+	Created    time.Time
+	Modified   time.Time
+	Creator    string
+	Labels     []string
+}
+
+// The internal struct which tracks a file's metadata
+type file struct {
 	parent   *Store
 	m        sync.RWMutex // protects everything below
 	ID       string       // name in the parent.fstore
 	Size     int64        // sum of all the children sizes
 	N        int          // the id number to use for the next fragment
-	Children []*Fragment  // Children ids, in the order to read them.
+	Children []*fragment  // Children ids, in the order to read them.
 	Created  time.Time    // time this record was created
 	Modified time.Time    // last time this record was modified
 	Labels   []string     // list of labels for this file
 	Creator  string       // the "user" (aka API key) who created this file
-	Payload  []byte       // application defined data
 }
 
-type Fragment struct {
+// make this private?
+type fragment struct {
 	ID   string
 	Size int64
 }
 
-// Create a new fragment store wrapping a store.Store. The metadata will be
-// loaded from the store before returning.
+// Create a new fragment store wrapping a store.Store.
 func New(s store.Store) *Store {
 	return &Store{
 		meta:   NewJSON(store.NewWithPrefix(s, fileKeyPrefix)),
 		fstore: store.NewWithPrefix(s, fragmentKeyPrefix),
-		files:  make(map[string]*File),
+		files:  make(map[string]*file),
 		labels: make(map[string][]string),
 	}
 }
@@ -80,7 +98,7 @@ func (s *Store) Load() error {
 	s.m.Lock()
 	defer s.m.Unlock()
 	for _, key := range metadata {
-		f := new(File)
+		f := new(file)
 		err := s.meta.Open(key, &f)
 		if err != nil {
 			// TODO(dbrower): this is probably too strict. We should
@@ -96,7 +114,7 @@ func (s *Store) Load() error {
 
 // index the labels for f
 // locks must be held on both s AND f to call this.
-func (s *Store) indexRecord(f *File) {
+func (s *Store) indexRecord(f *file) {
 	for _, label := range f.Labels {
 		s.labels[label] = append(s.labels[label], f.ID)
 		sort.Strings(s.labels[label])
@@ -105,7 +123,7 @@ func (s *Store) indexRecord(f *File) {
 
 // remove a record from our label indices
 // locks must be held on both s and f to call this
-func (s *Store) unindexRecord(f *File) {
+func (s *Store) unindexRecord(f *file) {
 	for _, label := range f.Labels {
 		list := s.labels[label]
 		i := sort.SearchStrings(list, f.ID)
@@ -184,13 +202,13 @@ func combineCommon(lists [][]string) []string {
 // Create a new file with the given name, and return a pointer to it.
 // the file is not persisted until its first fragment has been written.
 // If the file already exists, nil is returned.
-func (s *Store) New(id string) *File {
+func (s *Store) New(id string) FileEntry {
 	s.m.Lock()
 	defer s.m.Unlock()
 	if _, ok := s.files[id]; ok {
 		return nil
 	}
-	newfile := &File{
+	newfile := &file{
 		ID:       id,
 		parent:   s,
 		Created:  time.Now(),
@@ -202,7 +220,7 @@ func (s *Store) New(id string) *File {
 
 // Lookup a file. Returns nil if none exists with that id.
 // Returned pointers are not safe to be accessed by more than one goroutine.
-func (s *Store) Lookup(id string) *File {
+func (s *Store) Lookup(id string) FileEntry {
 	s.m.RLock()
 	defer s.m.RUnlock()
 	return s.files[id]
@@ -233,8 +251,22 @@ func (s *Store) Delete(id string) error {
 	return err
 }
 
+func (f *file) Stat() Stat {
+	f.m.RLock()
+	defer f.m.RUnlock()
+	return Stat{
+		ID:         f.ID,
+		Size:       f.Size,
+		NFragments: len(f.Children),
+		Created:    f.Created,
+		Modified:   f.Modified,
+		Creator:    f.Creator,
+		Labels:     f.Labels[:],
+	}
+}
+
 // Open a file for writing. The writes are appended to the end.
-func (f *File) Append() (io.WriteCloser, error) {
+func (f *file) Append() (io.WriteCloser, error) {
 	f.m.Lock()
 	defer f.m.Unlock()
 	fragkey := fmt.Sprintf("%s+%04d", f.ID, f.N)
@@ -243,7 +275,7 @@ func (f *File) Append() (io.WriteCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	frag := &Fragment{ID: fragkey}
+	frag := &fragment{ID: fragkey}
 	f.Children = append(f.Children, frag)
 	err = f.save()
 	return &fragwriter{frag: frag, parent: f, w: w}, err
@@ -253,8 +285,8 @@ type fragwriter struct {
 	w    io.WriteCloser
 	size int64
 	// must hold lock in parent to access these
-	parent *File
-	frag   *Fragment // make it easy to update when we are closed
+	parent *file
+	frag   *fragment // make it easy to update when we are closed
 }
 
 func (fw *fragwriter) Write(p []byte) (int, error) {
@@ -277,7 +309,7 @@ func (fw *fragwriter) Close() error {
 }
 
 // Open a file for reading from the beginning.
-func (f *File) Open() io.ReadCloser {
+func (f *file) Open() io.ReadCloser {
 	f.m.RLock()
 	defer f.m.RUnlock()
 	var list = make([]string, len(f.Children))
@@ -333,80 +365,62 @@ func (fr *fragreader) Close() error {
 	return nil
 }
 
-// Remove the last fragment from this file.
-// Use RemoveFragment to remove a specific fragment.
-func (f *File) Rollback() error {
+// Remove the last fragment from this file. This is everything written during
+// using the Writer gotten from the most recent call to Append.
+// If called more than once, it will keep removing previous Append'ed blocks,
+// until the file is empty.
+// Returns an error if there was a problem deleting the most recent fragment.
+func (f *file) Rollback() error {
 	f.m.Lock()
 	defer f.m.Unlock()
-	return f.removefragment(len(f.Children) - 1)
-}
-
-// Remove the given fragment from a file. The first fragment is
-// 0, the next is 1, etc. Use Rollback() to remove the last fragment.
-func (f *File) RemoveFragment(n int) error {
-	if n < 0 || n >= len(f.Children) {
-		return nil
-	}
-	f.m.Lock()
-	defer f.m.Unlock()
-	return f.removefragment(n)
-}
-
-// must hold m.Lock() when calling
-func (f *File) removefragment(n int) error {
+	n := len(f.Children) - 1
 	frag := f.Children[n]
 	err := f.parent.fstore.Delete(frag.ID)
 	if err != nil {
 		return err
 	}
-	f.Children = append(f.Children[:n], f.Children[n+1:]...)
+	f.Children = f.Children[:n]
 	f.Size -= frag.Size
 	return f.save()
 }
 
 // Save the metadata for this file object.
 // must hold at least a read lock on f to call this
-func (f *File) save() error {
+func (f *file) save() error {
 	return f.parent.meta.Save(f.ID, f)
 }
 
 // set the labels on the given file to those passed in.
 // We overwrite the list of labels currently applied to the file.
-func (f *File) SetLabels(labels []string) {
-	//TODO: is this reversing the order to acquire these locks?
-	// maybe this needs to be hoisted to a function on the Store?
-	f.m.Lock()
-	defer f.m.Unlock()
+func (f *file) SetLabels(labels []string) {
+	dedup := make([]string, len(labels))
+	for i := range labels {
+		dedup[i] = labels[i]
+	}
+	sort.Sort(sort.StringSlice(dedup))
+	// only run loop until the next-to-last element in the array
+	for i := 0; i < len(dedup)-1; {
+		if dedup[i] == dedup[i+1] {
+			dedup = append(dedup[:i], dedup[i+1:]...)
+		} else {
+			i++
+		}
+	}
+	// we do this locking dance to maintain the lock order of locking the
+	// store before the file
 	f.parent.m.Lock()
 	defer f.parent.m.Unlock()
+	f.m.Lock()
+	defer f.m.Unlock()
 	f.parent.unindexRecord(f)
-	f.Labels = make([]string, len(labels))
-	for i := range labels {
-		f.Labels[i] = labels[i]
-	}
+	f.Labels = dedup
 	f.parent.indexRecord(f)
 	f.save()
 }
 
-func (f *File) SetCreator(name string) {
+func (f *file) SetCreator(name string) {
 	f.m.Lock()
 	defer f.m.Unlock()
 	f.Creator = name
 	f.save()
-}
-
-func (f *File) SetPayload(p []byte) {
-	f.m.Lock()
-	defer f.m.Unlock()
-	f.Payload = make([]byte, len(p))
-	copy(f.Payload, p)
-	f.save()
-}
-
-// this is used to write json back to any server requests.
-// It needs to be here since we must hold a read lock to call json.Encode()
-func (f *File) OutputJSON(w io.Writer) error {
-	f.m.RLock()
-	defer f.m.RUnlock()
-	return json.NewEncoder(w).Encode(f)
 }

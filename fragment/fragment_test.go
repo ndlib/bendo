@@ -27,15 +27,7 @@ func TestFileWriting(t *testing.T) {
 	for _, test := range table {
 		f := registry.New(test.name)
 		expected := insertString(t, f, test.data)
-		r := f.Open()
-		result, _ := ioutil.ReadAll(r)
-		r.Close()
-		if string(result) != expected {
-			t.Fatalf("Read %s, expected %s", string(result), expected)
-		}
-		if int64(len(result)) != f.Size {
-			t.Fatalf("Got f.Size = %d, expected %d", f.Size, len(result))
-		}
+		readAndCheck(t, f, expected)
 	}
 	// Now test reloading
 	registry = New(memory)
@@ -50,14 +42,7 @@ func TestFileWriting(t *testing.T) {
 			t.Fatalf("Lookup of key %s failed", test.name)
 			continue
 		}
-		r := f.Open()
-		result, _ := ioutil.ReadAll(r)
-		if string(result) != expected {
-			t.Fatalf("Read %s, expected %s", string(result), expected)
-		}
-		if int64(len(result)) != f.Size {
-			t.Fatalf("Got f.Size = %d, expected %d", f.Size, len(result))
-		}
+		readAndCheck(t, f, expected)
 	}
 	// now delete things
 	for _, test := range table {
@@ -70,7 +55,7 @@ func TestFileWriting(t *testing.T) {
 	}
 }
 
-func insertString(t *testing.T, f *File, text string) string {
+func insertString(t *testing.T, f FileEntry, text string) string {
 	var expected string
 	segments := strings.Split(text, "|")
 	for _, segment := range segments {
@@ -94,6 +79,18 @@ func expectedText(text string) string {
 		}
 		return in
 	}, text)
+}
+
+func readAndCheck(t *testing.T, f FileEntry, expected string) {
+	r := f.Open()
+	result, _ := ioutil.ReadAll(r)
+	if string(result) != expected {
+		t.Fatalf("Read %s, expected %s", string(result), expected)
+	}
+	fstat := f.Stat()
+	if int64(len(result)) != fstat.Size {
+		t.Fatalf("Got f.Size = %d, expected %d", fstat.Size, len(result))
+	}
 }
 
 func TestRollback(t *testing.T) {
@@ -123,14 +120,7 @@ func TestRollback(t *testing.T) {
 		} else {
 			expected = ""
 		}
-		r := f.Open()
-		result, _ := ioutil.ReadAll(r)
-		if string(result) != expected {
-			t.Fatalf("Read %s, expected %s", string(result), expected)
-		}
-		if int64(len(result)) != f.Size {
-			t.Fatalf("Got f.Size = %d, expected %d", f.Size, len(result))
-		}
+		readAndCheck(t, f, expected)
 	}
 }
 
@@ -145,14 +135,7 @@ func TestLargeFile(t *testing.T) {
 	// must be larger than 32k
 	text := strings.Repeat("hello world", 5000)
 	insertString(t, f, text)
-	r := f.Open()
-	result, _ := ioutil.ReadAll(r)
-	if string(result) != text {
-		t.Fatalf("Read (len = %d), expected (len = %d)", len(result), len(text))
-	}
-	if int64(len(result)) != f.Size {
-		t.Fatalf("Got f.Size = %d, expected %d", f.Size, len(result))
-	}
+	readAndCheck(t, f, text)
 }
 
 func TestCombineCommon(t *testing.T) {
@@ -230,4 +213,32 @@ func TestCombineCommon(t *testing.T) {
 				test.input, result, test.output)
 		}
 	}
+}
+
+func TestSetLabels(t *testing.T) {
+	memory := store.NewMemory()
+	registry := New(memory)
+	err := registry.Load()
+	if err != nil {
+		t.Fatalf("received %s, expected nil", err.Error())
+	}
+	f := registry.New("zzz")
+	var labels = []string{"qwerty", "asdfg", "zxcvb", "asdfg"}
+	f.SetLabels(labels)
+	fstat := f.Stat()
+	if !listsEqual(fstat.Labels, []string{"asdfg", "qwerty", "zxcvb"}) {
+		t.Fatalf("Received %#v", fstat.Labels)
+	}
+}
+
+func listsEqual(s1, s2 []string) bool {
+	if len(s1) != len(s2) {
+		return false
+	}
+	for i := range s1 {
+		if s1[i] != s2[i] {
+			return false
+		}
+	}
+	return true
 }

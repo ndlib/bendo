@@ -173,9 +173,9 @@ type blob struct {
 	SHA256 []byte
 }
 
-func (tx *T) NewFile(md5, sha256 []byte) *fragment.File {
+func (tx *T) NewFile(md5, sha256 []byte) fragment.FileEntry {
 	var id string
-	var f *fragment.File
+	var f fragment.FileEntry
 	for {
 		id = randomid()
 		f = tx.files.New(id)
@@ -275,7 +275,8 @@ func (tx *T) Commit(s items.Store, Creator string) {
 	for _, bl := range tx.NewBlobs {
 		f := tx.files.Lookup(bl.PID)
 		reader := f.Open()
-		bid, err := iw.WriteBlob(reader, f.Size, bl.MD5, bl.SHA256)
+		fstat := f.Stat()
+		bid, err := iw.WriteBlob(reader, fstat.Size, bl.MD5, bl.SHA256)
 		reader.Close()
 		if err != nil {
 			tx.Err = append(tx.Err, err)

@@ -90,7 +90,7 @@ func AppendFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Par
 		}
 	}
 	fileid := ps.ByName("fileid")
-	var f *fragment.File // the file to append to
+	var f fragment.FileEntry // the file to append to
 	// if no file was given, make a new one
 	// if a file id was given, but doesn't exist...create it
 	if fileid == "" {
@@ -126,7 +126,7 @@ func AppendFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Par
 	_, err = io.Copy(hw, r.Body)
 	err2 := wr.Close()
 	r.Body.Close()
-	w.Header().Set("Location", "/upload/"+f.ID)
+	w.Header().Set("Location", "/upload/"+f.Stat().ID)
 	if err != nil {
 		w.WriteHeader(500)
 		fmt.Fprintln(w, err.Error())
@@ -176,16 +176,16 @@ func SetFileInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Pa
 		return
 	}
 	// TODO(dbrower): use a limit reader to 1MB(?) for this
-	var metadata fragment.File
+	var metadata fragment.Stat
 	err := json.NewDecoder(r.Body).Decode(&metadata)
 	if err != nil {
 		w.WriteHeader(400)
 		fmt.Fprintln(w, err.Error())
 		return
 	}
-	if len(metadata.Payload) > 0 {
-		f.SetPayload(metadata.Payload)
-	}
+	//if len(metadata.Payload) > 0 {
+	//	f.SetPayload(metadata.Payload)
+	//}
 	if len(metadata.Labels) > 0 {
 		f.SetLabels(metadata.Labels)
 	}
