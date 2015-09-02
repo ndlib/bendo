@@ -242,3 +242,48 @@ func listsEqual(s1, s2 []string) bool {
 	}
 	return true
 }
+
+func TestListFiltered(t *testing.T) {
+	var items = []struct {
+		id     string
+		labels []string
+	}{
+		{"zzz", []string{"qwerty", "asdfg", "zxcvb"}},
+		{"yyy", []string{"qwerty", "asdfg"}},
+		{"xxx", []string{"qwerty"}},
+		{"www", []string{}},
+		{"vvv", []string{"zxcvb"}},
+	}
+	var tests = []struct {
+		labels []string
+		result []string
+	}{
+		{[]string{}, []string{"vvv", "www", "xxx", "yyy", "zzz"}},
+		{[]string{"qwerty"}, []string{"xxx", "yyy", "zzz"}},
+		{[]string{"asdfg"}, []string{"yyy", "zzz"}},
+		{[]string{"qwerty", "asdfg"}, []string{"yyy", "zzz"}},
+		{[]string{"zxcvb"}, []string{"vvv", "zzz"}},
+		{[]string{"qwerty", "zxcvb"}, []string{"zzz"}},
+		{[]string{"12345"}, []string{}},
+	}
+
+	memory := store.NewMemory()
+	registry := New(memory)
+	err := registry.Load()
+	if err != nil {
+		t.Fatalf("received %s, expected nil", err.Error())
+	}
+	for _, item := range items {
+		f := registry.New(item.id)
+		f.SetLabels(item.labels)
+	}
+	for _, test := range tests {
+		result := registry.ListFiltered(test.labels)
+		if !listsEqual(result, test.result) {
+			t.Errorf("For %v received %v, expected %v",
+				test.labels,
+				result,
+				test.result)
+		}
+	}
+}

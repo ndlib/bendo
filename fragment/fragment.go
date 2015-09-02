@@ -144,8 +144,15 @@ func (s *Store) List() []string {
 	return result
 }
 
-// Return a list of the file ids matching a given set of labels
+// Return a list of the file ids matching a given set of labels.
+// If the list of labels provided is empty, a list of every item is returned.
+// The items in the returned list are in alphabetical order.
 func (s *Store) ListFiltered(labels []string) []string {
+	if len(labels) == 0 {
+		result := s.List()
+		sort.Sort(sort.StringSlice(result))
+		return result
+	}
 	s.m.RLock()
 	defer s.m.RUnlock()
 	var lists [][]string
