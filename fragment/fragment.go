@@ -48,6 +48,7 @@ type FileEntry interface {
 	SetCreator(name string)
 }
 
+// The metadata kept on each file entry
 type Stat struct {
 	ID         string
 	Size       int64
@@ -72,13 +73,14 @@ type file struct {
 	Creator  string       // the "user" (aka API key) who created this file
 }
 
-// make this private?
+// An individual fragment of a file
 type fragment struct {
-	ID   string
-	Size int64
+	ID   string // the id of this fragment in the fstore
+	Size int64  // the size of this fragment in bytes
 }
 
-// Create a new fragment store wrapping a store.Store.
+// Create a new fragment store wrapping a store.Store. Call Load() before
+// using the store.
 func New(s store.Store) *Store {
 	return &Store{
 		meta:   NewJSON(store.NewWithPrefix(s, fileKeyPrefix)),
@@ -88,8 +90,8 @@ func New(s store.Store) *Store {
 	}
 }
 
-// Initialize our in-memory data from the store. This must be called before
-// using the structure.
+// Initialize an in memory data from the file entries stored inside.
+// Must be called before using this store.
 func (s *Store) Load() error {
 	metadata, err := s.meta.ListPrefix("")
 	if err != nil {
@@ -233,7 +235,7 @@ func (s *Store) Lookup(id string) FileEntry {
 	return s.files[id]
 }
 
-// Delete a file
+// Delete a file. It is not an error to delete a file that does not exist.
 func (s *Store) Delete(id string) error {
 	s.m.Lock()
 	f := s.files[id]
@@ -306,7 +308,6 @@ func (fw *fragwriter) Close() error {
 	err := fw.w.Close()
 	if err == nil {
 		fw.parent.m.Lock()
-		fw.parent.Modified = time.Now()
 		fw.parent.Size += fw.size
 		fw.frag.Size = fw.size
 		err = fw.parent.save()
@@ -392,8 +393,9 @@ func (f *file) Rollback() error {
 }
 
 // Save the metadata for this file object.
-// must hold at least a read lock on f to call this
+// must hold a write lock on f to call this
 func (f *file) save() error {
+	f.Modified = time.Now()
 	return f.parent.meta.Save(f.ID, f)
 }
 
