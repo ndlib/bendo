@@ -34,14 +34,7 @@ var (
 		{"POST", "/item/:id/transaction", NewTxHandler},
 		{"GET", "/transaction", ListTxHandler},
 		{"GET", "/transaction/:tid", TxInfoHandler},
-		{"POST", "/transaction/:tid", AddBlobHandler},
-		{"GET", "/transaction/:tid/commands", GetCommandsHandler},
-		{"PUT", "/transaction/:tid/commands", AddCommandsHandler},
-		{"GET", "/transaction/:tid/blob/:bid", ListBlobInfoHandler},
-		{"PUT", "/transaction/:tid/blob/:bid", AddBlobHandler},
-		{"DELETE", "/transaction/:tid/blob/:bid", DeleteBlobHandler},
-		{"POST", "/transaction/:tid/commit", CommitTxHandler},
-		{"POST", "/transaction/:tid/cancel", CancelTxHandler},
+		{"POST", "/transaction/:tid/cancel", CancelTxHandler}, //keep?
 		// file upload things
 		{"GET", "/upload", ListFileHandler},
 		{"POST", "/upload", AppendFileHandler},
@@ -73,7 +66,7 @@ func Run() {
 }
 
 func initCommitQueue() {
-	// for each commit, if in StateWaiting or StateCommit, start a
+	// for each commit, if in StateWaiting or StateCommit, start a goroutine
 	for _, tid := range TxStore.List() {
 		tx := TxStore.Lookup(tid)
 		if tx.Status == transaction.StatusWaiting || tx.Status == transaction.StatusIngest {

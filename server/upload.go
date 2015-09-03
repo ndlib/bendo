@@ -31,7 +31,7 @@ var (
 <h1>Files</h1>
 <ol>
 {{ range . }}
-	<li><a href="/upload/{{ . }}">{{ . }}</a></li>
+	<li><a href="/upload/{{ . }}/metadata">{{ . }}</a></li>
 {{ else }}
 	<li>No Files</li>
 {{ end }}
@@ -48,7 +48,8 @@ func GetFileInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Pa
 		fmt.Fprintln(w, "cannot find file")
 		return
 	}
-	writeHTMLorJSON(w, r, fileInfoTemplate, f)
+	fstat := f.Stat()
+	writeHTMLorJSON(w, r, fileInfoTemplate, fstat)
 }
 
 var (
@@ -58,13 +59,13 @@ var (
 <dl>
 <dt>ID</dt><dd>{{ .ID }}</dd>
 <dt>Size</dt><dd>{{ .Size }}</dd>
-<dt>Fragments</dt><dd>{{ .Children | len }}</dd>
+<dt>Fragments</dt><dd>{{ .NFragments }}</dd>
 <dt>Created</dt><dd>{{ .Created }}</dd>
 <dt>Modified</dt><dd>{{ .Modified }}</dd>
 <dt>Creator</dt><dd>{{ .Creator }}</dd>
 <dt>Labels</dt><dd>{{ range .Labels }}{{ . }}<br/>{{ end }}</dd>
-<dt>Payload</dt><dd>{{ .Payload }}</dd>
 </dl>
+<a href="/upload/{{ $fileid }}">View content</a></br>
 <a href="/upload">Back</a>
 </html>`))
 )
@@ -154,9 +155,8 @@ func randomid() string {
 }
 
 //{"DELETE", "/upload/:fileid", DeleteFileHandler},
-// This deletes a blob which has been uploaded to a transactions, but not committed
-// into an item yet. If an item has already been committed, then a "delete"
-// command is needed instead. I know, it is confusing.
+// This deletes a file which has been uploaded and is in the temporary
+// holding area.
 func DeleteFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	fileid := ps.ByName("fileid")
 	err := FileStore.Delete(fileid)
@@ -183,9 +183,6 @@ func SetFileInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Pa
 		fmt.Fprintln(w, err.Error())
 		return
 	}
-	//if len(metadata.Payload) > 0 {
-	//	f.SetPayload(metadata.Payload)
-	//}
 	if len(metadata.Labels) > 0 {
 		f.SetLabels(metadata.Labels)
 	}

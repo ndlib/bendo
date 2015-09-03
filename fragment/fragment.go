@@ -232,7 +232,13 @@ func (s *Store) New(id string) FileEntry {
 func (s *Store) Lookup(id string) FileEntry {
 	s.m.RLock()
 	defer s.m.RUnlock()
-	return s.files[id]
+	result, ok := s.files[id]
+	if !ok {
+		// explicitly return nil otherwise we get a nil wrapped as
+		// a valid interface...see https://golang.org/doc/faq#nil_error
+		return nil
+	}
+	return result
 }
 
 // Delete a file. It is not an error to delete a file that does not exist.

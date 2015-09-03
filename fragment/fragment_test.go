@@ -287,3 +287,17 @@ func TestListFiltered(t *testing.T) {
 		}
 	}
 }
+
+func TestLookupUnknown(t *testing.T) {
+	// get something which doesn't exist...make sure nil is returned
+	memory := store.NewMemory()
+	registry := New(memory)
+	err := registry.Load()
+	if err != nil {
+		t.Fatalf("received %s, expected nil", err.Error())
+	}
+	f := registry.Lookup("does-not-exist")
+	if f != nil {
+		t.Errorf("Lookup returned %#v, expected nil", f)
+	}
+}
