@@ -46,6 +46,8 @@ type FileEntry interface {
 	Rollback() error
 	SetLabels(labels []string)
 	SetCreator(name string)
+	SetMD5(hash []byte)
+	SetSHA256(hash []byte)
 }
 
 // The metadata kept on each file entry
@@ -57,6 +59,8 @@ type Stat struct {
 	Modified   time.Time
 	Creator    string
 	Labels     []string
+	MD5        []byte // expected hash for entire file
+	SHA256     []byte // expected hash for entire file
 }
 
 // The internal struct which tracks a file's metadata
@@ -71,6 +75,8 @@ type file struct {
 	Modified time.Time    // last time this record was modified
 	Labels   []string     // list of labels for this file
 	Creator  string       // the "user" (aka API key) who created this file
+	MD5      []byte       // expected hash for entire file
+	SHA256   []byte       // expected hash for entire file
 }
 
 // An individual fragment of a file
@@ -277,6 +283,8 @@ func (f *file) Stat() Stat {
 		Modified:   f.Modified,
 		Creator:    f.Creator,
 		Labels:     f.Labels[:],
+		MD5:        f.MD5[:],
+		SHA256:     f.SHA256[:],
 	}
 }
 
@@ -437,5 +445,19 @@ func (f *file) SetCreator(name string) {
 	f.m.Lock()
 	defer f.m.Unlock()
 	f.Creator = name
+	f.save()
+}
+
+func (f *file) SetMD5(hash []byte) {
+	f.m.Lock()
+	defer f.m.Unlock()
+	f.MD5 = hash[:]
+	f.save()
+}
+
+func (f *file) SetSHA256(hash []byte) {
+	f.m.Lock()
+	defer f.m.Unlock()
+	f.SHA256 = hash[:]
 	f.save()
 }

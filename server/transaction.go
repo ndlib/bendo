@@ -105,11 +105,6 @@ func AddCommandsHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Pa
 		fmt.Fprintln(w, "cannot find transaction")
 		return
 	}
-	if !tx.IsModifiable() {
-		w.WriteHeader(400)
-		fmt.Fprintln(w, "transaction is not modifiable")
-		return
-	}
 	// TODO(dbrower): use a limit reader to 1MB(?) for this
 	var cmds [][]string
 	err := json.NewDecoder(r.Body).Decode(&cmds)
@@ -136,11 +131,6 @@ func CommitTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Param
 		fmt.Fprintln(w, "cannot find transaction")
 		return
 	}
-	if !tx.IsModifiable() {
-		w.WriteHeader(400)
-		fmt.Fprintln(w, "transaction is not modifiable")
-		return
-	}
 	tx.SetStatus(transaction.StatusWaiting)
 	go processCommit(tx)
 	w.WriteHeader(202)
@@ -149,7 +139,7 @@ func CommitTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Param
 func processCommit(tx *transaction.T) {
 	gate.Enter()
 	defer gate.Leave()
-	tx.Commit(*Items, "nobody")
+	tx.Commit(*Items, FileStore, "nobody")
 	if len(tx.Err) == 0 {
 		err := TxStore.Delete(tx.ID)
 		if err != nil {

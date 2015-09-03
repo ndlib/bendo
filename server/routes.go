@@ -15,7 +15,7 @@ import (
 
 var (
 	Items     *items.Store
-	TxStore   *transaction.Registry
+	TxStore   *transaction.Store
 	FileStore *fragment.Store
 )
 
