@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
@@ -12,31 +11,6 @@ import (
 	"github.com/ndlib/bendo/transaction"
 	"github.com/ndlib/bendo/util"
 )
-
-//r.Handle("POST", "/item/:id", NewTxHandler)
-func NewTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	id := ps.ByName("id")
-	tx, err := TxStore.Create(id)
-	if err != nil {
-		// the err is probably that there is already a transaction open
-		// on the item
-		w.WriteHeader(409)
-		fmt.Fprintln(w, err.Error())
-		return
-	}
-	w.Header().Set("Location", "/transaction/"+tx.ID)
-}
-
-func writeHTMLorJSON(w http.ResponseWriter,
-	r *http.Request,
-	tmpl *template.Template,
-	val interface{}) {
-	if r.Header.Get("Accept-Encoding") == "application/json" {
-		json.NewEncoder(w).Encode(val)
-		return
-	}
-	tmpl.Execute(w, val)
-}
 
 //r.Handle("GET", "/transaction", ListTx)
 func ListTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
@@ -94,20 +68,21 @@ var (
 	</html>`))
 )
 
-//r.Handle("PUT", "/transaction/:tid/commands", AddCommands)
-// XXX: roll this into the NewTxHandler...since now beginning a transaction
-// means providing a list of commands to perform
-func AddCommandsHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	tid := ps.ByName("tid")
-	tx := TxStore.Lookup(tid)
-	if tx == nil {
-		w.WriteHeader(404)
-		fmt.Fprintln(w, "cannot find transaction")
+//r.Handle("POST", "/item/:id", NewTxHandler)
+func NewTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	id := ps.ByName("id")
+	tx, err := TxStore.Create(id)
+	if err != nil {
+		// the err is probably that there is already a transaction open
+		// on the item
+		w.WriteHeader(409)
+		fmt.Fprintln(w, err.Error())
 		return
 	}
+	w.Header().Set("Location", "/transaction/"+tx.ID)
 	// TODO(dbrower): use a limit reader to 1MB(?) for this
 	var cmds [][]string
-	err := json.NewDecoder(r.Body).Decode(&cmds)
+	err = json.NewDecoder(r.Body).Decode(&cmds)
 	if err != nil {
 		w.WriteHeader(400)
 		fmt.Fprintln(w, err.Error())
@@ -119,18 +94,6 @@ func AddCommandsHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Pa
 		fmt.Fprintln(w, err.Error())
 		return
 	}
-}
-
-//r.Handle("POST", "/transaction/:tid/commit", CommitTx)
-//XXX: roll this into the NewTxHandler...
-func CommitTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	tid := ps.ByName("tid")
-	tx := TxStore.Lookup(tid)
-	if tx == nil {
-		w.WriteHeader(404)
-		fmt.Fprintln(w, "cannot find transaction")
-		return
-	}
 	tx.SetStatus(transaction.StatusWaiting)
 	go processCommit(tx)
 	w.WriteHeader(202)
@@ -140,12 +103,6 @@ func processCommit(tx *transaction.T) {
 	gate.Enter()
 	defer gate.Leave()
 	tx.Commit(*Items, FileStore, "nobody")
-	if len(tx.Err) == 0 {
-		err := TxStore.Delete(tx.ID)
-		if err != nil {
-			log.Println(err)
-		}
-	}
 }
 
 // the number of active commits onto tape we allow at a given time
@@ -157,6 +114,7 @@ var gate = util.NewGate(MaxConcurrentCommits)
 func CancelTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	tid := ps.ByName("tid")
 	// TODO(dbrower): only delete tx if it is modifiable
+	//TODO(dbrower): how to remove waiting goroutine?
 	err := TxStore.Delete(tid)
 	fmt.Fprintf(w, err.Error())
 }

@@ -16,59 +16,62 @@ import (
 )
 
 func TestTransaction1(t *testing.T) {
-	// rework to fit with new transaction interface
-	//checkStatus(t, "GET", "/item/zxcv", 404)
-	//txpath := getlocation(t, "POST", "/item/zxcv/transaction", 200)
-	//t.Log("got tx path", txpath)
-	//// cannot open two transactions on one item
-	//checkStatus(t, "POST", "/item/zxcv/transaction", 409)
+	// bad transaction ids are rejected
+	checkStatus(t, "GET", "/transaction/abc", 404)
 
-	//// bad transaction ids are rejected
-	//checkStatus(t, "GET", "/transaction/abc", 404)
+	// do a simple transaction
+	file1 := uploadstring(t, "POST", "/upload", "hello world")
+	t.Log("got file1 =", file1)
+	uploadstring(t, "POST", file1, " and hello sun")
 
-	//blobpath := uploadstring(t, "POST", txpath, "hello world")
-	//t.Log("got blob path", blobpath)
-	//blobpath = uploadstring(t, "PUT", blobpath, " and hello sun")
-	//checkStatus(t, "GET", blobpath, 200)
-	//checkStatus(t, "POST", blobpath, 405)
-	//checkStatus(t, "POST", txpath+"/commit", 202)
-	//checkStatus(t, "GET", "/item/zxcv", 200)
-	//checkStatus(t, "GET", "/blob/zxcv/1", 200)
-	//checkStatus(t, "GET", "/blob/zxcv/2", 404)
-	//text := getbody(t, "GET", "/blob/zxcv/1", 200)
-	//if text != "hello world and hello sun" {
-	//	t.Fatalf("Received %#v, expected %#v", text, "hello world and hello sun")
-	//}
+	checkStatus(t, "GET", "/item/zxcv", 404)
+
+	// should use file1 path here...
+	txpath := uploadstringhash(t, "POST", "/item/zxcv/transaction",
+		`[["add","lh3bj5"]]`, "", 202)
+	t.Log("got tx path", txpath)
+
+	// tx is processed async to the web frontend.
+	// maybe we should see if the transaction completes first?
+
+	checkStatus(t, "GET", "/item/zxcv", 200)
+	checkStatus(t, "GET", "/blob/zxcv/2", 404)
+	text := getbody(t, "GET", "/blob/zxcv/1", 200)
+	if text != "hello world and hello sun" {
+		t.Fatalf("Received %#v, expected %#v", text, "hello world and hello sun")
+	}
 }
 
 func TestTransactionCommands(t *testing.T) {
-	// rework to fit with new transaction interface
-	//// add two blobs, and then delete one
-	//checkStatus(t, "GET", "/item/zxcvbnm", 404)
-	//txpath := getlocation(t, "POST", "/item/zxcvbnm/transaction", 200)
-	//t.Log("got tx path", txpath)
-	//blob1 := uploadstring(t, "POST", txpath, "hello world")
-	//t.Log("got blob path", blob1)
-	//blob2 := uploadstring(t, "POST", txpath, "delete me")
-	//t.Log("got blob path", blob2)
-	//checkStatus(t, "POST", txpath+"/commit", 202)
-	//text := getbody(t, "GET", "/blob/zxcvbnm/2", 200)
-	//if text != "delete me" {
-	//	t.Errorf("Received %#v, expected %#v", text, "delete me")
-	//}
-	//// now delete blob 2
-	//txpath = getlocation(t, "POST", "/item/zxcvbnm/transaction", 200)
-	//t.Log("got tx path", txpath)
-	//uploadstring(t, "PUT", txpath+"/commands", `[["delete", "2"]]`)
-	//checkStatus(t, "POST", txpath+"/commit", 202)
-	//text = getbody(t, "GET", "/blob/zxcvbnm/1", 200)
-	//if text != "hello world" {
-	//	t.Errorf("Received %#v, expected %#v", text, "hello world")
-	//}
-	//text = getbody(t, "GET", "/blob/zxcvbnm/2", 404)
-	//if text == "delete me" {
-	//	t.Errorf("Received %#v, expected %#v", text, "")
-	//}
+	// add two blobs, and then delete one
+	blob1 := uploadstring(t, "POST", "/upload", "hello world")
+	t.Log("blob1 = ", blob1)
+	blob2 := uploadstring(t, "POST", "/upload", "delete me")
+	t.Log("blob2 =", blob2)
+
+	checkStatus(t, "GET", "/item/zxcvbnm", 404)
+	txpath := uploadstringhash(t, "POST", "/item/zxcvbnm/transaction",
+		`[["add","nlodzb"],["add","fjn4cb"]]`, "", 202)
+	t.Log("got tx path", txpath)
+	// tx is processed async from the commit above.
+	// maybe wait for it to be committed?
+	checkStatus(t, "GET", "/item/zxcvbnm", 200)
+	text := getbody(t, "GET", "/blob/zxcvbnm/2", 200)
+	if text != "delete me" {
+		t.Errorf("Received %#v, expected %#v", text, "delete me")
+	}
+	// now delete blob 2
+	txpath = uploadstringhash(t, "POST", "/item/zxcvbnm/transaction",
+		`[["delete", "2"]]`, "", 202)
+	t.Log("got tx path", txpath)
+	text = getbody(t, "GET", "/blob/zxcvbnm/1", 200)
+	if text != "hello world" {
+		t.Errorf("Received %#v, expected %#v", text, "hello world")
+	}
+	text = getbody(t, "GET", "/blob/zxcvbnm/2", 404)
+	if text == "delete me" {
+		t.Errorf("Received %#v, expected %#v", text, "")
+	}
 }
 
 func TestUploadNameAssign(t *testing.T) {

@@ -64,9 +64,11 @@ var (
 func (r *Store) Create(itemid string) (*T, error) {
 	r.m.Lock()
 	defer r.m.Unlock()
-	// is there currently a transaction for the item?
+	// is there currently a open transaction for the item?
 	for _, tx := range r.txs {
-		if tx.ItemID == itemid {
+		if tx.ItemID == itemid &&
+			tx.Status != StatusFinished &&
+			tx.Status != StatusError {
 			return nil, ErrExistingTransaction
 		}
 	}
@@ -77,6 +79,7 @@ func (r *Store) Create(itemid string) (*T, error) {
 		Modified: time.Now(),
 		ItemID:   itemid,
 		txstore:  &r.TxStore,
+		BlobMap:  make(map[string]int),
 	}
 	r.txs[tx.ID] = tx
 	tx.save()
@@ -276,6 +279,10 @@ func (c command) Execute(iw *items.Writer, tx *T) {
 	case cmd[0] == "add" && len(cmd) == 2:
 		// add <file id>
 		f := tx.files.Lookup(cmd[1])
+		if f == nil {
+			tx.Err = append(tx.Err, errors.New("Cannot find "+cmd[1]))
+			break
+		}
 		reader := f.Open()
 		fstat := f.Stat()
 		bid, err := iw.WriteBlob(reader, fstat.Size, fstat.MD5, fstat.SHA256)

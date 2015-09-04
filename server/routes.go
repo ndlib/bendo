@@ -1,7 +1,9 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
@@ -89,4 +91,15 @@ func AddRoutes() http.Handler {
 func NotImplementedHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	w.WriteHeader(http.StatusNotImplemented)
 	fmt.Fprintf(w, "Not Implemented\n")
+}
+
+func writeHTMLorJSON(w http.ResponseWriter,
+	r *http.Request,
+	tmpl *template.Template,
+	val interface{}) {
+	if r.Header.Get("Accept-Encoding") == "application/json" {
+		json.NewEncoder(w).Encode(val)
+		return
+	}
+	tmpl.Execute(w, val)
 }
