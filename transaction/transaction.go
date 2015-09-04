@@ -133,7 +133,7 @@ type T struct {
 	Status   Status              // one of Status*
 	Started  time.Time           // time tx was created
 	Modified time.Time           // last time user touch or added a file
-	Err      []error             // list of errors (for StatusError)
+	Err      []string            // list of errors (for StatusError)
 	ItemID   string              // ID of the item this tx is modifying
 	Commands []command           // commands to run on commit
 	BlobMap  map[string]int      // tracks the blob id we used for uploaded files
@@ -199,7 +199,7 @@ func (tx *T) Commit(s items.Store, files *fragment.Store, Creator string) {
 	}
 	err := iw.Close()
 	if err != nil {
-		tx.Err = append(tx.Err, err)
+		tx.Err = append(tx.Err, err.Error())
 	}
 	tx.Status = StatusFinished
 	if len(tx.Err) > 0 {
@@ -248,7 +248,7 @@ type command []string
 // assumes lock tx.m is held for writing
 func (c command) Execute(iw *items.Writer, tx *T) {
 	if !c.WellFormed() {
-		tx.Err = append(tx.Err, errors.New("Command is not well formed"))
+		tx.Err = append(tx.Err, "Command is not well formed")
 		return
 	}
 	cmd := []string(c)
@@ -270,7 +270,7 @@ func (c command) Execute(iw *items.Writer, tx *T) {
 			var err error
 			id, err = strconv.Atoi(cmd[2])
 			if err != nil {
-				tx.Err = append(tx.Err, errors.New("Cannot resolve id "+cmd[2]))
+				tx.Err = append(tx.Err, "Cannot resolve id "+cmd[2])
 				break
 			}
 		}
@@ -282,7 +282,7 @@ func (c command) Execute(iw *items.Writer, tx *T) {
 		// add <file id>
 		f := tx.files.Lookup(cmd[1])
 		if f == nil {
-			tx.Err = append(tx.Err, errors.New("Cannot find "+cmd[1]))
+			tx.Err = append(tx.Err, "Cannot find "+cmd[1])
 			break
 		}
 		reader := f.Open()
@@ -290,7 +290,7 @@ func (c command) Execute(iw *items.Writer, tx *T) {
 		bid, err := iw.WriteBlob(reader, fstat.Size, fstat.MD5, fstat.SHA256)
 		reader.Close()
 		if err != nil {
-			tx.Err = append(tx.Err, err)
+			tx.Err = append(tx.Err, err.Error())
 			break
 		}
 		tx.BlobMap[cmd[1]] = int(bid)
@@ -299,7 +299,7 @@ func (c command) Execute(iw *items.Writer, tx *T) {
 		// nothing magic about 1 sec. could be less
 		time.Sleep(1 * time.Second)
 	default:
-		tx.Err = append(tx.Err, errors.New("Bad command "+cmd[0]))
+		tx.Err = append(tx.Err, "Bad command "+cmd[0])
 	}
 }
 

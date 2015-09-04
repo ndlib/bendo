@@ -56,14 +56,18 @@ var (
 )
 
 func Run() {
+	log.Println("Loading Transactions")
 	TxStore.Load()
+	log.Println("Loading Upload Queue")
 	FileStore.Load()
-	initCommitQueue()
+	log.Println("Starting pending transactions")
+	go initCommitQueue()
 
 	// for pprof
 	go func() {
 		log.Println(http.ListenAndServe("localhost:14001", nil))
 	}()
+	log.Println("Listening on :14000")
 	http.ListenAndServe(":14000", AddRoutes())
 }
 

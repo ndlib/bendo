@@ -77,3 +77,10 @@ func ItemHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 }
 
 // Wrap the item store in the singleflight so we only ask for metadata once
+
+/*
+// add  commit  button  to  item  info  page?
+	<form action="/transaction/{{ .ID }}/commit" method="post">
+		<button type="submit">Commit</button>
+	</form>
+*/

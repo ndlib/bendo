@@ -51,19 +51,10 @@ var (
 	<dt>For Item</dt><dd>{{ .ItemID }}</dd>
 	<dt>Status</dt><dd>{{ .Status }}</dd>
 	<dt>Started</dt><dd>{{ .Started }}</dd>
+	<dt>Modified</dt><dd>{{ .Modified }}</dd>
 	<dt>Errors</dt><dd>{{ range .Err }}{{ . }}<br/>{{ end }}</dd>
 	<dt>Commands</dt><dd>{{ range .Commands }}{{ . }}<br/>{{ end }}</dd>
-	<dt>New Blobs</dt><dd>
-		{{ range .NewBlobs }}
-			<b>PID</b> <a href="/transaction/{{ $txid }}/blob/{{ .PID }}">{{ .PID }}</a>
-			<b>md5</b> {{ .MD5 }}
-			<b>sha256</b> {{ .SHA256 }}<br/>
-		{{ end }}
-		</dd>
 	</dl>
-	<form action="/transaction/{{ .ID }}/commit" method="post">
-		<button type="submit">Commit</button>
-	</form>
 	<a href="/transaction">Back</a>
 	</html>`))
 )
