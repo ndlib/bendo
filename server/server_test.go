@@ -3,9 +3,11 @@ package server
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"strings"
 	"testing"
 
@@ -19,6 +21,17 @@ func TestTransaction1(t *testing.T) {
 	// bad transaction ids are rejected
 	checkStatus(t, "GET", "/transaction/abc", 404)
 
+	// non-well-formed json is rejected
+	// must use uploadstringhash to send the bad json
+	uploadstringhash(t, "POST", "/item/abc1/transaction", `["not correct format"]`, "", 400)
+	// bad or non-existant commands are rejected
+	sendtransaction(t, "/item/abc2/transaction", [][]string{{"not a command"}}, 400)
+	sendtransaction(t, "/item/abc3/transaction", [][]string{{"not a command"}}, 400)
+
+	// transactions on items already having pending transactions are rejected
+	sendtransaction(t, "/item/abc4/transaction", [][]string{{"sleep"}}, 202)
+	sendtransaction(t, "/item/abc4/transaction", [][]string{{"add", "file"}}, 409)
+
 	// do a simple transaction
 	file1 := uploadstring(t, "POST", "/upload", "hello world")
 	t.Log("got file1 =", file1)
@@ -27,8 +40,8 @@ func TestTransaction1(t *testing.T) {
 	checkStatus(t, "GET", "/item/zxcv", 404)
 
 	// should use file1 path here...
-	txpath := uploadstringhash(t, "POST", "/item/zxcv/transaction",
-		`[["add","lh3bj5"]]`, "", 202)
+	txpath := sendtransaction(t, "/item/zxcv/transaction",
+		[][]string{{"add", path.Base(file1)}}, 202)
 	t.Log("got tx path", txpath)
 
 	// tx is processed async to the web frontend.
@@ -50,8 +63,9 @@ func TestTransactionCommands(t *testing.T) {
 	t.Log("blob2 =", blob2)
 
 	checkStatus(t, "GET", "/item/zxcvbnm", 404)
-	txpath := uploadstringhash(t, "POST", "/item/zxcvbnm/transaction",
-		`[["add","nlodzb"],["add","fjn4cb"]]`, "", 202)
+	txpath := sendtransaction(t, "/item/zxcvbnm/transaction",
+		[][]string{{"add", path.Base(blob1)},
+			{"add", path.Base(blob2)}}, 202)
 	t.Log("got tx path", txpath)
 	// tx is processed async from the commit above.
 	// maybe wait for it to be committed?
@@ -61,8 +75,8 @@ func TestTransactionCommands(t *testing.T) {
 		t.Errorf("Received %#v, expected %#v", text, "delete me")
 	}
 	// now delete blob 2
-	txpath = uploadstringhash(t, "POST", "/item/zxcvbnm/transaction",
-		`[["delete", "2"]]`, "", 202)
+	txpath = sendtransaction(t, "/item/zxcvbnm/transaction",
+		[][]string{{"delete", "2"}}, 202)
 	t.Log("got tx path", txpath)
 	text = getbody(t, "GET", "/blob/zxcvbnm/1", 200)
 	if text != "hello world" {
@@ -120,6 +134,10 @@ func TestDeleteFile(t *testing.T) {
 	checkStatus(t, "GET", filepath, 404) // There should be no file
 }
 
+//
+// Test Helpers
+//
+
 func uploadstring(t *testing.T, verb, route string, s string) string {
 	md5hash := md5.Sum([]byte(s))
 	return uploadstringhash(t, verb, route, s, hex.EncodeToString(md5hash[:]), 200)
@@ -146,6 +164,11 @@ func uploadstringhash(t *testing.T, verb, route, s, hash string, statuscode int)
 		return ""
 	}
 	return resp.Header.Get("Location")
+}
+
+func sendtransaction(t *testing.T, route string, commands [][]string, statuscode int) string {
+	content, _ := json.Marshal(commands)
+	return uploadstringhash(t, "POST", route, string(content), "", statuscode)
 }
 
 func getlocation(t *testing.T, verb, route string, expstatus int) string {

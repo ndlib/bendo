@@ -241,23 +241,25 @@ func (tx *T) save() {
 //   ["slot", "/asdf/45", 4],
 //   ["note", "blah blah"]
 //   ["add", "vh567"]
+//   ["sleep"]
 // ]
 type command []string
 
 // assumes lock tx.m is held for writing
 func (c command) Execute(iw *items.Writer, tx *T) {
-	cmd := []string(c)
-	if len(cmd) == 0 {
+	if !c.WellFormed() {
+		tx.Err = append(tx.Err, errors.New("Command is not well formed"))
 		return
 	}
-	switch {
-	case cmd[0] == "delete" && len(cmd) == 2:
+	cmd := []string(c)
+	switch cmd[0] {
+	case "delete":
 		// delete <blob id>
 		id, err := strconv.Atoi(cmd[1])
 		if err == nil {
 			iw.DeleteBlob(items.BlobID(id))
 		}
-	case cmd[0] == "slot" && len(cmd) == 3:
+	case "slot":
 		// slot <label> <blob id/file id>
 		// if the id resolves to a blob we have added
 		// to the item, use that, otherwise try to interpret
@@ -273,10 +275,10 @@ func (c command) Execute(iw *items.Writer, tx *T) {
 			}
 		}
 		iw.SetSlot(cmd[1], items.BlobID(id))
-	case cmd[0] == "note" && len(cmd) == 2:
+	case "note":
 		// note <text>
 		iw.SetNote(cmd[1])
-	case cmd[0] == "add" && len(cmd) == 2:
+	case "add":
 		// add <file id>
 		f := tx.files.Lookup(cmd[1])
 		if f == nil {
@@ -292,6 +294,10 @@ func (c command) Execute(iw *items.Writer, tx *T) {
 			break
 		}
 		tx.BlobMap[cmd[1]] = int(bid)
+	case "sleep":
+		// sleep for some length of time. intended to be used for testing.
+		// nothing magic about 1 sec. could be less
+		time.Sleep(1 * time.Second)
 	default:
 		tx.Err = append(tx.Err, errors.New("Bad command "+cmd[0]))
 	}
@@ -317,6 +323,8 @@ func (c command) WellFormed() bool {
 	case cmd[0] == "note" && len(cmd) == 2:
 		return true
 	case cmd[0] == "add" && len(cmd) == 2:
+		return true
+	case cmd[0] == "sleep" && len(cmd) == 1:
 		return true
 	}
 	return false

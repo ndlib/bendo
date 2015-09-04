@@ -84,12 +84,14 @@ func NewTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) 
 	var cmds [][]string
 	err = json.NewDecoder(r.Body).Decode(&cmds)
 	if err != nil {
+		tx.SetStatus(transaction.StatusError)
 		w.WriteHeader(400)
 		fmt.Fprintln(w, err.Error())
 		return
 	}
 	err = tx.AddCommandList(cmds)
 	if err != nil {
+		tx.SetStatus(transaction.StatusError)
 		w.WriteHeader(400)
 		fmt.Fprintln(w, err.Error())
 		return
