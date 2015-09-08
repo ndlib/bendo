@@ -29,27 +29,29 @@ func TestTransaction1(t *testing.T) {
 	sendtransaction(t, "/item/abc3/transaction", [][]string{{"not a command"}}, 400)
 
 	// transactions on items already having pending transactions are rejected
-	sendtransaction(t, "/item/abc4/transaction", [][]string{{"sleep"}}, 202)
-	sendtransaction(t, "/item/abc4/transaction", [][]string{{"add", "file"}}, 409)
+	abc := "abc4" + randomid()
+	sendtransaction(t, "/item/"+abc+"/transaction", [][]string{{"sleep"}}, 202)
+	sendtransaction(t, "/item/"+abc+"/transaction", [][]string{{"add", "file"}}, 409)
 
 	// do a simple transaction
 	file1 := uploadstring(t, "POST", "/upload", "hello world")
 	t.Log("got file1 =", file1)
 	uploadstring(t, "POST", file1, " and hello sun")
 
-	checkStatus(t, "GET", "/item/zxcv", 404)
+	itemid := "zxcv" + randomid()
+	checkStatus(t, "GET", "/item/"+itemid, 404)
 
 	// should use file1 path here...
-	txpath := sendtransaction(t, "/item/zxcv/transaction",
+	txpath := sendtransaction(t, "/item/"+itemid+"/transaction",
 		[][]string{{"add", path.Base(file1)}}, 202)
 	t.Log("got tx path", txpath)
 
 	// tx is processed async to the web frontend.
 	// maybe we should see if the transaction completes first?
 
-	checkStatus(t, "GET", "/item/zxcv", 200)
-	checkStatus(t, "GET", "/blob/zxcv/2", 404)
-	text := getbody(t, "GET", "/blob/zxcv/1", 200)
+	checkStatus(t, "GET", "/item/"+itemid, 200)
+	checkStatus(t, "GET", "/blob/"+itemid+"/2", 404)
+	text := getbody(t, "GET", "/blob/"+itemid+"/1", 200)
 	if text != "hello world and hello sun" {
 		t.Fatalf("Received %#v, expected %#v", text, "hello world and hello sun")
 	}
@@ -62,27 +64,28 @@ func TestTransactionCommands(t *testing.T) {
 	blob2 := uploadstring(t, "POST", "/upload", "delete me")
 	t.Log("blob2 =", blob2)
 
-	checkStatus(t, "GET", "/item/zxcvbnm", 404)
-	txpath := sendtransaction(t, "/item/zxcvbnm/transaction",
+	itemid := "zxcvbnm" + randomid()
+	checkStatus(t, "GET", "/item/"+itemid, 404)
+	txpath := sendtransaction(t, "/item/"+itemid+"/transaction",
 		[][]string{{"add", path.Base(blob1)},
 			{"add", path.Base(blob2)}}, 202)
 	t.Log("got tx path", txpath)
 	// tx is processed async from the commit above.
 	// maybe wait for it to be committed?
-	checkStatus(t, "GET", "/item/zxcvbnm", 200)
-	text := getbody(t, "GET", "/blob/zxcvbnm/2", 200)
+	checkStatus(t, "GET", "/item/"+itemid, 200)
+	text := getbody(t, "GET", "/blob/"+itemid+"/2", 200)
 	if text != "delete me" {
 		t.Errorf("Received %#v, expected %#v", text, "delete me")
 	}
 	// now delete blob 2
-	txpath = sendtransaction(t, "/item/zxcvbnm/transaction",
+	txpath = sendtransaction(t, "/item/"+itemid+"/transaction",
 		[][]string{{"delete", "2"}}, 202)
 	t.Log("got tx path", txpath)
-	text = getbody(t, "GET", "/blob/zxcvbnm/1", 200)
+	text = getbody(t, "GET", "/blob/"+itemid+"/1", 200)
 	if text != "hello world" {
 		t.Errorf("Received %#v, expected %#v", text, "hello world")
 	}
-	text = getbody(t, "GET", "/blob/zxcvbnm/2", 404)
+	text = getbody(t, "GET", "/blob/"+itemid+"/2", 404)
 	if text == "delete me" {
 		t.Errorf("Received %#v, expected %#v", text, "")
 	}
@@ -90,7 +93,7 @@ func TestTransactionCommands(t *testing.T) {
 
 func TestUploadNameAssign(t *testing.T) {
 	// if we ask for a name, is it created?
-	ourpath := "/upload/uploadnameassign"
+	ourpath := "/upload/uploadnameassign" + randomid()
 	checkStatus(t, "GET", ourpath, 404)
 	assignedpath := uploadstring(t, "POST", ourpath, "zxcv")
 	if assignedpath != ourpath {

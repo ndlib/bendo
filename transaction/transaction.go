@@ -25,7 +25,7 @@ func New(s store.Store) *Store {
 type Store struct {
 	TxStore fragment.JSONStore
 	m       sync.RWMutex  // protects txs
-	txs     map[string]*T // transaction ID to transaction
+	txs     map[string]*T // cache of transaction ID to transaction
 }
 
 func (r *Store) Load() error {
@@ -66,9 +66,12 @@ func (r *Store) Create(itemid string) (*T, error) {
 	defer r.m.Unlock()
 	// is there currently a open transaction for the item?
 	for _, tx := range r.txs {
-		if tx.ItemID == itemid &&
+		tx.m.RLock()
+		var inprocess = tx.ItemID == itemid &&
 			tx.Status != StatusFinished &&
-			tx.Status != StatusError {
+			tx.Status != StatusError
+		tx.m.RUnlock()
+		if inprocess {
 			return nil, ErrExistingTransaction
 		}
 	}
@@ -187,6 +190,8 @@ func (tx *T) SetStatus(s Status) {
 // Commit a creation/update of an item in s, possibly using files
 // in files, and with the given creator name.
 func (tx *T) Commit(s items.Store, files *fragment.Store, Creator string) {
+	// we hold the lock on tx for the duration of the commit.
+	// That might be for a very long time.
 	tx.m.Lock()
 	defer tx.m.Unlock()
 	tx.Status = StatusIngest
@@ -209,6 +214,8 @@ func (tx *T) Commit(s items.Store, files *fragment.Store, Creator string) {
 	// to do: delete files after successful upload
 }
 
+// ReferencedFiles returns a list of all the upload file ids associated with
+// this transaction. That is, all the files referenced by an "add" command.
 func (tx *T) ReferencedFiles() []string {
 	var result []string
 	for _, cmd := range tx.Commands {
@@ -245,7 +252,9 @@ func (tx *T) save() {
 // ]
 type command []string
 
-// assumes lock tx.m is held for writing
+// Execute the a command using the given item writer and transaction as
+// necessary. Assumes the write mutex on tx is held on entry. Execute will
+// give up and then reaquire it after lengthy processing steps.
 func (c command) Execute(iw *items.Writer, tx *T) {
 	if !c.WellFormed() {
 		tx.Err = append(tx.Err, "Command is not well formed")
@@ -285,10 +294,12 @@ func (c command) Execute(iw *items.Writer, tx *T) {
 			tx.Err = append(tx.Err, "Cannot find "+cmd[1])
 			break
 		}
+		tx.m.Unlock()
 		reader := f.Open()
 		fstat := f.Stat()
 		bid, err := iw.WriteBlob(reader, fstat.Size, fstat.MD5, fstat.SHA256)
 		reader.Close()
+		tx.m.Lock()
 		if err != nil {
 			tx.Err = append(tx.Err, err.Error())
 			break
@@ -297,7 +308,9 @@ func (c command) Execute(iw *items.Writer, tx *T) {
 	case "sleep":
 		// sleep for some length of time. intended to be used for testing.
 		// nothing magic about 1 sec. could be less
+		tx.m.Unlock()
 		time.Sleep(1 * time.Second)
+		tx.m.Lock()
 	default:
 		tx.Err = append(tx.Err, "Bad command "+cmd[0])
 	}
