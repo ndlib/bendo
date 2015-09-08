@@ -71,6 +71,7 @@ func NewTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) 
 		return
 	}
 	w.Header().Set("Location", "/transaction/"+tx.ID)
+	tx.Creator = "nobody"
 	// TODO(dbrower): use a limit reader to 1MB(?) for this
 	var cmds [][]string
 	err = json.NewDecoder(r.Body).Decode(&cmds)
@@ -95,7 +96,8 @@ func NewTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) 
 func processCommit(tx *transaction.T) {
 	gate.Enter()
 	defer gate.Leave()
-	tx.Commit(*Items, FileStore, "nobody")
+	tx.VerifyFiles(FileStore)
+	tx.Commit(*Items, FileStore)
 }
 
 // the number of active commits onto tape we allow at a given time

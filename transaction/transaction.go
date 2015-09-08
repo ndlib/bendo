@@ -137,6 +137,7 @@ type T struct {
 	Started  time.Time           // time tx was created
 	Modified time.Time           // last time user touch or added a file
 	Err      []string            // list of errors (for StatusError)
+	Creator  string              // username of the committer
 	ItemID   string              // ID of the item this tx is modifying
 	Commands []command           // commands to run on commit
 	BlobMap  map[string]int      // tracks the blob id we used for uploaded files
@@ -189,14 +190,14 @@ func (tx *T) SetStatus(s Status) {
 // underlying item.
 // Commit a creation/update of an item in s, possibly using files
 // in files, and with the given creator name.
-func (tx *T) Commit(s items.Store, files *fragment.Store, Creator string) {
+func (tx *T) Commit(s items.Store, files *fragment.Store) {
 	// we hold the lock on tx for the duration of the commit.
 	// That might be for a very long time.
 	tx.m.Lock()
 	defer tx.m.Unlock()
 	tx.Status = StatusIngest
 	iw := s.Open(tx.ItemID)
-	iw.SetCreator(Creator)
+	iw.SetCreator(tx.Creator)
 	tx.files = files
 	// execute commands. Errors will be appended to tx.Err
 	for _, cmd := range tx.Commands {
