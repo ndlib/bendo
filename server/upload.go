@@ -186,6 +186,9 @@ func SetFileInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Pa
 	if len(metadata.Labels) > 0 {
 		f.SetLabels(metadata.Labels)
 	}
+	if len(metadata.Extra) > 0 {
+		f.SetExtra(metadata.Extra)
+	}
 }
 
 //{"GET", "/upload/:fileid", GetFileHandler},

@@ -15,6 +15,7 @@ type HashWriter struct {
 	sha256    hash.Hash
 }
 
+// Wrap the given io.Writer to also calculate checksums.
 func NewHashWriter(w io.Writer) *HashWriter {
 	hw := &HashWriter{
 		md5:    md5.New(),
@@ -24,11 +25,23 @@ func NewHashWriter(w io.Writer) *HashWriter {
 	return hw
 }
 
+// Return a HashWriter which only computes an MD5 checksum.
 func NewMD5Writer(w io.Writer) *HashWriter {
 	hw := &HashWriter{
 		md5: md5.New(),
 	}
 	hw.Writer = io.MultiWriter(w, hw.md5)
+	return hw
+}
+
+// Return a HashWriter that does not wrap an output stream. This will just
+// compute the checksums of the data written to it.
+func NewHashWriterPlain() *HashWriter {
+	hw := &HashWriter{
+		md5:    md5.New(),
+		sha256: sha256.New(),
+	}
+	hw.Writer = io.MultiWriter(hw.md5, hw.sha256)
 	return hw
 }
 

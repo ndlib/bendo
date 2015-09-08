@@ -217,6 +217,8 @@ func (tx *T) Commit(s items.Store, files *fragment.Store, Creator string) {
 // ReferencedFiles returns a list of all the upload file ids associated with
 // this transaction. That is, all the files referenced by an "add" command.
 func (tx *T) ReferencedFiles() []string {
+	tx.m.RLock()
+	defer tx.m.RUnlock()
 	var result []string
 	for _, cmd := range tx.Commands {
 		if cmd[0] == "add" && len(cmd) == 2 {
@@ -226,12 +228,23 @@ func (tx *T) ReferencedFiles() []string {
 	return result
 }
 
-func (tx *T) VerifyFiles() {
-	/* needs to be implemented */
-	tx.Status = StatusChecking
-	tx.Status = StatusWaiting
-	if len(tx.Err) > 0 {
-		tx.Status = StatusError
+// Verify the checksums of the files to be added in this transaction.
+// Pass in the fragment store containing the uploaded files. Any negative
+// results are returned in tx.Err.
+func (tx *T) VerifyFiles(files *fragment.Store) {
+	for _, fid := range tx.ReferencedFiles() {
+		f := files.Lookup(fid)
+		if f == nil {
+			tx.m.Lock()
+			tx.Err = append(tx.Err, "Missing file "+fid)
+			tx.m.Unlock()
+			continue
+		}
+		if !f.Verify() {
+			tx.m.Lock()
+			tx.Err = append(tx.Err, "Checksum mismatch for "+fid)
+			tx.m.Unlock()
+		}
 	}
 }
 

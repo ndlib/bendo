@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ndlib/bendo/store"
+	"github.com/ndlib/bendo/util"
 )
 
 // Store wraps a store.Store and provides a fragment cache. This allows files
@@ -48,6 +49,8 @@ type FileEntry interface {
 	SetCreator(name string)
 	SetMD5(hash []byte)
 	SetSHA256(hash []byte)
+	SetExtra(extra string)
+	Verify() bool
 }
 
 // The metadata kept on each file entry
@@ -61,6 +64,7 @@ type Stat struct {
 	Labels     []string
 	MD5        []byte // expected hash for entire file
 	SHA256     []byte // expected hash for entire file
+	Extra      string // arbitrary user defined content
 }
 
 // The internal struct which tracks a file's metadata
@@ -77,6 +81,7 @@ type file struct {
 	Creator  string       // the "user" (aka API key) who created this file
 	MD5      []byte       // expected hash for entire file
 	SHA256   []byte       // expected hash for entire file
+	Extra    string       // arbitrary user defined content
 }
 
 // An individual fragment of a file
@@ -285,6 +290,7 @@ func (f *file) Stat() Stat {
 		Labels:     f.Labels[:],
 		MD5:        f.MD5[:],
 		SHA256:     f.SHA256[:],
+		Extra:      f.Extra,
 	}
 }
 
@@ -413,6 +419,29 @@ func (f *file) save() error {
 	return f.parent.meta.Save(f.ID, f)
 }
 
+// Returns true if the MD5 and SHA256 checksums set on this file match the
+// checksums of the file's contents. If a checksum is not provided, then it
+// is not checked. If neither checksum is provided, then returns true.
+func (f *file) Verify() bool {
+	if len(f.MD5) == 0 && len(f.SHA256) == 0 {
+		return true
+	}
+	r := f.Open()
+	hw := util.NewHashWriterPlain()
+	io.Copy(hw, r)
+	r.Close()
+	var result = true
+	if len(f.MD5) > 0 {
+		_, ok := hw.CheckMD5(f.MD5)
+		result = result && ok
+	}
+	if len(f.SHA256) > 0 {
+		_, ok := hw.CheckSHA256(f.SHA256)
+		result = result && ok
+	}
+	return result
+}
+
 // set the labels on the given file to those passed in.
 // We overwrite the list of labels currently applied to the file.
 func (f *file) SetLabels(labels []string) {
@@ -459,5 +488,12 @@ func (f *file) SetSHA256(hash []byte) {
 	f.m.Lock()
 	defer f.m.Unlock()
 	f.SHA256 = hash[:]
+	f.save()
+}
+
+func (f *file) SetExtra(extra string) {
+	f.m.Lock()
+	defer f.m.Unlock()
+	f.Extra = extra
 	f.save()
 }
