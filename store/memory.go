@@ -81,7 +81,7 @@ func (r *buf) Close() error {
 	return nil
 }
 
-func (r buf) ReadAt(p []byte, off int64) (int, error) {
+func (r *buf) ReadAt(p []byte, off int64) (int, error) {
 	if int(off) >= len(r.b) {
 		return 0, io.EOF
 	}
