@@ -149,8 +149,8 @@ type Status int
 const (
 	StatusUnknown  Status = iota
 	StatusOpen            // transaction is being modified by user
-	StatusChecking        // files are being checksummed and verified
 	StatusWaiting         // transaction has been submitted to be committed
+	StatusChecking        // files are being checksummed and verified
 	StatusIngest          // files are being written into bundles
 	StatusFinished        // transaction is over, successful
 	StatusError           // transaction had an error
@@ -236,17 +236,20 @@ func (tx *T) VerifyFiles(files *fragment.Store) {
 	for _, fid := range tx.ReferencedFiles() {
 		f := files.Lookup(fid)
 		if f == nil {
-			tx.m.Lock()
-			tx.Err = append(tx.Err, "Missing file "+fid)
-			tx.m.Unlock()
+			tx.AppendError("Missing file " + fid)
 			continue
 		}
 		if !f.Verify() {
-			tx.m.Lock()
-			tx.Err = append(tx.Err, "Checksum mismatch for "+fid)
-			tx.m.Unlock()
+			tx.AppendError("Checksum mismatch for " + fid)
 		}
 	}
+}
+
+// Append the given error string to tx. Aquires the write lock on tx.
+func (tx *T) AppendError(e string) {
+	tx.m.Lock()
+	tx.Err = append(tx.Err, e)
+	tx.m.Unlock()
 }
 
 // must hold lock tx.m to call this

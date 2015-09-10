@@ -8,6 +8,30 @@ import (
 	"io"
 )
 
+// VerifyStreamHash checksums the given io.Reader and compares the checksum
+// against the provided md5 and sha256 checksums. It returns true if everything
+// matches, and false otherwise. Pass in an empty slice to not verify a given
+// checksum type. For example, to only verify the SHA256 hash of the reader,
+// pass in []byte{} for the md5 parameter.
+// The reader is not closed when finished.
+func VerifyStreamHash(r io.Reader, md5, sha256 []byte) bool {
+	if len(md5) == 0 && len(sha256) == 0 {
+		return true
+	}
+	hw := NewHashWriterPlain()
+	io.Copy(hw, r)
+	var result = true
+	if len(md5) > 0 {
+		_, ok := hw.CheckMD5(md5)
+		result = result && ok
+	}
+	if len(sha256) > 0 {
+		_, ok := hw.CheckSHA256(sha256)
+		result = result && ok
+	}
+	return result
+}
+
 // An io.Writer which will also calculate the md5 and sha256 sums of the input stream.
 type HashWriter struct {
 	io.Writer // our io.MultiWriter

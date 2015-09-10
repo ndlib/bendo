@@ -423,23 +423,9 @@ func (f *file) save() error {
 // checksums of the file's contents. If a checksum is not provided, then it
 // is not checked. If neither checksum is provided, then returns true.
 func (f *file) Verify() bool {
-	if len(f.MD5) == 0 && len(f.SHA256) == 0 {
-		return true
-	}
 	r := f.Open()
-	hw := util.NewHashWriterPlain()
-	io.Copy(hw, r)
-	r.Close()
-	var result = true
-	if len(f.MD5) > 0 {
-		_, ok := hw.CheckMD5(f.MD5)
-		result = result && ok
-	}
-	if len(f.SHA256) > 0 {
-		_, ok := hw.CheckSHA256(f.SHA256)
-		result = result && ok
-	}
-	return result
+	defer r.Close()
+	return util.VerifyStreamHash(r, f.MD5, f.SHA256)
 }
 
 // set the labels on the given file to those passed in.

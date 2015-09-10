@@ -72,7 +72,7 @@ func Run() {
 }
 
 func initCommitQueue() {
-	// for each commit, if in StateWaiting or StateCommit, start a goroutine
+	// for each commit, pass to processCommit, and let it sort things out
 	for _, tid := range TxStore.List() {
 		tx := TxStore.Lookup(tid)
 		if tx.Status == transaction.StatusWaiting || tx.Status == transaction.StatusIngest {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
@@ -93,11 +94,35 @@ func NewTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) 
 	w.WriteHeader(202)
 }
 
+// The transaction's status must be set to StatusWaiting before entering,
+// or nothing will happen to the transaction.
 func processCommit(tx *transaction.T) {
+	// probably should hold lock on tx to access these fields directly
+	log.Printf("Starting transaction %s on %s (%s)", tx.ID, tx.ItemID,
+		tx.Status.String())
+	if tx.Status == transaction.StatusOpen ||
+		tx.Status == transaction.StatusFinished ||
+		tx.Status == transaction.StatusError {
+		return
+	}
+
 	gate.Enter()
 	defer gate.Leave()
-	tx.VerifyFiles(FileStore)
-	tx.Commit(*Items, FileStore)
+
+	switch tx.Status {
+	default:
+		log.Printf("Unknown status %s", tx.Status.String())
+	case transaction.StatusWaiting:
+		tx.SetStatus(transaction.StatusChecking)
+		fallthrough
+	case transaction.StatusChecking:
+		tx.VerifyFiles(FileStore)
+		// check for len(tx.Err) > 0
+		tx.SetStatus(transaction.StatusIngest)
+		fallthrough
+	case transaction.StatusIngest:
+		tx.Commit(*Items, FileStore)
+	}
 }
 
 // the number of active commits onto tape we allow at a given time
