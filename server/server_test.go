@@ -11,6 +11,7 @@ import (
 	"path"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ndlib/bendo/fragment"
 	"github.com/ndlib/bendo/items"
@@ -73,6 +74,7 @@ func TestTransactionCommands(t *testing.T) {
 	t.Log("got tx path", txpath)
 	// tx is processed async from the commit above.
 	// maybe wait for it to be committed?
+	time.Sleep(10 * time.Millisecond) // sleep a squinch
 	checkStatus(t, "GET", "/item/"+itemid, 200)
 	text := getbody(t, "GET", "/blob/"+itemid+"/2", 200)
 	if text != "delete me" {
@@ -82,13 +84,14 @@ func TestTransactionCommands(t *testing.T) {
 	txpath = sendtransaction(t, "/item/"+itemid+"/transaction",
 		[][]string{{"delete", "2"}}, 202)
 	t.Log("got tx path", txpath)
+	time.Sleep(10 * time.Millisecond) // sleep a squinch
 	text = getbody(t, "GET", "/blob/"+itemid+"/1", 200)
 	if text != "hello world" {
 		t.Errorf("Received %#v, expected %#v", text, "hello world")
 	}
 	text = getbody(t, "GET", "/blob/"+itemid+"/2", 404)
-	if text == "delete me" {
-		t.Errorf("Received %#v, expected %#v", text, "")
+	if text != "Blob has been deleted\n" {
+		t.Errorf("Received %#v, expected %#v", text, "Blob has been deleted\n")
 	}
 }
 

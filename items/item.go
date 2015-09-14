@@ -132,6 +132,10 @@ func (s *Store) Blob(id string, bid BlobID) (io.ReadCloser, error) {
 	if b == nil {
 		return nil, fmt.Errorf("No blob (%s, %d)", id, bid)
 	}
+	if b.Bundle == 0 {
+		// blob has been deleted
+		return nil, fmt.Errorf("Blob has been deleted")
+	}
 	sname := fmt.Sprintf("blob/%d", bid)
 	return OpenBundleStream(s.S, sugar(id, b.Bundle), sname)
 }
