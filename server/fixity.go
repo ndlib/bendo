@@ -29,8 +29,12 @@ func StopFixity() {
 var (
 	// close this to stop the fixity process
 	fixitystop chan struct{} = make(chan struct{})
-	// rate the checksum in bytes/second
+
+	// rate to compute checksums in bytes/second
 	fixityRate float64
+
+	// do not checksum an item any more often than every 6 months
+	minDurationChecksum = 180 * 24 * time.Hour
 )
 
 func fixity() {
@@ -71,13 +75,16 @@ func fixityItem(r *rateCounter, itemid string) {
 	}
 }
 
+// itemlist generates a list of item ids to checksum, and adds them to the
+// provided channel.
 func itemlist(c chan<- string) {
-	// first list everything in the Item store
-	in := Items.List()
 	for {
-		select {
-		case item := <-in:
-			c <- item
+		id := OldestChecksum(time.Now().Add(-minDurationChecksum))
+		if id == "" {
+			// we poll if there are no ids available.
+			time.Sleep(time.Hour)
+		} else {
+			c <- id
 		}
 	}
 }

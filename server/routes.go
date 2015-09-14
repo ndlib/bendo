@@ -56,6 +56,8 @@ var (
 )
 
 func Run() {
+	openDatabase("memory")
+
 	log.Println("Loading Transactions")
 	TxStore.Load()
 	log.Println("Loading Upload Queue")
