@@ -67,6 +67,15 @@ func OldestChecksum(cutoff time.Time) string {
 	return result
 }
 
+func UpdateChecksum(itemid string, status string) error {
+	const dbUpdateChecksum = `
+		UPDATE items
+			checksumDate = now(),
+			checksumStatus = ?2
+		WHERE name == ?1`
+	return performExec(dbUpdateChecksum, itemid, status)
+}
+
 // SyncItems will try to synchronize the database with the item list in the
 // store (which is the canonical source of information). Items which are
 // missing in the database will be added, and items in the database missing

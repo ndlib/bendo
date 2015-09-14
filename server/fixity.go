@@ -11,7 +11,7 @@ import (
 )
 
 // Start a background goroutine to check item fixity at the given rate
-// (in MB/hour). If the rate is 0, no goroutine is started.
+// (in MB/hour). If the rate is 0, no background process is started.
 func FixityCheck(rate int64) {
 	fixityRate = float64(rate) * 1000000 / 3600
 	if rate > 0 {
@@ -19,7 +19,8 @@ func FixityCheck(rate int64) {
 	}
 }
 
-// StopFixity halts the background fixity checking process. It is not resumable.
+// StopFixity halts the background fixity checking process. The process is not
+// resumable once stopped.
 func StopFixity() {
 	if fixityRate > 0 {
 		close(fixitystop)
@@ -69,9 +70,12 @@ func fixityItem(r *rateCounter, itemid string) {
 		rr := &rateReader{reader: blobreader, rate: r}
 		// VerifyStreamHash needs to pass back an error since the
 		// rateReader indicates a timeout by returning an error
+		newstatus := "ok"
 		if !util.VerifyStreamHash(rr, b.MD5, b.SHA256) {
 			// checksum error!
+			newstatus = "error"
 		}
+		_ = UpdateChecksum(itemid, newstatus)
 	}
 }
 
@@ -81,7 +85,7 @@ func itemlist(c chan<- string) {
 	for {
 		id := OldestChecksum(time.Now().Add(-minDurationChecksum))
 		if id == "" {
-			// we poll if there are no ids available.
+			// sleep if there are no ids available
 			time.Sleep(time.Hour)
 		} else {
 			c <- id
@@ -116,7 +120,6 @@ func (rr *rateReader) Read(p []byte) (int, error) {
 // the pool. If the pool goes negative, then we wait until it goes positive.
 type rateCounter struct {
 	c       chan time.Time // channel we use to signal credits is positive
-	tick    *time.Ticker   // our tick source
 	stop    chan struct{}  // close to signal adder goroutine to exit
 	m       sync.Mutex     // protects below
 	credits int64          // current credit balance
@@ -134,7 +137,6 @@ func newRateCounter(rate float64) *rateCounter {
 	amount := int64(rate * rateInterval.Seconds())
 	r := &rateCounter{
 		c:       make(chan time.Time),
-		tick:    time.NewTicker(rateInterval),
 		stop:    make(chan struct{}),
 		credits: amount,
 	}
@@ -142,21 +144,28 @@ func newRateCounter(rate float64) *rateCounter {
 	return r
 }
 
+// Use some number of units, it is okay if it takes this counter negative.
 func (r *rateCounter) Use(count int64) {
 	r.m.Lock()
 	r.credits -= count
 	r.m.Unlock()
 }
 
+// Return a channel to wait on. The current time will be sent when it is OK
+// to resume reading.
 func (r *rateCounter) OK() <-chan time.Time {
 	return r.c
 }
 
+// Stop the background goroutine refilling the rateCounter.
 func (r *rateCounter) Stop() {
 	close(r.stop)
 }
 
+// background goroutine. refills the rate counter based on the original rate
+// it was created with.
 func (r *rateCounter) adder(amount int64) {
+	tick := time.NewTicker(rateInterval)
 	for {
 		var signal chan time.Time
 		r.m.Lock()
@@ -165,7 +174,7 @@ func (r *rateCounter) adder(amount int64) {
 		}
 		r.m.Unlock()
 		select {
-		case <-r.tick.C:
+		case <-tick.C:
 			r.Use(-amount) // add amount to credits!
 		case signal <- time.Now():
 		case <-r.stop:
