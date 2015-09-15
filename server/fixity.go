@@ -27,7 +27,7 @@ func StopFixity() {
 }
 
 var (
-	// stop this to stop the fixity process
+	// call Stop on this to quit the fixity process
 	fixityratelimiter *rateCounter
 
 	// do not checksum an item any more often than every 6 months
@@ -38,21 +38,25 @@ var (
 func fixity(r *rateCounter) {
 	c := make(chan string)
 	go itemlist(c)
-	for {
-		itemid := <-c
-		fixityItem(r, itemid)
+	for itemid := range c {
+		status, _, err := fixityItem(r, itemid)
 		// TODO(dbrower): exit if fixityItem returns a timeout
+		if err == ErrStopped {
+			return
+		}
+		_ = UpdateChecksum(itemid, status)
 	}
 }
 
-// checksum all the blobs in a single item. It uses the given rateCounter to
-// limit its reads. When finished it will update the database with a
-// success/error. (TODO: perhaps it should return success/errors and let the
-// manager process handle updating the database?)
-func fixityItem(r *rateCounter, itemid string) {
-	newstatus := "ok"
+// fixityItem checksums all the blobs in a single item. It uses the passed-in
+// rateCounter to limit its reads. When finished it returns a status of "ok",
+// "error", or "mismatch", a (possibly empty) list of messages, and an actual
+// error if there was a transient error (not a validation error).
+func fixityItem(r *rateCounter, itemid string) (status string, msgs []string, err error) {
+	status = "error"
 	item, err := Items.Item(itemid)
 	if err != nil {
+		msgs = append(msgs, err.Error())
 		log.Printf("fixity for %s: %s", itemid, err.Error())
 		return
 	}
@@ -60,24 +64,36 @@ func fixityItem(r *rateCounter, itemid string) {
 	// TODO(dbrower): sort them by bundle number to optimize bundle loading
 	for _, b := range item.Blobs {
 		// open the blob stream
-		blobreader, err := Items.Blob(itemid, b.ID)
+		var blobreader io.ReadCloser
+		blobreader, err = Items.Blob(itemid, b.ID)
 		if err != nil {
+			msgs = append(msgs, err.Error())
 			log.Printf("fixity for: (%s, %d): %s", itemid, b.ID, err.Error())
 			continue
 		}
 		rr := r.Wrap(blobreader)
-		ok, err := util.VerifyStreamHash(rr, b.MD5, b.SHA256)
-		if err == ErrTimeout {
+		var ok bool
+		ok, err = util.VerifyStreamHash(rr, b.MD5, b.SHA256)
+		if err == ErrStopped {
 			// we were cancelled
+			return
+		} else if err != nil {
+			msgs = append(msgs, err.Error())
+			continue
 		} else if !ok {
 			// checksum error!
-			newstatus = "error"
+			status = "mismatch"
+			msgs = append(msgs, "Checksum mismatch")
+			log.Printf("fixity mismatch: (%s, %d)", itemid, b.ID)
 		}
 	}
-	_ = UpdateChecksum(itemid, newstatus)
+	if len(msgs) == 0 {
+		status = "ok"
+	}
+	return
 }
 
-// itemlist generates a list of item ids to checksum, and adds them to the
+// itemlist generates a list of item ids to checksum, and sends them to the
 // provided channel.
 func itemlist(c chan<- string) {
 	for {
@@ -168,12 +184,12 @@ func (r *rateCounter) adder(amount int64) {
 // this rateCounter. Reads will block until the rateCounter says the current
 // usage is ok. It is okay for more than one goroutine to use the same
 // rateCounter. If the rateCounter was stopped, the returned reader will
-// cause an ErrTimeout.
+// cause an ErrStopped.
 func (r *rateCounter) Wrap(reader io.Reader) io.Reader {
 	return rateReader{reader: reader, rate: r}
 }
 
-var ErrTimeout = errors.New("fixitystop signaled")
+var ErrStopped = errors.New("rateCounter stopped")
 
 type rateReader struct {
 	reader io.Reader
@@ -185,7 +201,7 @@ func (r rateReader) Read(p []byte) (int, error) {
 	_, ok := <-r.rate.OK()
 	if !ok {
 		// our rateCounter was stopped.
-		return 0, ErrTimeout
+		return 0, ErrStopped
 	}
 	n, err := r.reader.Read(p)
 	r.rate.Use(int64(n))
