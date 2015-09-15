@@ -32,14 +32,15 @@ func VerifyStreamHash(r io.Reader, md5, sha256 []byte) (bool, error) {
 	return result, err
 }
 
-// An io.Writer which will also calculate the md5 and sha256 sums of the input stream.
+// An HashWriter wraps an io.Writer and also calculate the MD5 and SHA256 hashes
+// of the bytes written.
 type HashWriter struct {
 	io.Writer // our io.MultiWriter
 	md5       hash.Hash
 	sha256    hash.Hash
 }
 
-// Wrap the given io.Writer to also calculate checksums.
+// NewHashWriter returns a HashWriter wrapping w.
 func NewHashWriter(w io.Writer) *HashWriter {
 	hw := &HashWriter{
 		md5:    md5.New(),
@@ -49,7 +50,7 @@ func NewHashWriter(w io.Writer) *HashWriter {
 	return hw
 }
 
-// Return a HashWriter which only computes an MD5 checksum.
+// NewMD5Writer returns a HashWriter wrapping w and only computing an MD5 hash.
 func NewMD5Writer(w io.Writer) *HashWriter {
 	hw := &HashWriter{
 		md5: md5.New(),
@@ -58,8 +59,8 @@ func NewMD5Writer(w io.Writer) *HashWriter {
 	return hw
 }
 
-// Return a HashWriter that does not wrap an output stream. This will just
-// compute the checksums of the data written to it.
+// NewHashWriterPlain return a HashWriter that does not wrap an output stream.
+// It will just compute the checksums of the data written to it.
 func NewHashWriterPlain() *HashWriter {
 	hw := &HashWriter{
 		md5:    md5.New(),
@@ -69,8 +70,10 @@ func NewHashWriterPlain() *HashWriter {
 	return hw
 }
 
-// Returns the MD5 hash for this writer. Also returns true if either
-// goal is empty or goal is provided, and it matches the sum
+// CheckMD5 returns the MD5 hash for this writer, and compares it for equality
+// with the goal hash passed in. Returns true if goal matches the MD5 hash,
+// false otherwise. If the goal is empty then it is treated as matching, and
+// true is returned.
 func (hw *HashWriter) CheckMD5(goal []byte) ([]byte, bool) {
 	var computed []byte
 	if hw.md5 != nil {
@@ -80,6 +83,10 @@ func (hw *HashWriter) CheckMD5(goal []byte) ([]byte, bool) {
 	return computed, ok
 }
 
+// CheckSHA256 returns the SHA256 hash for this writer, and compares it for
+// equality with the goal hash passed in. Returns true if goal matches the
+// SHA256 hash, false otherwise. If the goal is empty then it is treated as
+// matching, and true is returned.
 func (hw *HashWriter) CheckSHA256(goal []byte) ([]byte, bool) {
 	var computed []byte
 	if hw.sha256 != nil {
