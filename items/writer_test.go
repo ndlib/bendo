@@ -12,7 +12,10 @@ import (
 func TestWriteBlobErrors(t *testing.T) {
 	ms := store.NewFileSystem(".")
 	s := New(ms)
-	w := s.Open("abc")
+	w, err := s.Open("abc")
+	if err != nil {
+		t.Fatalf("Unexpected error %s", err.Error())
+	}
 	w.SetCreator("nobody")
 	bid, err := w.WriteBlob(strings.NewReader("hello world"),
 		3,   // wrong length

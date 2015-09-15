@@ -22,7 +22,7 @@ type Writer struct {
 //
 // It is an error for more than one goroutine to open the same item at a time.
 // This does not perform any locking itself.
-func (s *Store) Open(id string) *Writer {
+func (s *Store) Open(id string) (*Writer, error) {
 	wr := &Writer{
 		store: s,
 		version: Version{
@@ -33,9 +33,11 @@ func (s *Store) Open(id string) *Writer {
 		},
 	}
 	item, err := s.Item(id)
-	if item == nil || err != nil {
+	if err == ErrNoItem {
 		// this is a new item
 		item = &Item{ID: id}
+	} else if err != nil {
+		return nil, err
 	}
 	wr.item = item
 	// figure out the next version number
@@ -49,7 +51,7 @@ func (s *Store) Open(id string) *Writer {
 		}
 	}
 	wr.bw = NewBundler(s.S, item)
-	return wr
+	return wr, nil
 }
 
 // Close the given Writer. The final metadata is written out, and any

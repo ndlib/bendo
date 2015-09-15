@@ -1,20 +1,38 @@
 package main
 
 import (
+	"bytes"
 	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/ndlib/bendo/items"
 	"github.com/ndlib/bendo/store"
+	"github.com/ndlib/bendo/util"
 )
 
 var (
 	storeDir = flag.String("s", ".", "location of the storage directory")
+	creator  = flag.String("creator", "butil", "Creator name to use")
+	usage    = `
+butil <command> <command arguments>
+
+Possible commands:
+    blob <item id> <blob number>
+
+    item <item id list>
+
+    list
+
+    add <item id> <file/directory list>
+`
 )
 
 func main() {
@@ -76,8 +94,8 @@ func printitem(item *items.Item) {
 		fmt.Fprintf(w, "Note:\t%s\n", vers.Note)
 		w.Flush()
 		fmt.Printf(" Blob  Slot\n")
-		for slot, blob := range vers.Slots {
-			fmt.Printf("%5d  %s\n", blob, slot)
+		for _, r := range sortBySlot(vers.Slots) {
+			fmt.Printf("%5d  %s\n", r.blob, r.slot)
 		}
 	}
 	for _, blob := range item.Blobs {
@@ -99,6 +117,25 @@ func printitem(item *items.Item) {
 	}
 }
 
+type brecord struct {
+	slot string
+	blob items.BlobID
+}
+type BySlot []brecord
+
+func (s BySlot) Len() int           { return len(s) }
+func (s BySlot) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s BySlot) Less(i, j int) bool { return s[i].slot < s[j].slot }
+
+func sortBySlot(m map[string]items.BlobID) []brecord {
+	var result []brecord
+	for slot, blob := range m {
+		result = append(result, brecord{slot, blob})
+	}
+	sort.Sort(BySlot(result))
+	return result
+}
+
 func dolist(r *items.Store) {
 	c := r.List()
 	for name := range c {
@@ -107,20 +144,90 @@ func dolist(r *items.Store) {
 }
 
 func doadd(r *items.Store, id string, files []string) {
-	tx := r.Open(id)
-	tx.SetCreator("wendy")
+	item, err := r.Item(id)
+	if err != nil && err != items.ErrNoItem {
+		fmt.Println(err.Error())
+		return
+	}
+	tx, err := r.Open(id)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	tx.SetCreator(*creator)
 	defer tx.Close()
 	for _, name := range files {
-		in, err := os.Open(name)
+		err := filepath.Walk(name, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				fmt.Println(err.Error())
+				return nil
+			}
+			fmt.Println(info.Name())
+			if strings.HasPrefix(info.Name(), ".") {
+				return filepath.SkipDir
+			}
+			if !info.IsDir() {
+				fmt.Printf("Adding %s\n", path)
+				return addfile(item, tx, path, info.Size())
+			}
+			return nil
+		})
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		bid, err := tx.WriteBlob(in, 0, nil, nil)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		tx.SetSlot(name, bid)
 	}
+}
+
+func addfile(item *items.Item, tx *items.Writer, fname string, size int64) error {
+	// see if the file is already in the blob list
+	var bid items.BlobID
+	if item != nil {
+		bid = findBlobByFile(item, fname, size)
+	}
+	if bid == 0 {
+		// read it in
+		in, err := os.Open(fname)
+		if err != nil {
+			return err
+		}
+		defer in.Close()
+		bid, err = tx.WriteBlob(in, size, nil, nil)
+		if err != nil {
+			return err
+		}
+	}
+	tx.SetSlot(fname, bid)
+	return nil
+}
+
+func findBlobByFile(item *items.Item, fname string, size int64) items.BlobID {
+	// see if any blobs have the same size. if so, lets checksum it
+	// and compare further.
+	for _, blob := range item.Blobs {
+		if blob.Size == size {
+			goto checksum
+		}
+	}
+	return 0
+
+checksum:
+	in, err := os.Open(fname)
+	if err != nil {
+		return 0
+	}
+	defer in.Close()
+	w := util.NewHashWriterPlain()
+	_, err = io.Copy(w, in)
+	if err != nil {
+		return 0
+	}
+	h, _ := w.CheckSHA256(nil)
+
+	for _, blob := range item.Blobs {
+		if bytes.Compare(h, blob.SHA256) == 0 {
+			return blob.ID
+		}
+	}
+	return 0
 }

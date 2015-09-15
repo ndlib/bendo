@@ -196,14 +196,18 @@ func (tx *T) Commit(s items.Store, files *fragment.Store) {
 	tx.m.Lock()
 	defer tx.m.Unlock()
 	tx.Status = StatusIngest
-	iw := s.Open(tx.ItemID)
+	iw, err := s.Open(tx.ItemID)
+	if err != nil {
+		tx.Err = append(tx.Err, err.Error())
+		return
+	}
 	iw.SetCreator(tx.Creator)
 	tx.files = files
 	// execute commands. Errors will be appended to tx.Err
 	for _, cmd := range tx.Commands {
 		cmd.Execute(iw, tx)
 	}
-	err := iw.Close()
+	err = iw.Close()
 	if err != nil {
 		tx.Err = append(tx.Err, err.Error())
 	}
