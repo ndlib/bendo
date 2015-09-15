@@ -14,12 +14,12 @@ import (
 // checksum type. For example, to only verify the SHA256 hash of the reader,
 // pass in []byte{} for the md5 parameter.
 // The reader is not closed when finished.
-func VerifyStreamHash(r io.Reader, md5, sha256 []byte) bool {
+func VerifyStreamHash(r io.Reader, md5, sha256 []byte) (bool, error) {
 	if len(md5) == 0 && len(sha256) == 0 {
-		return true
+		return true, nil
 	}
 	hw := NewHashWriterPlain()
-	io.Copy(hw, r)
+	_, err := io.Copy(hw, r)
 	var result = true
 	if len(md5) > 0 {
 		_, ok := hw.CheckMD5(md5)
@@ -29,7 +29,7 @@ func VerifyStreamHash(r io.Reader, md5, sha256 []byte) bool {
 		_, ok := hw.CheckSHA256(sha256)
 		result = result && ok
 	}
-	return result
+	return result, err
 }
 
 // An io.Writer which will also calculate the md5 and sha256 sums of the input stream.

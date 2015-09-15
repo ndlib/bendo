@@ -425,7 +425,8 @@ func (f *file) save() error {
 func (f *file) Verify() bool {
 	r := f.Open()
 	defer r.Close()
-	return util.VerifyStreamHash(r, f.MD5, f.SHA256)
+	ok, _ := util.VerifyStreamHash(r, f.MD5, f.SHA256)
+	return ok
 }
 
 // set the labels on the given file to those passed in.
