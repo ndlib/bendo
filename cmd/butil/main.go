@@ -33,6 +33,8 @@ Possible commands:
     list
 
     add <item id> <file/directory list>
+
+    set <item id> <file/directory list>
 `
 )
 
@@ -59,6 +61,8 @@ func main() {
 		doadd(r, args[1], args[2:], false)
 	case "set":
 		doadd(r, args[1], args[2:], true)
+	case "delete":
+		dodelete(r, args[1], args[2:])
 	}
 }
 
@@ -262,4 +266,32 @@ checksum:
 		}
 	}
 	return 0
+}
+
+// add all the files to this item. Directories are automatically recursed into.
+// Files and directories which begin with a dot are skipped.
+func dodelete(r *items.Store, id string, delblobs []string) {
+	var delbid []items.BlobID
+	for _, blobid := range delblobs {
+		bid, err := strconv.Atoi(blobid)
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
+		delbid = append(delbid, items.BlobID(bid))
+	}
+	tx, err := r.Open(id)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	tx.SetCreator(*creator) // must set before calling Close()
+	for _, bid := range delbid {
+		tx.DeleteBlob(bid)
+		// TODO(dbrower): also remove any slots pointing to this blob
+	}
+	err = tx.Close()
+	if err != nil {
+		fmt.Println(err.Error())
+	}
 }
