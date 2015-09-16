@@ -6,7 +6,7 @@
 class lib_bendo_server( $bendo_root = '/opt/bendo', $branch='master') {
 
 $goroot = "${bendo_root}/gocode"
-$target = 'github.com/ndlib/bendo'
+$target = 'github.com/ndlib/bendo/cmd/bendo'
 $repo = "github.com/ndlib/bendo"
 
 # Go Packages -  refactor into lib_go?
@@ -36,7 +36,7 @@ $repo = "github.com/ndlib/bendo"
 		target => $target,
 		repo => $repo,
 		require => Package[$pkglist],
-	}
+	} ->
 
 # Create bendo runit service directories
 
@@ -46,8 +46,7 @@ $repo = "github.com/ndlib/bendo"
 		ensure => directory,
 		owner => "app",
 		group => "app",
-		require => Class['lib_go::build'],
-	}
+	} ->
 
 # make exec and log files for runit
 
@@ -55,16 +54,14 @@ $repo = "github.com/ndlib/bendo"
 		name => '/etc/sv/bendo/run',
 		replace => true,
 		content => template('lib_bendo_server/bendo.exec.erb'),
-		require => File[$bendorunitdirs],
-	}
+	} ->
 
 
 	file { 'bendorunitlog':
 		name => '/etc/sv/bendo/log/run',
 		replace => true,
 		content => template('lib_bendo_server/bendo.log.erb'),
-		require => File[$bendorunitdirs],
-	}
+	} ->
 
 # Enable the Service
 
@@ -72,7 +69,6 @@ $repo = "github.com/ndlib/bendo"
 		provider => "runit",
 		ensure => running,
 		enable => true,
-		require => File[$bendorunitdirs], 
 	}
 
 }
