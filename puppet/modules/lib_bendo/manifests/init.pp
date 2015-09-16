@@ -1,12 +1,8 @@
 #
 # Bendo 
 
-class lib_bendo() {
+class lib_bendo( $bendo_root="/opt/bendo", $branch='master') {
 
-	# create app user
-
-	include lib_app_home
-	include lib_bendo_server
 
         # dternity mount
 
@@ -20,29 +16,29 @@ class lib_bendo() {
 		ensure => mounted,
 	}
 
-        # Batch import CORPFS share
-
-	mount { 'curatend-batchdir':
-		name => '/mnt/curatend-batch',
-		device => '//library.corpfs.nd.edu/DCNS/Library/Departmental/curatend-batch',
-		fstype => 'cifs',
-		options => 'rw,nounix,iocharset=utf8,file_mode=0777,dir_mode=0777,credentials=/.creds/wcreds	0	0',
-		ensure => mounted,
-	}
 
 	# app subdirectory for bendo
+        $bendo_dirs = [ "/home/app/bendo", $bendo_root ]
 
-	file { '"bendo-appdir": 
-		name => "/home/app/bendo",
+	file { $bendo_dirs : 
 		ensure => directory,
 		mode => 0755,
 		owner => "app",
 		group => "app",
+		require =>  Mount['dternity-dir']
 	} 
 
+	# Instantiate Application Class
 
-	# instantiation order
+	class { 'lib_bendo_server': 
+		bendo_root => $bendo_root,
+		branch => $branch,
+		require => File[ $bendo_dirs ],
+	}
+		
 
-	Class["lib_app_home"] -> File["bendo-appdir"] -> Class["lib_bendo_server"]
+
+
+
 
 }

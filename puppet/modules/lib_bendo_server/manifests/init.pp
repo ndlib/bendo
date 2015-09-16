@@ -1,4 +1,15 @@
-class lib_bendo_server( $bendo_root = '/opt/bendo') {
+
+# Application roles class for Bendo
+#
+# Assumes that bendo_root exists
+
+class lib_bendo_server( $bendo_root = '/opt/bendo', $branch='master') {
+
+$goroot = "${bendo_root}/gocode"
+$target = 'github.com/ndlib/bendo'
+$repo = "github.com/ndlib/bendo"
+
+# Go Packages -  refactor into lib_go?
 
 	$pkglist = [
 		"golang",
@@ -9,57 +20,59 @@ class lib_bendo_server( $bendo_root = '/opt/bendo') {
 		ensure => present,
 	}
 
+# Create Logdir. Runit will manage logrotate
+
 	file { "bendo-logdir":
-		name => [ "$bendo_root", "${bendo_root}/log" ]
+		name => [ "${bendo_root}/log" ]
 		ensure => directory,
 	}
 
-	exec { "Build-bendo-from-repo":
-		command => "/bin/bash -c \"export GOPATH=${bendo_root} && go get -u github.com/ndlib/curatend-batch\"",
-		require => File[$bendo_root],
+
+# Build and intall Go code from the repo
+
+	class { 'lib_go::build':
+		goroot => $goroot,
+		branch => $branch
+		target => $target,
+		repo => $repo
+		require => Package[$pkglist],
 	}
 
-	file { 'bendo.conf':
-		name => '/etc/init/bendo.conf',
+# Create bendo runit service directories
+
+	$bendo.runit.dirs = [ "/etc/sv/bendo", "/etc/sv/bendo/log" ]
+
+	file { $bendo.runit.dirs:
+		ensure => directory,
+		owner => "app",
+		group => "app",
+		require => Class['lib_go::build'],
+	}
+
+# make exec and log files for runit
+
+	file { 'bendo.runit.exec':
+		name => '/etc/sv/bendo/run',
 		replace => true,
-		content => template('lib_bendo/upstart.erb'),
-		require => Exec["Build-bendo-from-repo"],
+		content => template('lib_bendo_server/bendo.exec.erb'),
+		require => File[$bendo.runit.dirs],
 	}
 
-	file { 'bendo/tasks':
-		name => "${bendo_root}/tasks",
-		ensure => 'directory',
-		source => "${bendo_root}/src/github.com/ndlib/curatend-batch/tasks",
-		recurse => true,
-		purge => true,
-		require => Exec['Build-bendo-from-repo'],
-	}
 
-	file { 'bendo/tasks/conf':
-		name => "${bendo_root}/tasks/conf",
+	file { 'bendo.runit.log':
+		name => '/etc/sv/bendo/log/run',
 		replace => true,
-		content => template('lib_bendo/tasks.conf.erb'),
-		require => File['bendo/tasks'],
+		content => template('lib_bendo_server/bendo.log.erb'),
+		require => File[$bendo.runit.dirs],
 	}
 
-	file { 'logrotate.d/bendo':
-		name => '/etc/logrotate.d/bendo',
-		replace => true,
-		require => File["bendo/tasks/conf"],
-		content => template('lib_bendo/logrotate.erb'),
+# Enable the Service
+
+	service { 'bendo':
+		provider => "runit",
+		ensure => running,
+		enable => true,
+		require => File[[ 'bendo.runit.exec', 'bendo.runit.log']], 
 	}
 
-	exec { "stop-bendo":
-		command => "/sbin/initctl stop bendo",
-		unless => "/sbin/initctl status bendo | grep stop",
-		require => File['logrotate.d/bendo'],
-	}
-
-	exec { "start-bendo":
-		command => "/sbin/initctl start bendo",
-		unless => "/sbin/initctl status bendo | grep process",
-		require => Exec["stop-bendo"]
-	}
-
-        Package[$pkglist] -> File["bendo-logdir"] 
 }
