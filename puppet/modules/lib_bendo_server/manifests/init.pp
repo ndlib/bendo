@@ -40,9 +40,9 @@ $repo = "github.com/ndlib/bendo"
 
 # Create bendo runit service directories
 
-	$bendo.runit.dirs = [ "/etc/sv/bendo", "/etc/sv/bendo/log" ]
+	$bendorunitdirs = [ "/etc/sv/bendo", "/etc/sv/bendo/log" ]
 
-	file { $bendo.runit.dirs:
+	file { $bendorunitdirs:
 		ensure => directory,
 		owner => "app",
 		group => "app",
@@ -51,19 +51,19 @@ $repo = "github.com/ndlib/bendo"
 
 # make exec and log files for runit
 
-	file { 'bendo.runit.exec':
+	file { 'bendorunitexec':
 		name => '/etc/sv/bendo/run',
 		replace => true,
 		content => template('lib_bendo_server/bendo.exec.erb'),
-		require => File[$bendo.runit.dirs],
+		require => File[$bendorunitdirs],
 	}
 
 
-	file { 'bendo.runit.log':
+	file { 'bendorunitlog':
 		name => '/etc/sv/bendo/log/run',
 		replace => true,
 		content => template('lib_bendo_server/bendo.log.erb'),
-		require => File[$bendo.runit.dirs],
+		require => File[$bendorunitdirs],
 	}
 
 # Enable the Service
@@ -72,7 +72,7 @@ $repo = "github.com/ndlib/bendo"
 		provider => "runit",
 		ensure => running,
 		enable => true,
-		require => File[[ 'bendo.runit.exec', 'bendo.runit.log']], 
+		require => File[[ 'bendorunitexec', 'bendorunitlog']], 
 	}
 
 }
