@@ -34,11 +34,14 @@ func readItemInfo(rc io.Reader) (*Item, error) {
 	}
 	for _, blob := range fromTape.Blobs {
 		b := &Blob{
-			ID:       BlobID(blob.BlobID),
-			SaveDate: blob.SaveDate,
-			Creator:  blob.Creator,
-			Size:     blob.ByteCount,
-			Bundle:   blob.Bundle,
+			ID:         BlobID(blob.BlobID),
+			SaveDate:   blob.SaveDate,
+			Creator:    blob.Creator,
+			Size:       blob.ByteCount,
+			Bundle:     blob.Bundle,
+			DeleteDate: blob.DeleteDate,
+			Deleter:    blob.Deleter,
+			DeleteNote: blob.DeleteNote,
 		}
 		b.MD5, _ = hex.DecodeString(blob.MD5)
 		b.SHA256, _ = hex.DecodeString(blob.SHA256)
@@ -55,18 +58,16 @@ func writeItemInfo(w io.Writer, item *Item) error {
 	for _, b := range item.Blobs {
 		byteCount += b.Size
 		bTape := blobTape{
-			BlobID:    int(b.ID),
-			Bundle:    b.Bundle,
-			ByteCount: b.Size,
-			MD5:       hex.EncodeToString(b.MD5),
-			SHA256:    hex.EncodeToString(b.SHA256),
-			SaveDate:  b.SaveDate,
-			Creator:   b.Creator,
-		}
-		if b.Deleter != "" {
-			bTape.DeleteDate = b.DeleteDate
-			bTape.Deleter = b.Deleter
-			bTape.DeleteNote = b.DeleteNote
+			BlobID:     int(b.ID),
+			Bundle:     b.Bundle,
+			ByteCount:  b.Size,
+			MD5:        hex.EncodeToString(b.MD5),
+			SHA256:     hex.EncodeToString(b.SHA256),
+			SaveDate:   b.SaveDate,
+			Creator:    b.Creator,
+			DeleteDate: b.DeleteDate,
+			Deleter:    b.Deleter,
+			DeleteNote: b.DeleteNote,
 		}
 		itemStore.Blobs = append(itemStore.Blobs, bTape)
 	}

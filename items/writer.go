@@ -63,12 +63,13 @@ func (wr *Writer) Close() error {
 	}
 
 	// Update item metadata
-	wr.item.MaxBundle = wr.bw.CurrentBundle() // XXX: this should be handled by the BundleWriter
 	wr.version.SaveDate = time.Now()
 	wr.item.Versions = append(wr.item.Versions, &wr.version)
 
 	// handle any deletions
 	err := wr.doDeletes()
+
+	wr.item.MaxBundle = wr.bw.CurrentBundle() // XXX: this should be handled by the BundleWriter
 	err2 := wr.bw.Close()
 	wr.store.cache.Set(wr.item.ID, wr.item)
 	if err != nil {
@@ -79,6 +80,7 @@ func (wr *Writer) Close() error {
 	}
 
 	// delete bundles which contain purged items
+	// TODO(dbrower): figure out a policy on whether to do this deletion
 	for _, bundleid := range wr.bdel {
 		err = wr.store.S.Delete(sugar(wr.item.ID, bundleid))
 		if err != nil {
@@ -95,7 +97,7 @@ func (wr *Writer) doDeletes() error {
 	var bundles = make(map[int][]BlobID)
 	for _, id := range wr.del {
 		blob := wr.item.blobByID(id)
-		if blob != nil {
+		if blob != nil && blob.Bundle != 0 {
 			bundles[blob.Bundle] = append(bundles[blob.Bundle], id)
 
 			blob.DeleteDate = time.Now()
