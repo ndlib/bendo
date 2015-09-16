@@ -53,6 +53,9 @@ $repo = "github.com/ndlib/bendo"
 
 	file { 'bendorunitexec':
 		name => '/etc/sv/bendo/run',
+		owner => "app",
+		group => "app",
+		mode => '0755',
 		replace => true,
 		content => template('lib_bendo_server/bendo.exec.erb'),
 	} ->
@@ -60,7 +63,10 @@ $repo = "github.com/ndlib/bendo"
 
 	file { 'bendorunitlog':
 		name => '/etc/sv/bendo/log/run',
+		owner => "app",
+		group => "app",
 		replace => true,
+		mode => '0755',
 		content => template('lib_bendo_server/bendo.log.erb'),
 	} ->
 
