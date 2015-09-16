@@ -40,7 +40,7 @@ $repo = "github.com/ndlib/bendo"
 
 # Create bendo runit service directories
 
-	$bendorunitdirs = [ "/etc/sv/bendo", "/etc/sv/bendo/log" ]
+	$bendorunitdirs = [ "/etc/sv", "/etc/sv/bendo", "/etc/sv/bendo/log" ]
 
 	file { $bendorunitdirs:
 		ensure => directory,
