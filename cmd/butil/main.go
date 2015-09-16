@@ -19,8 +19,9 @@ import (
 )
 
 var (
-	storeDir = flag.String("s", ".", "location of the storage directory")
+	storeDir = flag.String("storage", ".", "location of the storage directory")
 	creator  = flag.String("creator", "butil", "Creator name to use")
+	verbose  = flag.Bool("v", false, "Display more information")
 	usage    = `
 butil <command> <command arguments>
 
@@ -55,7 +56,9 @@ func main() {
 	case "list":
 		dolist(r)
 	case "add":
-		doadd(r, args[1], args[2:])
+		doadd(r, args[1], args[2:], false)
+	case "set":
+		doadd(r, args[1], args[2:], true)
 	}
 }
 
@@ -84,7 +87,9 @@ func doitem(r *items.Store, ids []string) {
 
 func printitem(item *items.Item) {
 	fmt.Println("Item:", item.ID)
-	fmt.Println("MaxBundle:", item.MaxBundle)
+	fmt.Println("Num Versions:", len(item.Versions))
+	fmt.Println("Num Blobs:", len(item.Blobs))
+	fmt.Println("Num Bundles:", item.MaxBundle)
 	for _, vers := range item.Versions {
 		fmt.Println("---")
 		w := tabwriter.NewWriter(os.Stdout, 5, 1, 3, ' ', 0)
@@ -93,10 +98,16 @@ func printitem(item *items.Item) {
 		fmt.Fprintf(w, "Creator:\t%s\n", vers.Creator)
 		fmt.Fprintf(w, "Note:\t%s\n", vers.Note)
 		w.Flush()
+		if !*verbose {
+			continue
+		}
 		fmt.Printf(" Blob  Slot\n")
 		for _, r := range sortBySlot(vers.Slots) {
 			fmt.Printf("%5d  %s\n", r.blob, r.slot)
 		}
+	}
+	if !*verbose {
+		return
 	}
 	for _, blob := range item.Blobs {
 		fmt.Println("---")
@@ -143,7 +154,9 @@ func dolist(r *items.Store) {
 	}
 }
 
-func doadd(r *items.Store, id string, files []string) {
+// add all the files to this item. Directories are automatically recursed into.
+// Files and directories which begin with a dot are skipped.
+func doadd(r *items.Store, id string, files []string, isset bool) {
 	item, err := r.Item(id)
 	if err != nil && err != items.ErrNoItem {
 		fmt.Println(err.Error())
@@ -154,21 +167,26 @@ func doadd(r *items.Store, id string, files []string) {
 		fmt.Println(err.Error())
 		return
 	}
-	tx.SetCreator(*creator)
+	tx.SetCreator(*creator) // must set before calling Close()
 	defer tx.Close()
+	if isset {
+		tx.ClearSlots()
+	}
 	for _, name := range files {
 		err := filepath.Walk(name, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
-				fmt.Println(err.Error())
+				return err
+			}
+			if strings.HasPrefix(info.Name(), ".") {
+				if info.IsDir() {
+					return filepath.SkipDir
+				}
 				return nil
 			}
-			fmt.Println(info.Name())
-			if strings.HasPrefix(info.Name(), ".") {
-				return filepath.SkipDir
-			}
 			if !info.IsDir() {
+				slot := deriveSlotName(name, path)
 				fmt.Printf("Adding %s\n", path)
-				return addfile(item, tx, path, info.Size())
+				return addfile(item, tx, path, slot, info.Size())
 			}
 			return nil
 		})
@@ -179,7 +197,21 @@ func doadd(r *items.Store, id string, files []string) {
 	}
 }
 
-func addfile(item *items.Item, tx *items.Writer, fname string, size int64) error {
+func deriveSlotName(parentpath, fname string) string {
+	// we prefer slot names to not include the
+	// entire absolute path, so keep just the
+	// relative part of the path
+	slot := strings.TrimPrefix(fname, parentpath)
+	if slot == "" {
+		// we have fname == parentpath, so just take
+		// the base name for the file
+		slot = filepath.Base(fname)
+	}
+	// slots names shouldn't begin with a slash
+	return strings.TrimPrefix(slot, "/")
+}
+
+func addfile(item *items.Item, tx *items.Writer, fname string, slotname string, size int64) error {
 	// see if the file is already in the blob list
 	var bid items.BlobID
 	if item != nil {
@@ -197,7 +229,7 @@ func addfile(item *items.Item, tx *items.Writer, fname string, size int64) error
 			return err
 		}
 	}
-	tx.SetSlot(fname, bid)
+	tx.SetSlot(slotname, bid)
 	return nil
 }
 

@@ -16,9 +16,9 @@ type Writer struct {
 	bdel    []int         // bundle files to delete. generated from del
 }
 
-// Open the item id for writing. This will add a single new version to id.
-// New blobs can be written. Blobs can also be deleted (but this is not desigend
-// to be a quick operation).
+// Open the item id for writing. This will add a single new version to the item.
+// New blobs can be written. Blobs can also be deleted (but that is not a quick
+// operation).
 //
 // It is an error for more than one goroutine to open the same item at a time.
 // This does not perform any locking itself.
@@ -78,7 +78,7 @@ func (wr *Writer) Close() error {
 		return err2
 	}
 
-	// TODO(dbrower): delete bundles which contain purged items
+	// delete bundles which contain purged items
 	for _, bundleid := range wr.bdel {
 		err = wr.store.S.Delete(sugar(wr.item.ID, bundleid))
 		if err != nil {
@@ -185,6 +185,13 @@ func (wr *Writer) SetSlot(s string, id BlobID) {
 	} else {
 		wr.version.Slots[s] = id
 	}
+}
+
+// ClearSlots will remove all the slot information for the current version.
+// Any slot entries made before calling this will be lost (but the blobs will
+// still be around!).
+func (wr *Writer) ClearSlots() {
+	wr.version.Slots = make(map[string]BlobID)
 }
 
 // Mark the given blob for removal from the underlying storage. Blobs will be
