@@ -32,7 +32,7 @@ $repo = "github.com/ndlib/bendo"
 
 	class { 'lib_go::build':
 		goroot => $goroot,
-		branch => $branch
+		branch => $branch,
 		target => $target,
 		repo => $repo,
 		require => Package[$pkglist],
