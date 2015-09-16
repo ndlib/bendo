@@ -46,7 +46,7 @@ $repo = "github.com/ndlib/bendo"
 		ensure => directory,
 		owner => "app",
 		group => "app",
-		require['lib_go::build'],
+		require => Class['lib_go::build'],
 	} ->
 
 # make exec and log files for runit
