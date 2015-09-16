@@ -72,7 +72,7 @@ $repo = "github.com/ndlib/bendo"
 		provider => "runit",
 		ensure => running,
 		enable => true,
-		require => File[[ 'bendorunitexec', 'bendorunitlog']], 
+		require => File[$bendorunitdirs], 
 	}
 
 }
