@@ -23,7 +23,7 @@ $repo = "github.com/ndlib/bendo"
 # Create Logdir. Runit will manage logrotate
 
 	file { "bendo-logdir":
-		name => [ "${bendo_root}/log" ]
+		name =>  "${bendo_root}/log",
 		ensure => directory,
 	}
 
@@ -34,7 +34,7 @@ $repo = "github.com/ndlib/bendo"
 		goroot => $goroot,
 		branch => $branch
 		target => $target,
-		repo => $repo
+		repo => $repo,
 		require => Package[$pkglist],
 	}
 
