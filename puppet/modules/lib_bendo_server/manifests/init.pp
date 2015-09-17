@@ -9,6 +9,11 @@ $goroot = "${bendo_root}/gocode"
 $target = 'github.com/ndlib/bendo/cmd/bendo'
 $repo = "github.com/ndlib/bendo"
 
+# hiera config for runit run scripts
+
+$bendo_upload_dir = hiera("bendo_upload_dir")
+$bendo_storage_dir = hiera("bendo_storage_dir")
+
 # Go Packages -  refactor into lib_go?
 
 	$pkglist = [
