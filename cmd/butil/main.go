@@ -166,12 +166,11 @@ func doadd(r *items.Store, id string, files []string, isset bool) {
 		fmt.Println(err.Error())
 		return
 	}
-	tx, err := r.Open(id)
+	tx, err := r.Open(id, *creator)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
-	tx.SetCreator(*creator) // must set before calling Close()
 	defer tx.Close()
 	if isset {
 		tx.ClearSlots()
@@ -280,12 +279,11 @@ func dodelete(r *items.Store, id string, delblobs []string) {
 		}
 		delbid = append(delbid, items.BlobID(bid))
 	}
-	tx, err := r.Open(id)
+	tx, err := r.Open(id, *creator)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
-	tx.SetCreator(*creator) // must set before calling Close()
 	for _, bid := range delbid {
 		tx.DeleteBlob(bid)
 		// TODO(dbrower): also remove any slots pointing to this blob

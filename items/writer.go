@@ -20,9 +20,11 @@ type Writer struct {
 // New blobs can be written. Blobs can also be deleted (but that is not a quick
 // operation).
 //
+// The creator is the name of the agent performing these updates.
+//
 // It is an error for more than one goroutine to open the same item at a time.
 // This does not perform any locking itself.
-func (s *Store) Open(id string) (*Writer, error) {
+func (s *Store) Open(id string, creator string) (*Writer, error) {
 	wr := &Writer{
 		store: s,
 		version: Version{
@@ -30,6 +32,7 @@ func (s *Store) Open(id string) (*Writer, error) {
 			ID:       1,
 			Slots:    make(map[string]BlobID),
 			SaveDate: time.Now(),
+			Creator:  creator,
 		},
 	}
 	item, err := s.Item(id)
@@ -56,12 +59,7 @@ func (s *Store) Open(id string) (*Writer, error) {
 
 // Close the given Writer. The final metadata is written out, and any
 // blobs marked for deletion are extracted and removed.
-// SetCreator() must have been called first.
 func (wr *Writer) Close() error {
-	if wr.version.Creator == "" {
-		panic("Closed() called before SetCreator()")
-	}
-
 	// Update item metadata
 	wr.version.SaveDate = time.Now()
 	wr.item.Versions = append(wr.item.Versions, &wr.version)
@@ -122,8 +120,6 @@ func (wr *Writer) doDeletes() error {
 // with the data in r and an error is triggered if there is a difference.
 // The hashes and size may be nil and 0 if unknown, in which case they are
 // calculated and stored as needed, and no error is triggered.
-// The creator needs to have been set previously with a call to SetCreator.
-// A panic will happen if there is no creator.
 //
 // The data in r is written immediately to the bundle file. The id of the new
 // blob is returned. If there is an error writing the blob, the blob is not
@@ -131,10 +127,6 @@ func (wr *Writer) doDeletes() error {
 // remnant "blob/{id}" entry in the zip file, so it is best to close this Writer
 // and reopen to retry.
 func (wr *Writer) WriteBlob(r io.Reader, size int64, md5, sha256 []byte) (BlobID, error) {
-	if wr.version.Creator == "" {
-		panic("WriteBlob() called before call to SetCreator()")
-	}
-
 	// lazily set up the blob counter
 	if wr.bnext == 0 {
 		wr.bnext = 1 // blob ids are 1 based
