@@ -41,6 +41,7 @@ $bendo_storage_dir = hiera("bendo_storage_dir")
 		target => $target,
 		repo => $repo,
 		require => Package[$pkglist],
+		notify => Service['bendo'],
 	} 
 
 # Create bendo runit service directories
@@ -78,9 +79,14 @@ $bendo_storage_dir = hiera("bendo_storage_dir")
 # Enable the Service
 
 	service { 'bendo':
-		provider => "runit",
 		ensure => running,
 		enable => true,
+		hasstatus => false,
+		hasrestart => false,
+		restart => '/sbin/sv restart bendo',
+		start => '/sbin/sv start bendo',
+		stop => '/sbin/sv stop bendo',
+		status => '/sbin/sv status bendo'
 	}
 
 }
