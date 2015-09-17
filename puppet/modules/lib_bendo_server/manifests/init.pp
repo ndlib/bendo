@@ -79,6 +79,7 @@ $bendo_storage_dir = hiera("bendo_storage_dir")
 # Enable the Service
 
 	service { 'bendo':
+		provider => 'base',
 		ensure => running,
 		enable => true,
 		hasstatus => false,
