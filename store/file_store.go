@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"io"
 	"log"
 	"os"
@@ -109,20 +110,63 @@ func (s *FileSystem) Open(key string) (ReadAtCloser, int64, error) {
 
 func (s *FileSystem) Create(key string) (io.WriteCloser, error) {
 	var w io.WriteCloser
+	// first set up the eventual home dir of this file
 	dir := filepath.Join(s.root, itemSubdir(key))
 	err := os.MkdirAll(dir, 0775)
-	if err == nil {
-		fname := filepath.Join(dir, key)
-		// pass the O_EXCL flag explicitly to prevent overwriting
-		// already existing files
-		w, err = os.OpenFile(fname, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
+	if err != nil {
+		return nil, err
 	}
-	return w, err
+	target := filepath.Join(dir, key)
+	_, err = os.Stat(target)
+	if !os.IsNotExist(err) {
+		return nil, ErrKeyExists
+	}
+	// now set up the scratch location we will temporially save the file to
+	dir = filepath.Join(s.root, scratchdir)
+	err = os.MkdirAll(dir, 0775)
+	if err != nil {
+		return nil, err
+	}
+	temp := filepath.Join(dir, key)
+	// pass the O_EXCL flag explicitly to prevent overwriting
+	// already existing files
+	w, err = os.OpenFile(temp, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
+	if err != nil {
+		return nil, err
+	}
+	return &moveCloser{w, temp, target}, nil
+}
+
+const (
+	scratchdir = "scratch"
+)
+
+var (
+	ErrKeyExists = errors.New("Key already exists")
+)
+
+// track the file so when it is closed, we can move it into the correct place
+type moveCloser struct {
+	io.WriteCloser
+	source string
+	target string
+}
+
+func (w *moveCloser) Close() error {
+	err := w.WriteCloser.Close()
+	if err != nil {
+		return err
+	}
+	_, err = os.Stat(w.target)
+	if !os.IsNotExist(err) {
+		return ErrKeyExists
+	}
+	return os.Rename(w.source, w.target)
 }
 
 func (s *FileSystem) Delete(key string) error {
-	fname := filepath.Join(s.root, itemSubdir(key), key)
-	err := os.Remove(fname)
+	fname1 := filepath.Join(s.root, itemSubdir(key), key)
+	err := os.Remove(fname1)
 	// don't report a missing file as an error
 	if err != nil && os.IsNotExist(err) {
 		err = nil

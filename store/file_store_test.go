@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 
 func TestItemSubdir(t *testing.T) {
 	var table = []struct{ input, output string }{
+		{"", "./"},
 		{"x", "x/"},
 		{"xy", "xy/"},
 		{"xyz", "xy/z/"},
@@ -137,6 +139,142 @@ func TestWalkTree(t *testing.T) {
 	}
 }
 
+func TestCreate(t *testing.T) {
+	root, _ := ioutil.TempDir("", "")
+	defer os.RemoveAll(root)
+	s := NewFileSystem(root)
+
+	const text = "hello abc"
+	// make an object
+	add(t, s, "abc", text)
+
+	r, n, err := s.Open("abc")
+	if err != nil {
+		t.Errorf("Received error %s", err.Error())
+	}
+	if n != int64(len(text)) {
+		t.Errorf("Received length %d, expected %d", n, len(text))
+	}
+	var buf = make([]byte, 32)
+	n64, err := r.ReadAt(buf, 0)
+	if err != nil && err != io.EOF {
+		t.Errorf("Received error %s", err.Error())
+	}
+	t.Logf("n = %d", n64)
+	if string(buf[:n64]) != text {
+		t.Errorf("Received %v, expected %s", buf, text)
+	}
+	err = r.Close()
+	if err != nil {
+		t.Errorf("Received error %s", err.Error())
+	}
+
+	// make object again....should error
+	_, err = s.Create("abc")
+	if err != ErrKeyExists {
+		t.Errorf("Received error %s", err.Error())
+	}
+
+	// make sure file ab/c/abc exists and file scratch/abc doesn't
+	if !exists(root, itemSubdir("abc"), "abc") {
+		t.Errorf("File abc does not exist")
+	}
+	if exists(root, scratchdir, "abc") {
+		t.Errorf("File scratch abc exists")
+	}
+}
+
+func TestOpenTwice(t *testing.T) {
+	// should not be able to open an object twice for writing
+	root, _ := ioutil.TempDir("", "")
+	defer os.RemoveAll(root)
+	s := NewFileSystem(root)
+
+	const text = "hello abc"
+	// make an object
+	w1, err := s.Create("abc")
+	if err != nil {
+		t.Errorf("Received error %s", err.Error())
+	}
+
+	// now try to open a second time, before closing w1
+	w2, err := s.Create("abc")
+	if err == nil {
+		w2.Close()
+		t.Errorf("Received error %s", err.Error())
+	}
+	w1.Close()
+}
+
+func TestFileDisappear(t *testing.T) {
+	root, _ := ioutil.TempDir("", "")
+	defer os.RemoveAll(root)
+	s := NewFileSystem(root)
+
+	const text = "hello abc"
+	const text2 = "Second time abc"
+	// make an object
+	w, err := s.Create("abc")
+	if err != nil {
+		t.Errorf("Received error %s", err.Error())
+	}
+	_, err = w.Write([]byte(text))
+	if err != nil {
+		t.Errorf("Received error %s", err.Error())
+	}
+	// touch the target file, then see if closing w complains
+	second, err := os.Create(filepath.Join(root, itemSubdir("abc"), "abc"))
+	second.Write([]byte("second file"))
+	second.Close()
+
+	// now close our original file, expect error
+	err = w.Close()
+	if err != ErrKeyExists {
+		t.Errorf("Received error %s", err.Error())
+	}
+
+	// the temp file is still in place?
+	if !exists(root, scratchdir, "abc") {
+		t.Errorf("File scratch abc does not exist")
+	}
+
+	// delete our foil file
+	s.Delete("abc")
+
+	// now we should NOT be able to create another "abc",
+	// since the file remnant is still in the scratch space
+	w, err = s.Create("abc")
+	if err == nil {
+		t.Fatalf("Received no error", err.Error())
+	}
+}
+
+func TestDelete(t *testing.T) {
+	root, _ := ioutil.TempDir("", "")
+	defer os.RemoveAll(root)
+	s := NewFileSystem(root)
+
+	// it is not an error to delete an object which is not present
+	err := s.Delete("abc")
+	if err != nil {
+		t.Errorf("Received error %s", err.Error())
+	}
+
+	// make object
+	add(t, s, "abc", "hello abc from test delete")
+
+	err = s.Delete("abc")
+	if err != nil {
+		t.Errorf("Received error %s", err.Error())
+	}
+
+	_, _, err = s.Open("abc")
+	t.Logf("Open(abc) = %s", err.Error())
+	if err == nil {
+		t.Errorf("Received nil error")
+	}
+}
+
 // returns abs path to the root of the new tree.
 // remember to delete the new directory when finished.
 func makeTmpTree(files []string) string {
@@ -167,4 +305,9 @@ func equal(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func exists(paths ...string) bool {
+	_, err := os.Stat(filepath.Join(paths...))
+	return err == nil
 }
