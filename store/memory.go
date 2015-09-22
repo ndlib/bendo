@@ -19,17 +19,20 @@ var (
 	_ Store = &Memory{}
 )
 
+// NewMemory returns a new, empty memory store.
 func NewMemory() *Memory {
 	return &Memory{store: make(map[string]*buf)}
 }
 
-// The listing goroutine keeps a read lock on the underlying store for its
-// duration. This may cause deadlocks.
+// List returns a channel giving the id for every item in the store.
+//
+// The goroutine started to generate the list keeps a read lock on the
+// underlying store for its duration. This may cause deadlocks.
 func (ms *Memory) List() <-chan string {
 	c := make(chan string)
 	go func() {
 		ms.m.RLock()
-		for k, _ := range ms.store {
+		for k := range ms.store {
 			c <- k
 		}
 		ms.m.RUnlock()
@@ -38,10 +41,11 @@ func (ms *Memory) List() <-chan string {
 	return c
 }
 
+// ListPrefix returns all the key entries which begin with the given prefix.
 func (ms *Memory) ListPrefix(prefix string) ([]string, error) {
 	var result []string
 	ms.m.RLock()
-	for k, _ := range ms.store {
+	for k := range ms.store {
 		if strings.HasPrefix(k, prefix) {
 			result = append(result, k)
 		}
@@ -50,6 +54,7 @@ func (ms *Memory) ListPrefix(prefix string) ([]string, error) {
 	return result, nil
 }
 
+// Open returns a ReadAtCloser and the size of the given blob.
 func (ms *Memory) Open(key string) (ReadAtCloser, int64, error) {
 	ms.m.RLock()
 	v, ok := ms.store[key]
@@ -94,6 +99,8 @@ func (r *buf) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// Create makes a new entry in the store, and returns a writer to save data
+// into it.
 func (ms *Memory) Create(key string) (io.WriteCloser, error) {
 	r := &buf{}
 	r.m.Lock()
@@ -104,6 +111,8 @@ func (ms *Memory) Create(key string) (io.WriteCloser, error) {
 	return r, nil
 }
 
+// Delete the given key from the store. It is not an error if the item does
+// not exist in the store.
 func (ms *Memory) Delete(key string) error {
 	ms.m.Lock()
 	delete(ms.store, key)
@@ -111,7 +120,8 @@ func (ms *Memory) Delete(key string) error {
 	return nil
 }
 
-// for testing and debugging
+// Dump writes a listing of the contents of the store to the given writer.
+// This is intended for testing and debugging.
 func (ms *Memory) Dump(w io.Writer) {
 	ms.m.RLock()
 	for k, v := range ms.store {

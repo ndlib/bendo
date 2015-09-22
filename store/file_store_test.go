@@ -245,7 +245,7 @@ func TestFileDisappear(t *testing.T) {
 	// since the file remnant is still in the scratch space
 	w, err = s.Create("abc")
 	if err == nil {
-		t.Fatalf("Received no error", err.Error())
+		t.Fatalf("Received no error")
 	}
 }
 

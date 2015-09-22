@@ -1,15 +1,16 @@
-// A store provides a simple, goroutine safe, key-value interface. Instead of
-// values being an opaque array of bytes, though, they are a stream. This lets
-// large items to be stored easily.
+// Package store provides a simple, goroutine safe key-value interface. Instead
+// of values being an opaque array of bytes, though, they are a stream. This
+// approach allows large items to be stored easily.
 //
-// Probably the most important type is the FileSystem. The others are useful
-// for testing or wrapping a File.
+// Probably the most important implementation is the FileSystem. The other are
+// stores are useful for testing or other specialized situations.
 package store
 
 import (
 	"io"
 )
 
+// ReadAtCloser combines the io.ReaderAt and io.Closer interfaces.
 type ReadAtCloser interface {
 	io.ReaderAt
 	io.Closer
@@ -40,8 +41,8 @@ type ROStore interface {
 	Open(key string) (ReadAtCloser, int64, error)
 }
 
-// Turns a ReaderAt into a io.Reader. It is here as a utility to help work with
-// the ReadAtCloser returned by Open.
+// NewReader converts a ReaderAt into a io.Reader. It is here as a utility to
+// help work with the ReadAtCloser returned by Open.
 func NewReader(r io.ReaderAt) io.Reader {
 	return &reader{r: r}
 }

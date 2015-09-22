@@ -19,16 +19,25 @@ type FileSystem struct {
 	root string
 }
 
+const (
+	// the subdir to store files while they are being written to.
+	scratchdir = "scratch"
+)
+
 var (
 	// make sure it implements the Store interface
 	_ Store = &FileSystem{}
+
+	// ErrKeyExists indicates an attempt to create a key which already exists
+	ErrKeyExists = errors.New("Key already exists")
 )
 
-// Create a new FileSystem store based at the given root path.
+// NewFileSystem creates a new FileSystem store based at the given root path.
 func NewFileSystem(root string) *FileSystem {
 	return &FileSystem{root}
 }
 
+// List returns a channel listing all the keys in this store.
 func (s *FileSystem) List() <-chan string {
 	c := make(chan string)
 	go walkTree(c, s.root, true)
@@ -70,6 +79,7 @@ func walkTree(out chan<- string, root string, toplevel bool) {
 	}
 }
 
+// ListPrefix returns a list of all the keys beginning with the given prefix.
 func (s *FileSystem) ListPrefix(prefix string) ([]string, error) {
 	var glob string
 	switch len(prefix) {
@@ -94,6 +104,7 @@ func (s *FileSystem) ListPrefix(prefix string) ([]string, error) {
 	return result, err
 }
 
+// Open returns a reader for the given object along with its size.
 func (s *FileSystem) Open(key string) (ReadAtCloser, int64, error) {
 	fname := filepath.Join(s.root, itemSubdir(key), key)
 	f, err := os.Open(fname)
@@ -108,26 +119,24 @@ func (s *FileSystem) Open(key string) (ReadAtCloser, int64, error) {
 	return f, fi.Size(), nil
 }
 
+// Create creates a new item with the given key, and a writer to allow for
+// saving data into the new item.
 func (s *FileSystem) Create(key string) (io.WriteCloser, error) {
 	var w io.WriteCloser
 	// first set up the eventual home dir of this file
-	dir := filepath.Join(s.root, itemSubdir(key))
-	err := os.MkdirAll(dir, 0775)
+	target, err := s.setupSubDir(itemSubdir(key), key)
 	if err != nil {
 		return nil, err
 	}
-	target := filepath.Join(dir, key)
 	_, err = os.Stat(target)
 	if !os.IsNotExist(err) {
 		return nil, ErrKeyExists
 	}
 	// now set up the scratch location we will temporially save the file to
-	dir = filepath.Join(s.root, scratchdir)
-	err = os.MkdirAll(dir, 0775)
+	temp, err := s.setupSubDir(scratchdir, key)
 	if err != nil {
 		return nil, err
 	}
-	temp := filepath.Join(dir, key)
 	// pass the O_EXCL flag explicitly to prevent overwriting
 	// already existing files
 	w, err = os.OpenFile(temp, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
@@ -137,13 +146,13 @@ func (s *FileSystem) Create(key string) (io.WriteCloser, error) {
 	return &moveCloser{w, temp, target}, nil
 }
 
-const (
-	scratchdir = "scratch"
-)
-
-var (
-	ErrKeyExists = errors.New("Key already exists")
-)
+// setupSubDir makes sure the given subdirectory exists under the root, and
+// then returns the absolute path to the keyed file, and an optional error.
+func (s *FileSystem) setupSubDir(subdir, key string) (string, error) {
+	dir := filepath.Join(s.root, subdir)
+	err := os.MkdirAll(dir, 0775)
+	return filepath.Join(dir, key), err
+}
 
 // track the file so when it is closed, we can move it into the correct place
 type moveCloser struct {
@@ -164,6 +173,8 @@ func (w *moveCloser) Close() error {
 	return os.Rename(w.source, w.target)
 }
 
+// Delete the given key from the store. It is not an error if the key doesn't
+// exist.
 func (s *FileSystem) Delete(key string) error {
 	fname1 := filepath.Join(s.root, itemSubdir(key), key)
 	err := os.Remove(fname1)

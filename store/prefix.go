@@ -5,9 +5,9 @@ import (
 	"strings"
 )
 
-// Wrap the store s by one which will prefix all its keys by prefix.
-// This provides a way to namespace the keys, and to share the same underlying
-// store among a group of users.
+// NewWithPrefix wraps a store by one which will prefix all its keys with the
+// prefix. This provides a basic way to namespace the keys, and to share the
+// same underlying store among a group of distinct stores.
 func NewWithPrefix(s Store, prefix string) Store {
 	return prefixstore{s: s, p: prefix}
 }
