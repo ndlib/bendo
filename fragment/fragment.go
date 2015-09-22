@@ -1,10 +1,8 @@
-/*
-Fragment manages the fragment cache used to upload files to the server.
-The fragment cache lets files be uploaded in pieces, and then be copied
-to tape as a single unit. Files are intended to be uploaded as consecutive
-pieces, of arbitrary size. If a fragment upload does not complete or has
-and error, that fragment is deleted, and the upload can try again.
-*/
+// Package fragment manages the fragment cache used to upload files to the server.
+// The fragment cache lets files be uploaded in pieces, and then be copied
+// to tape as a single unit. Files are intended to be uploaded as consecutive
+// pieces, of arbitrary size. If a fragment upload does not complete or has
+// and error, that fragment is deleted, and the upload can try again.
 package fragment
 
 import (
@@ -40,20 +38,48 @@ const (
 	fragmentKeyPrefix = "f"
 )
 
+// A FileEntry represents a single file in the fragment store. A FileEntry
+// presents a collection of operations which can be done on a file, including
+// opening it for Appending, and opening it for reading. (A FileEntry cannot
+// be read or written to directly).
 type FileEntry interface {
+	// Return a writer which will append a new block to this file.
 	Append() (io.WriteCloser, error)
+
+	// Open the file for reading from the very beginning
 	Open() io.ReadCloser
+
+	// Stat returns information about this file
 	Stat() Stat
+
+	// Rollback deletes the last block of this file. (i.e. the last
+	// segment of data which was Appended)
 	Rollback() error
+
+	// Set the label metadata for this file. The given label list will
+	// completely replace the current label list.
 	SetLabels(labels []string)
+
+	// Set the creator name for this file.
 	SetCreator(name string)
+
+	// Set the expected MD5 sum for the entire file (i.e. over all of
+	// its blocks).
 	SetMD5(hash []byte)
+
+	// Set the expected SHA256 sum for the entire file (i.e. over all of
+	// its blocks).
 	SetSHA256(hash []byte)
+
+	// Sets an opaque metadata blob which can be assigned to each file.
 	SetExtra(extra string)
+
+	// Verify the checksums of this file. Returns true if they match,
+	// and false otherwise.
 	Verify() bool
 }
 
-// The metadata kept on each file entry
+// Stat contains the metadata for a file entry.
 type Stat struct {
 	ID         string
 	Size       int64
@@ -90,7 +116,7 @@ type fragment struct {
 	Size int64  // the size of this fragment in bytes
 }
 
-// Create a new fragment store wrapping a store.Store. Call Load() before
+// New creates a new fragment store wrapping a store.Store. Call Load() before
 // using the store.
 func New(s store.Store) *Store {
 	return &Store{
@@ -101,8 +127,8 @@ func New(s store.Store) *Store {
 	}
 }
 
-// Initialize an in memory data from the file entries stored inside.
-// Must be called before using this store.
+// Load initializes the in-memory indexing and caches for the stored file
+// entries. It must be called before using this store.
 func (s *Store) Load() error {
 	metadata, err := s.meta.ListPrefix("")
 	if err != nil {
@@ -146,7 +172,8 @@ func (s *Store) unindexRecord(f *file) {
 	}
 }
 
-// Return a list of all the stored file names.
+// List returns the names of all the stored files.
+// (But not the names of the individual fragment files).
 func (s *Store) List() []string {
 	s.m.RLock()
 	defer s.m.RUnlock()
@@ -157,7 +184,7 @@ func (s *Store) List() []string {
 	return result
 }
 
-// Return a list of the file ids matching a given set of labels.
+// ListFiltered returns a list of the file ids matching a given set of labels.
 // If the list of labels provided is empty, a list of every item is returned.
 // The items in the returned list are in alphabetical order.
 func (s *Store) ListFiltered(labels []string) []string {
@@ -186,41 +213,42 @@ func combineCommon(lists [][]string) []string {
 	// this is similar to an n-way merge sort
 	// first set bar to the maximum of what we need to scan for
 	var bar string
-	var current_list int
-	var equal_count int
+	var currentList int
+	var nEqual int
 	for {
-		// advance current_list until it is >= bar
-		list := lists[current_list]
+		// advance currentList until it is >= bar
+		list := lists[currentList]
 		for {
 			// exit if we come to the end of this list
-			if idxs[current_list] >= len(list) {
+			if idxs[currentList] >= len(list) {
 				return result
 			}
 			// if current list is == bar, see if other lists agree
-			if list[idxs[current_list]] == bar {
-				equal_count++
-				if equal_count < len(lists) {
+			if list[idxs[currentList]] == bar {
+				nEqual++
+				if nEqual < len(lists) {
 					break
 				}
 				// a match accross every list!
 				result = append(result, bar)
-				equal_count = 0
-			} else if list[idxs[current_list]] > bar {
-				bar = list[idxs[current_list]]
-				equal_count = 0
+				nEqual = 0
+			} else if list[idxs[currentList]] > bar {
+				bar = list[idxs[currentList]]
+				nEqual = 0
 				break
 			}
-			idxs[current_list]++
+			idxs[currentList]++
 		}
-		current_list++
-		if current_list >= len(lists) {
-			current_list = 0
+		// go to the next list, wrapping around if necessary
+		currentList++
+		if currentList >= len(lists) {
+			currentList = 0
 		}
 	}
 }
 
-// Create a new file with the given name, and return a pointer to it.
-// the file is not persisted until its first fragment has been written.
+// New creates a new file with the given name and return a pointer to it.
+// The file is not persisted until its first fragment has been written.
 // If the file already exists, nil is returned.
 func (s *Store) New(id string) FileEntry {
 	s.m.Lock()
@@ -238,8 +266,9 @@ func (s *Store) New(id string) FileEntry {
 	return newfile
 }
 
-// Lookup a file. Returns nil if none exists with that id.
-// Returned pointers are not safe to be accessed by more than one goroutine.
+// Lookup returns the FileEntry for the given name. It returns nil if there is
+// no FileEntry with that with that id. Returned pointers are not safe to be
+// accessed by more than one goroutine.
 func (s *Store) Lookup(id string) FileEntry {
 	s.m.RLock()
 	defer s.m.RUnlock()
@@ -252,7 +281,8 @@ func (s *Store) Lookup(id string) FileEntry {
 	return result
 }
 
-// Delete a file. It is not an error to delete a file that does not exist.
+// Delete deletes a file. It is not an error to delete a file that does not
+// exist.
 func (s *Store) Delete(id string) error {
 	s.m.Lock()
 	f := s.files[id]

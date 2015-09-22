@@ -72,6 +72,8 @@ func insertString(t *testing.T, f FileEntry, text string) string {
 	return expected
 }
 
+// strip out our ad-hoc formatting characters and return what text should
+// have been actually uploaded.
 func expectedText(text string) string {
 	return strings.Map(func(in rune) rune {
 		if in == '|' || in == '^' {
@@ -81,15 +83,22 @@ func expectedText(text string) string {
 	}, text)
 }
 
+// read the given FileEntry, and compare what was read against the expected
+// string. Raises any errors with t.
 func readAndCheck(t *testing.T, f FileEntry, expected string) {
+	t.Logf("readAndCheck: expect %0.10s", expected)
 	r := f.Open()
 	result, _ := ioutil.ReadAll(r)
 	if string(result) != expected {
-		t.Fatalf("Read %s, expected %s", string(result), expected)
+		t.Errorf("Read %s, expected %s", string(result), expected)
 	}
 	fstat := f.Stat()
 	if int64(len(result)) != fstat.Size {
-		t.Fatalf("Got f.Size = %d, expected %d", fstat.Size, len(result))
+		t.Errorf("Got f.Size = %d, expected %d", fstat.Size, len(result))
+	}
+	err := r.Close()
+	if err != nil {
+		t.Errorf("Received error %s", err.Error())
 	}
 }
 

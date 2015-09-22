@@ -6,36 +6,39 @@ import (
 	"github.com/ndlib/bendo/store"
 )
 
-// Wraps a Store and lets items be serialized as JSON instead of being streams.
-// Does not cache the results of serialization/deserialization.
-// By necessity, the result does not match the store.Store interface.
+// A JSONStore wraps a Store and provides a store which serializes its items as
+// JSON instead of using streams. It does not cache the results of
+// serialization/deserialization. Since it deals with interface{} instead of
+// readers and writers, a JSONStore does not match the store.Store interface.
 type JSONStore struct {
 	store.Store
 }
 
+// NewJSON creates a new JSONStore using the provided store for its storage.
 func NewJSON(s store.Store) JSONStore {
 	return JSONStore{s}
 }
 
-func (js JSONStore) Open(key string, val interface{}) error {
+// Open the item having the given key and unserialize it into value.
+func (js JSONStore) Open(key string, value interface{}) error {
 	r, _, err := js.Store.Open(key)
 	if err != nil {
 		return err
 	}
 	defer r.Close()
 	dec := json.NewDecoder(store.NewReader(r))
-	return dec.Decode(val)
+	return dec.Decode(value)
 }
 
-// Synomym for Save().
-func (js JSONStore) Create(key string, val interface{}) error {
-	// this is here to overried js.Store.Create()
-	return js.Save(key, val)
+// Create is a synonym for Save(). (Why do we have this?)
+// This is here to override js.Store.Create()
+func (js JSONStore) Create(key string, value interface{}) error {
+	return js.Save(key, value)
 }
 
 // Save the value val under the given key. It will delete any existing value
 // for the key before doing the save.
-func (js JSONStore) Save(key string, val interface{}) error {
+func (js JSONStore) Save(key string, value interface{}) error {
 	err := js.Delete(key)
 	if err != nil {
 		return err
@@ -46,5 +49,5 @@ func (js JSONStore) Save(key string, val interface{}) error {
 	}
 	defer w.Close()
 	enc := json.NewEncoder(w)
-	return enc.Encode(val)
+	return enc.Encode(value)
 }
