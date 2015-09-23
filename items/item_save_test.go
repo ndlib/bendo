@@ -61,7 +61,7 @@ func TestExtractBlobId(t *testing.T) {
 		{"blob/cdef", 0},
 	}
 	for _, test := range table {
-		b := extractBlobId(test.input)
+		b := extractBlobID(test.input)
 		if b != test.output {
 			t.Errorf("For %s got %v, expected %v",
 				test.input,
