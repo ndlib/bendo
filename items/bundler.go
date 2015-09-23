@@ -51,7 +51,7 @@ func (bw *BundleWriter) CurrentBundle() int {
 	return bw.n - 1
 }
 
-// Next() closes the current bundle, if any, and starts a new bundle file.
+// Next closes the current bundle, if any, and starts a new bundle file.
 func (bw *BundleWriter) Next() error {
 	var err error
 	err = bw.Close()
@@ -67,7 +67,7 @@ func (bw *BundleWriter) Next() error {
 	return nil
 }
 
-// Close() writes out any final metadata and closes the current bundle.
+// Close writes out any final metadata and closes the current bundle.
 func (bw *BundleWriter) Close() error {
 	if bw.zw == nil {
 		return nil
@@ -83,13 +83,16 @@ func (bw *BundleWriter) Close() error {
 }
 
 const (
+	// MB is the number of bytes in one megabyte (we use base 10)
 	MB = 1000000
 
-	// Start a new bundle once the current one becomes larger than this.
+	// IdealBundleSize is a cutoff, and new bundle files will be started
+	// once the current one grows past this. (only checked when starting
+	// as new blob.)
 	IdealBundleSize = 500 * MB
 )
 
-// Write the given blob into the bundle.
+// WriteBlob writes the given blob into the bundle.
 func (bw *BundleWriter) WriteBlob(blob *Blob, r io.Reader) error {
 	if bw.size >= IdealBundleSize || bw.zw == nil {
 		if err := bw.Next(); err != nil {
@@ -140,8 +143,8 @@ func testhash(h hash.Hash, target *[]byte, name string) error {
 	return nil
 }
 
-// Copies all the blobs in the bundle src, except for those in the list, into
-// the current place in the bundle writer.
+// CopyBundleExcept copies all the blobs in the bundle src, except for those in
+// the list, into the current place in the bundle writer.
 func (bw *BundleWriter) CopyBundleExcept(src int, except []BlobID) error {
 	r, err := OpenBundle(bw.store, sugar(bw.item.ID, src))
 	if err != nil {
@@ -163,7 +166,7 @@ func (bw *BundleWriter) CopyBundleExcept(src int, except []BlobID) error {
 			return err
 		}
 		// TODO(dbrower): check for errors
-		blob := bw.item.blobByID(extractBlobId(f.Name))
+		blob := bw.item.blobByID(extractBlobID(f.Name))
 		err = bw.WriteBlob(blob, rc)
 		rc.Close()
 		if err != nil {
@@ -183,7 +186,7 @@ func contains(lst []string, s string) bool {
 }
 
 // from "blob/xxx" return xxx as a BlobID
-func extractBlobId(s string) BlobID {
+func extractBlobID(s string) BlobID {
 	sa := strings.SplitN(s, "/", 2)
 	if len(sa) != 2 || sa[0] != "blob" {
 		return BlobID(0)

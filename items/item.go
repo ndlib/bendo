@@ -10,19 +10,25 @@ import (
 	"github.com/ndlib/bendo/store"
 )
 
+// A Store holds a collection of items
 type Store struct {
 	cache ItemCache
 	S     store.Store // the underlying bundle store
 }
 
+// New creates a new item store which writes its bundles to the given store.Store.
 func New(s store.Store) *Store {
 	return &Store{S: s, cache: nullcache}
 }
 
+// NewWithCache creates a new item store which caches the item metadata in the
+// given cache. (Should be deprecated??)
 func NewWithCache(s store.Store, cache ItemCache) *Store {
 	return &Store{S: s, cache: cache}
 }
 
+// List returns a channel which will contain all of the item ids in the current
+// store.
 func (s *Store) List() <-chan string {
 	out := make(chan string)
 	go func() {
@@ -67,11 +73,12 @@ func desugar(s string) (id string, n int) {
 }
 
 var (
-	ErrTryAgain = errors.New("scanning directories, try again")
-	ErrNoItem   = errors.New("no item, bad item id")
+	// ErrNoItem occurs when an item is requested for which no bundle
+	// files could be found in the backing store.
+	ErrNoItem = errors.New("no item, bad item id")
 )
 
-// Load and return an item's metadata info. This will block until the
+// Item loads and return an item's metadata info. This will block until the
 // item is loaded.
 func (s *Store) Item(id string) (*Item, error) {
 	result := s.cache.Lookup(id)
@@ -121,8 +128,10 @@ func (s *Store) findMaxBundle(id string) int {
 	return max
 }
 
-// Return an io.ReadCloser containing the given blob's contents.
-// Will block until the item and blob are loaded from tape.
+// Blob returns an io.ReadCloser containing the given blob's contents.
+// It will block until the item and blob are loaded from the backing store.
+//
+// TODO: perhaps this should be moved to be a method on an Item*
 func (s *Store) Blob(id string, bid BlobID) (io.ReadCloser, error) {
 	item, err := s.Item(id)
 	if err != nil {
@@ -149,8 +158,9 @@ func (item Item) blobByID(id BlobID) *Blob {
 	return nil
 }
 
-// Given a version identifier and a slot name, returns the corresponding blob
-// identifier. Returns 0 if the vid, slot pair does not resolve to anything.
+// BlobByVersionSlot returns the blob corresponding to the given version
+// identifier and slot name. It returns 0 if the version id and slot pair does
+// not resolve to anything.
 func (item Item) BlobByVersionSlot(vid VersionID, slot string) BlobID {
 	var ver *Version
 	for _, v := range item.Versions {
@@ -175,5 +185,5 @@ type cache struct{}
 
 var nullcache cache
 
-func (_ cache) Lookup(id string) *Item    { return nil }
-func (_ cache) Set(id string, item *Item) {}
+func (c cache) Lookup(id string) *Item    { return nil }
+func (c cache) Set(id string, item *Item) {}

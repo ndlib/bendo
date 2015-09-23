@@ -30,6 +30,7 @@ type Blob struct {
 	DeleteNote string    // optional note for deletion event
 }
 
+// Version contains the metadata on a single item version.
 type Version struct {
 	ID       VersionID
 	SaveDate time.Time
@@ -38,6 +39,7 @@ type Version struct {
 	Slots    map[string]BlobID
 }
 
+// An Item contains the information for a single item.
 type Item struct {
 	ID        string
 	MaxBundle int        // largest bundle id used by this item
@@ -45,6 +47,7 @@ type Item struct {
 	Versions  []*Version // list of versions, sorted by it
 }
 
+// An ItemCache defines the methods a Store will use to interact with a cache.
 type ItemCache interface {
 	// try to return an item record with the given id.
 	// return nil if there is nothing matching in the cache.

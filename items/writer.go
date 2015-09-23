@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+// A Writer implements an io.Writer with extra methods to save a new
+// version of an Item.
 type Writer struct {
 	store   *Store        // need for cache.Set() and Deletes
 	item    *Item         // item we are writing out
@@ -16,9 +18,9 @@ type Writer struct {
 	bdel    []int         // bundle files to delete. generated from del
 }
 
-// Open the item id for writing. This will add a single new version to the item.
-// New blobs can be written. Blobs can also be deleted (but that is not a quick
-// operation).
+// Open opens the item id for writing. This will add a single new version to the
+// item. New blobs can be written. Blobs can also be deleted (but that is not a
+// quick operation).
 //
 // The creator is the name of the agent performing these updates.
 //
@@ -57,7 +59,7 @@ func (s *Store) Open(id string, creator string) (*Writer, error) {
 	return wr, nil
 }
 
-// Close the given Writer. The final metadata is written out, and any
+// Close closes the given Writer. The final metadata is written out, and any
 // blobs marked for deletion are extracted and removed.
 func (wr *Writer) Close() error {
 	// Update item metadata
@@ -116,10 +118,10 @@ func (wr *Writer) doDeletes() error {
 	return nil
 }
 
-// Write the given io.Reader as a new blob. The hashes and size are compared
-// with the data in r and an error is triggered if there is a difference.
-// The hashes and size may be nil and 0 if unknown, in which case they are
-// calculated and stored as needed, and no error is triggered.
+// WriteBlob copies the given io.Reader into the item as a new blob. The hashes
+// and size are compared with the data in r and an error is triggered if there
+// is a difference.  The hashes and size may be nil and 0 if unknown, in which
+// case they are calculated and stored as needed, and no error is triggered.
 //
 // The data in r is written immediately to the bundle file. The id of the new
 // blob is returned. If there is an error writing the blob, the blob is not
@@ -168,11 +170,14 @@ func (p byID) Len() int           { return len(p) }
 func (p byID) Less(i, j int) bool { return p[i].ID < p[j].ID }
 func (p byID) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
-func (wr *Writer) SetNote(s string)    { wr.version.Note = s }
+// SetNote sets the note metadata field for this version.
+func (wr *Writer) SetNote(s string) { wr.version.Note = s }
+
+// SetCreator sets the creator metadata field. (Remove?)
 func (wr *Writer) SetCreator(s string) { wr.version.Creator = s }
 
-// Sets a slot mapping for this version. To explicitly remove a slot, set it
-// to 0. The slot mapping is initialized to that of the previous version.
+// SetSlot adds a slot mapping for this version. To explicitly remove a slot,
+// set it  to 0. The slot mapping is initialized to that of the previous version.
 func (wr *Writer) SetSlot(s string, id BlobID) {
 	if id == 0 {
 		delete(wr.version.Slots, s)
@@ -188,9 +193,10 @@ func (wr *Writer) ClearSlots() {
 	wr.version.Slots = make(map[string]BlobID)
 }
 
-// Mark the given blob for removal from the underlying storage. Blobs will be
-// removed when Close() is called. Removal may take a while since every other
-// blob in the bundle the blob is stored in will be copied into a new bundle.
+// DeleteBlob marks the given blob for removal from the underlying storage.
+// Blobs will be removed when Close() is called. Removal may take a while since
+// every other blob in the bundle the blob is stored in will be copied into a
+// new bundle.
 //
 // This is intended to be used seldomly. What is probably desired is to make a new
 // version with the given slot removed by calling SetSlot with a 0 as a blob id.

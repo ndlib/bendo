@@ -1,6 +1,5 @@
 /*
-
-Bendo provides routines to manulipate and serialize items.
+Package items provides routines to manipulate and serialize items.
 An item is defined as a collection of blobs and versions.
 Blobs are immutable binary blocks of data. Blobs may be added to an item over
 time, and may be deleted, but they cannot be otherwise altered once added.
@@ -15,11 +14,11 @@ from more than one item.
 
 A Store provides the logic to do the serialization and deserialization of items
 to bundles. It wraps a store.Store interface. It will block. It is possible to
-add a cache to store item metadata. The data retreival paths of a store are
+add a cache to store item metadata. The data retrieval paths of a store are
 safe to be accessed from multiple goroutines. However, an open Writer for any
 given item should only be used by one gouroutine at a time.
 
-Both blobs and versions are numbered sequentually starting from 1.
+Both blobs and versions are numbered sequentially starting from 1.
 
 An item's metadata and blobs are grouped into bundles, which are zip files.
 Each bundle contains the complete up-to-date metadata information on an item,
@@ -30,6 +29,5 @@ contain the most up-to-date information on the item, including the (correct!)
 blob to bundle mapping.
 
 There is no relationship between a bundle number and the versions of an item.
-
 */
 package items
