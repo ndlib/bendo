@@ -12,8 +12,10 @@ import (
 	"github.com/ndlib/bendo/store"
 )
 
-// Given a store, create a new registry.
-// Use the Load() option to reload the metadata from the store.
+// New creates a new transaction store using the given a store to save all the
+// associated items.
+// Make sure to call Load() on the returned structure to reload the metadata
+// from the underlying store.
 func New(s store.Store) *Store {
 	return &Store{
 		TxStore: fragment.NewJSON(store.NewWithPrefix(s, "tx:")),
@@ -21,13 +23,14 @@ func New(s store.Store) *Store {
 	}
 }
 
-// Tracks item commit transactions.
+// A Store tracks item transactions.
 type Store struct {
 	TxStore fragment.JSONStore
 	m       sync.RWMutex  // protects txs
 	txs     map[string]*T // cache of transaction ID to transaction
 }
 
+// Load reads the underlying store and caches an inventory into memory.
 func (r *Store) Load() error {
 	r.m.Lock()
 	defer r.m.Unlock()
@@ -43,7 +46,7 @@ func (r *Store) Load() error {
 	return nil
 }
 
-// Return a list of all the stored transactions.
+// List returns an array containing the ids of all the stored transactions.
 func (r *Store) List() []string {
 	r.m.RLock()
 	defer r.m.RUnlock()
@@ -55,11 +58,15 @@ func (r *Store) List() []string {
 }
 
 var (
+	// ErrExistingTransaction occurs when trying to start a transaction on
+	// an item already having a pending transaction.
 	ErrExistingTransaction = errors.New("existing transaction for that item")
-	ErrBadCommand          = errors.New("Bad command")
+
+	// ErrBadCommand means a bad command was passed to the ingest routine.
+	ErrBadCommand = errors.New("Bad command")
 )
 
-// Create a new transaction to update itemid. There can only be at most one
+// Create a new transaction to update itemid. There can be at most one
 // transaction per itemid.
 func (r *Store) Create(itemid string) (*T, error) {
 	r.m.Lock()
@@ -105,6 +112,8 @@ func randomid() string {
 	return strconv.FormatInt(int64(n), 36)
 }
 
+// Lookup the given transaction identifier and return a pointer to the
+// transaction. Returns nil if there is no transaction with that id.
 func (r *Store) Lookup(txid string) *T {
 	r.m.RLock()
 	defer r.m.RUnlock()
@@ -143,25 +152,29 @@ type T struct {
 	BlobMap  map[string]int      // tracks the blob id we used for uploaded files
 }
 
-// The status of a transaction.
+// The Status of a transaction.
 type Status int
 
+// The possible status states for the processing of a transaction.
 const (
-	StatusUnknown  Status = iota
-	StatusOpen            // transaction is being modified by user
-	StatusWaiting         // transaction has been submitted to be committed
-	StatusChecking        // files are being checksummed and verified
-	StatusIngest          // files are being written into bundles
-	StatusFinished        // transaction is over, successful
-	StatusError           // transaction had an error
+	StatusUnknown  Status = iota // zero status value
+	StatusOpen                   // transaction is being modified by user
+	StatusWaiting                // transaction has been submitted to be committed
+	StatusChecking               // files are being checksummed and verified
+	StatusIngest                 // files are being written into bundles
+	StatusFinished               // transaction is over, successful
+	StatusError                  // transaction had an error
 )
 
-//go:generate stringer -type=status
+//go:generate stringer -type=Status
 
+// MarshalJSON lets statuses be exported as a string when json encoding.
 func (s Status) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + s.String() + `"`), nil
 }
 
+// AddCommandList changes the command list to process when committing this
+// transaction to the one given.
 func (tx *T) AddCommandList(cmds [][]string) error {
 	// first make sure commands are okay
 	for _, cmd := range cmds {
@@ -179,6 +192,7 @@ func (tx *T) AddCommandList(cmds [][]string) error {
 	return nil
 }
 
+// SetStatus updates the status of this transaction to s.
 func (tx *T) SetStatus(s Status) {
 	tx.m.Lock()
 	defer tx.m.Unlock()
@@ -232,7 +246,8 @@ func (tx *T) ReferencedFiles() []string {
 	return result
 }
 
-// Verify the checksums of the files to be added in this transaction.
+// VerifyFiles verifies the checksums of all the files being added by this
+// transaction.
 // Pass in the fragment store containing the uploaded files. Any negative
 // results are returned in tx.Err.
 func (tx *T) VerifyFiles(files *fragment.Store) {
@@ -248,7 +263,8 @@ func (tx *T) VerifyFiles(files *fragment.Store) {
 	}
 }
 
-// Append the given error string to tx. Aquires the write lock on tx.
+// AppendError appends the given error string to this transaction.
+// It will acquire the write lock on tx.
 func (tx *T) AppendError(e string) {
 	tx.m.Lock()
 	tx.Err = append(tx.Err, e)
@@ -272,9 +288,9 @@ func (tx *T) save() {
 // ]
 type command []string
 
-// Execute the a command using the given item writer and transaction as
-// necessary. Assumes the write mutex on tx is held on entry. Execute will
-// give up and then reaquire it after lengthy processing steps.
+// Execute this command on the given item writer and transaction.
+// Assumes the write mutex on tx is held on entry. Execute will
+// give up and then reacquire the write mutex on tx during lengthy processing steps.
 func (c command) Execute(iw *items.Writer, tx *T) {
 	if !c.WellFormed() {
 		tx.Err = append(tx.Err, "Command is not well formed")
@@ -336,10 +352,12 @@ func (c command) Execute(iw *items.Writer, tx *T) {
 	}
 }
 
-// Is the given command well formed? This is a weaker condition than
-// being semantically meaningful. For example, the slot command may refer
-// to a blob which doesn't exist. WellFormed() does not attempt to figure
-// that out.
+// WellFormed checks this command for well-formed-ness. It returns true if
+// the command is well formed, false otherwise.
+// Wellformedness is a weaker condition than being semantically meaningful.
+// For example, the slot command may refer to a blob which doesn't exist,
+// in which case the command is wellformed but semantically invalid.
+// WellFormed() does not attempt to figure out semantic validity.
 func (c command) WellFormed() bool {
 	cmd := []string(c)
 	if len(cmd) == 0 {

@@ -1,8 +1,9 @@
 /*
-Routines to maintain transactions, providing support to the server package.
-These are the transactions from the viewpoint of the web UI. Transactions
-handle the details of storing and manulipulating the item uploads for bendo.
-Eventually these transactions are turned into a sequence of calls to an
+Package transaction contains higher level logic used for ingesting content.
+It is intended to support the server package.
+A transaction here is the same as a transaction from the viewpoint of the web UI.
+Transactions handle the details of storing and manipulating the item uploads for
+Bendo. Eventually these transactions are turned into a sequence of calls to an
 item.Writer object.
 
 This package builds on the fragment package. A transaction is represented by a
