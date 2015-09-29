@@ -120,6 +120,25 @@ func (r *Reader) loadtagfile(name string) error {
 	return scanner.Err()
 }
 
+// Files returns a list of the payload files inside this bag (as opposed to
+// the tag and manifest files). The initial "data/" prefix is removed from
+// the file names.
+//
+// The result is recalculated each time the function is called. For large bags
+// generating the result could take a while.
+func (r *Reader) Files() []string {
+	var result []string
+	var prefix = r.t.dirname + "data/"
+	for _, f := range r.z.File {
+		name := f.Name
+		xname := strings.TrimPrefix(name, prefix)
+		if len(name) != len(xname) {
+			result = append(result, xname)
+		}
+	}
+	return result
+}
+
 // Verify computes the checksum of each file in this bag, and checks it against
 // the manifest files. Both payload ("data/") and tag files are checked.
 // The file list is read from manifest files for MD5, SHA1, SHA256, and SHA512

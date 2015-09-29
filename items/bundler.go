@@ -156,17 +156,17 @@ func (bw *BundleWriter) CopyBundleExcept(src int, except []BlobID) error {
 	for i, id := range except {
 		badnames[i+1] = fmt.Sprintf("blob/%d", id)
 	}
-	for _, f := range r.File {
-		if contains(badnames, f.Name) {
+	for _, fname := range r.Files() {
+		if contains(badnames, fname) {
 			continue
 		}
 		var rc io.ReadCloser
-		rc, err = f.Open()
+		rc, err = r.Open(fname)
 		if err != nil {
 			return err
 		}
 		// TODO(dbrower): check for errors
-		blob := bw.item.blobByID(extractBlobID(f.Name))
+		blob := bw.item.blobByID(extractBlobID(fname))
 		err = bw.WriteBlob(blob, rc)
 		rc.Close()
 		if err != nil {

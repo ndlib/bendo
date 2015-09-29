@@ -1,17 +1,21 @@
 package items
 
 import (
-	"archive/zip"
 	"errors"
 	"io"
+	"strings"
 
+	"github.com/ndlib/bendo/bagit"
 	"github.com/ndlib/bendo/store"
 )
 
+// TODO(dbrower): This file could use some cleanup/rethinking after replacing
+// the zip file code with the bagit code. Can the code be reduced or removed?
+
 // A ZipreaderCloser is a zip.Reader which will also close the underlying file.
 type ZipreaderCloser struct {
-	f io.Closer
-	*zip.Reader
+	f             io.Closer // the underlying file
+	*bagit.Reader           // the zip reader
 }
 
 // Close this ZipreaderCloser.
@@ -27,7 +31,7 @@ func OpenBundle(s store.Store, key string) (*ZipreaderCloser, error) {
 		return nil, err
 	}
 	var result *ZipreaderCloser
-	r, err := zip.NewReader(stream, size)
+	r, err := bagit.NewReader(stream, size)
 	if err == nil {
 		result = &ZipreaderCloser{
 			Reader: r,
@@ -63,20 +67,14 @@ func OpenBundleStream(s store.Store, key, sname string) (io.ReadCloser, error) {
 		return nil, err
 	}
 	var result *parentReadCloser
-	err = ErrNotFound
-	for _, f := range r.File {
-		if f.Name != sname {
-			continue
+	rc, err := r.Open(sname)
+	if err == nil {
+		result = &parentReadCloser{
+			parent:     r,
+			ReadCloser: rc,
 		}
-		var rc io.ReadCloser
-		rc, err = f.Open()
-		if err == nil {
-			result = &parentReadCloser{
-				parent:     r,
-				ReadCloser: rc,
-			}
-		}
-		break
+	} else if err == bagit.ErrNotFound {
+		err = ErrNotFound
 	}
 	return result, err
 }
@@ -85,8 +83,8 @@ func OpenBundleStream(s store.Store, key, sname string) (io.ReadCloser, error) {
 // holding the zip file's complete contents.
 // Some utility methods are added to make our life easier.
 type Zipwriter struct {
-	f           io.WriteCloser // the underlying bundle file, nil if no file is currently open
-	*zip.Writer                // the zip interface over the bundle file
+	f             io.WriteCloser // the underlying bundle file, nil if no file is currently open
+	*bagit.Writer                // the zip interface over the bundle file
 }
 
 // OpenZipWriter creates a new bundle in the given store using the given id and
@@ -98,7 +96,7 @@ func OpenZipWriter(s store.Store, id string, n int) (*Zipwriter, error) {
 	}
 	return &Zipwriter{
 		f:      f,
-		Writer: zip.NewWriter(f),
+		Writer: bagit.NewWriter(f, strings.TrimSuffix(id, ".zip")),
 	}, nil
 }
 
@@ -112,14 +110,10 @@ func (zw *Zipwriter) Close() error {
 	return err
 }
 
-// MakeStream returns a writer which saves into a file with the given name
+// MakeStream returns a writer which saves a file with the given name
 // inside this zip file. The writer does not need to be closed when finished.
 // Only one stream can be active at a time, and call MakeStream again to start
 // the next stream.
 func (zw *Zipwriter) MakeStream(name string) (io.Writer, error) {
-	header := zip.FileHeader{
-		Name:   name,
-		Method: zip.Store,
-	}
-	return zw.CreateHeader(&header)
+	return zw.Create(name)
 }
