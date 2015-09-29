@@ -50,6 +50,7 @@ func TestTransaction1(t *testing.T) {
 
 	// tx is processed async to the web frontend.
 	// maybe we should see if the transaction completes first?
+	time.Sleep(10 * time.Millisecond) // sleep a squinch
 
 	checkStatus(t, "GET", "/item/"+itemid, 200)
 	checkStatus(t, "GET", "/blob/"+itemid+"/2", 404)
