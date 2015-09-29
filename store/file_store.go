@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 )
 
 // FileSystem implements the simple file system based store. It tries to
@@ -30,6 +31,9 @@ var (
 
 	// ErrKeyExists indicates an attempt to create a key which already exists
 	ErrKeyExists = errors.New("Key already exists")
+
+	// ErrKeyContainsSlash means the key provided contains a forward slash '/'
+	ErrKeyContainsSlash = errors.New("Key contains forward slash")
 )
 
 // NewFileSystem creates a new FileSystem store based at the given root path.
@@ -106,6 +110,9 @@ func (s *FileSystem) ListPrefix(prefix string) ([]string, error) {
 
 // Open returns a reader for the given object along with its size.
 func (s *FileSystem) Open(key string) (ReadAtCloser, int64, error) {
+	if strings.Contains(key, "/") {
+		return nil, 0, ErrKeyContainsSlash
+	}
 	fname := filepath.Join(s.root, itemSubdir(key), key)
 	f, err := os.Open(fname)
 	if err != nil {
@@ -122,6 +129,9 @@ func (s *FileSystem) Open(key string) (ReadAtCloser, int64, error) {
 // Create creates a new item with the given key, and a writer to allow for
 // saving data into the new item.
 func (s *FileSystem) Create(key string) (io.WriteCloser, error) {
+	if strings.Contains(key, "/") {
+		return nil, ErrKeyContainsSlash
+	}
 	var w io.WriteCloser
 	// first set up the eventual home dir of this file
 	target, err := s.setupSubDir(itemSubdir(key), key)
@@ -176,6 +186,9 @@ func (w *moveCloser) Close() error {
 // Delete the given key from the store. It is not an error if the key doesn't
 // exist.
 func (s *FileSystem) Delete(key string) error {
+	if strings.Contains(key, "/") {
+		return ErrKeyContainsSlash
+	}
 	fname1 := filepath.Join(s.root, itemSubdir(key), key)
 	err := os.Remove(fname1)
 	// don't report a missing file as an error
