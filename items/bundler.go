@@ -2,11 +2,8 @@ package items
 
 import (
 	"bytes"
-	"crypto/md5"
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"hash"
 	"io"
 	"strconv"
 	"strings"
@@ -103,9 +100,6 @@ func (bw *BundleWriter) WriteBlob(blob *Blob, r io.Reader) error {
 	if err != nil {
 		return err
 	}
-	md5 := md5.New()
-	sha256 := sha256.New()
-	w = io.MultiWriter(w, md5, sha256)
 	size, err := io.Copy(w, r)
 	bw.size += size
 	if err != nil {
@@ -123,21 +117,21 @@ func (bw *BundleWriter) WriteBlob(blob *Blob, r io.Reader) error {
 			size,
 			blob.Size)
 	}
-	err = testhash(md5, &blob.MD5, bw.item.ID)
+	checksums := bw.zw.Checksum()
+	err = testhash(checksums.MD5, &blob.MD5, bw.item.ID)
 	if err == nil {
-		err = testhash(sha256, &blob.SHA256, bw.item.ID)
+		err = testhash(checksums.SHA256, &blob.SHA256, bw.item.ID)
 	}
 	return err
 }
 
-func testhash(h hash.Hash, target *[]byte, name string) error {
-	computed := h.Sum(nil)
+func testhash(h []byte, target *[]byte, name string) error {
 	if *target == nil {
-		*target = computed
-	} else if bytes.Compare(*target, computed) != 0 {
+		*target = h
+	} else if bytes.Compare(*target, h) != 0 {
 		return fmt.Errorf("commit (%s), got %s, expected %s",
 			name,
-			hex.EncodeToString(computed),
+			hex.EncodeToString(h),
 			hex.EncodeToString(*target))
 	}
 	return nil

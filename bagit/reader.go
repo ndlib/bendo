@@ -144,7 +144,7 @@ func (r *Reader) Files() []string {
 // The file list is read from manifest files for MD5, SHA1, SHA256, and SHA512
 // hashes, although only MD5 and SHA256 hashes are actually computed and verified.
 // Files missing an entry in a manifest file, or manifest entires missing a
-// file will cause a verification error.
+// corresponding file will cause a verification error.
 func (r *Reader) Verify() {
 	r.loadManifests()
 }
