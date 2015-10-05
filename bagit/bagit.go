@@ -1,21 +1,19 @@
-// Package bagit implements the enough of the BagIt specification to read and
-// save the BagIt files used by Bendo. It is tailored to use the Store interface
-// instead of directly using the file system. It creates zip files which do
-// not use compression. It also only supports MD5 and SHA256 checksums for
+// Package bagit implements the enough of the BagIt specification to save and
+// read the BagIt files used by Bendo. It creates zip files which do
+// not use compression. It only supports MD5 and SHA256 checksums for
 // the manifest file.
 //
-// Specific items not implemented are fetch files and holely bags. It doesn't
-// preserve the order of the tags in the bag-info.txt file. It also doesn't
-// preserve multiple occurrences of tags in the bag-info.txt file.
+// Specific items not implemented from the BagIt specification are fetch files
+// and holely bags. It also doesn't preserve the order of the tags
+// nor multiple occurrences of tags in the bag-info.txt file.
 //
 // This package allows for reading a bag, verifying a bag, and creating new
 // bags. It does not provide any services for updating a bag.
 // Checksums are generated for each file when a bag is created.
-// After that, checksums are only calculated when a bag is (explicitly) verified.
+// After that, checksums are only calculated when a bag is explicitly verified.
 // In particular, checksums are not calculated when reading content from a bag.
 //
-// The interface is designed to mirror the archive/zip interface as much as
-// possible.
+// The interface is designed to somewhat mirror the archive/zip interface.
 //
 // The BagIt spec can be found at https://tools.ietf.org/html/draft-kunze-bagit-11.
 package bagit

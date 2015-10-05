@@ -7,6 +7,8 @@ import (
 	"errors"
 	"io"
 	"strings"
+
+	"github.com/ndlib/bendo/util"
 )
 
 // Reader allows for reading an existing Bag file (in ZIP format).
@@ -24,23 +26,27 @@ type Reader struct {
 // NewReader creates a bag reader which wraps r. It expects a ZIP datastream,
 // and uses size to locate the zip manifest block, which is at the end.
 //
-// Closing a reader does not close the underlying ReaderAt.
+// Closing a reader does not close the wrapped ReaderAt.
 func NewReader(r io.ReaderAt, size int64) (*Reader, error) {
-	var result *Reader
 	in, err := zip.NewReader(r, size)
-	if err == nil {
-		result = &Reader{
-			z: in,
-			t: New(),
-		}
-		if len(result.z.File) > 0 {
-			paths := strings.SplitN(result.z.File[0].Name, "/", 2)
-			if len(paths) == 2 {
-				result.t.dirname = paths[0] + "/"
-			}
+	if err != nil {
+		return nil, err
+	}
+	result := &Reader{
+		z: in,
+		t: New(),
+	}
+	// are there any files inside the zip?
+	if len(in.File) > 0 {
+		// according to bagit spec, EVERYTHING in the zip
+		// should be inside the same directory, so take the first
+		// file inside and figure out its top-most directory name.
+		paths := strings.SplitN(in.File[0].Name, "/", 2)
+		if len(paths) == 2 {
+			result.t.dirname = paths[0] + "/"
 		}
 	}
-	return result, err
+	return result, nil
 }
 
 func (c *Checksum) setmd5(b []byte)    { c.MD5 = b }
@@ -91,8 +97,10 @@ func (r *Reader) Tags() map[string]string {
 
 func (r *Reader) loadtagfile(name string) error {
 	var previousKey string
-	// TODO(dbrower): handle errors on open?
-	rc, _ := r.open(name)
+	rc, err := r.open(name)
+	if err != nil {
+		return err
+	}
 	defer rc.Close()
 	scanner := bufio.NewScanner(rc)
 	for scanner.Scan() {
@@ -104,7 +112,7 @@ func (r *Reader) loadtagfile(name string) error {
 		if line[0] == ' ' || line[0] == '\t' {
 			if previousKey != "" {
 				r.t.tags[previousKey] = r.t.tags[previousKey] +
-					strings.TrimSpace(line)
+					" " + strings.TrimSpace(line)
 			}
 			continue
 		}
@@ -114,7 +122,7 @@ func (r *Reader) loadtagfile(name string) error {
 			// no colon?
 			continue
 		}
-		previousKey = pieces[0]
+		previousKey = strings.TrimSpace(pieces[0])
 		r.t.tags[previousKey] = strings.TrimSpace(pieces[1])
 	}
 	return scanner.Err()
@@ -139,39 +147,140 @@ func (r *Reader) Files() []string {
 	return result
 }
 
+// Possible verification errors.
+var (
+	ErrExtraFile   = errors.New("bagit: extra file")
+	ErrMissingFile = errors.New("bagit: missing file")
+	ErrChecksum    = errors.New("bagit: checksum mismatch")
+)
+
+type BagError struct {
+	Err  error
+	File string
+}
+
+func (err BagError) Error() string {
+	return err.Err.Error() + " " + err.File
+}
+
 // Verify computes the checksum of each file in this bag, and checks it against
 // the manifest files. Both payload ("data/") and tag files are checked.
 // The file list is read from manifest files for MD5, SHA1, SHA256, and SHA512
 // hashes, although only MD5 and SHA256 hashes are actually computed and verified.
 // Files missing an entry in a manifest file, or manifest entires missing a
 // corresponding file will cause a verification error.
-func (r *Reader) Verify() {
-	r.loadManifests()
+func (r *Reader) Verify() error {
+	err := r.loadManifests()
+	if err != nil {
+		return err
+	}
+
+	// Check the quick stuff first, and do the time consuming checksum
+	// verification last.
+	var dataprefix = r.t.dirname + "data/"
+	var npayload int
+
+	// Does every payload ("data/") file in this zip appear in our manifest
+	// map? tag files may also appear in the map, we don't care yet.
+	//
+	// We need to do some pathname manipulation since the zip directory
+	// names have the form "bagname/data/blah/blah" but the manifest
+	// has names of the form "data/blah/blah".
+	for _, f := range r.z.File {
+		if !strings.HasPrefix(f.Name, dataprefix) {
+			continue
+		}
+		npayload++
+		xname := strings.TrimPrefix(f.Name, r.t.dirname)
+		if r.t.manifest[xname] == nil {
+			return BagError{Err: ErrExtraFile, File: xname}
+		}
+	}
+
+	// Does every file listed in the manifest exist in the zip file?
+	//
+	// The loop above ensures npayload <= nmanifest.
+	// so if nmanifest != npayload, it must be because it contains files
+	// not present in the zip file. The downside of this method is we do
+	// not know the name of the missing file.
+	var nmanifest int
+	for k := range r.t.manifest {
+		if strings.HasPrefix(k, "data/") {
+			nmanifest++
+		}
+	}
+	if npayload != nmanifest {
+		return BagError{Err: ErrMissingFile}
+	}
+
+	// Do all the checksums match?
+	// Since t.manifest includes both payload and data files, we will
+	// verify more than nmanifest files here.
+	for _, f := range r.z.File {
+		xname := strings.TrimPrefix(f.Name, r.t.dirname)
+		checksum := r.t.manifest[xname]
+		if checksum == nil {
+			// this file is not in the manifest. We don't care
+			// since we have already verified all the payload
+			// files are accounted for.
+			continue
+		}
+		in, err := f.Open()
+		if err != nil {
+			return err
+		}
+		ok, err := util.VerifyStreamHash(in, checksum.MD5, checksum.SHA256)
+		_ = in.Close()
+		if err != nil {
+			return err
+		} else if !ok {
+			// checksum error!
+			return BagError{Err: ErrChecksum, File: xname}
+		}
+	}
+
+	return nil
 }
 
-func (r *Reader) loadManifests() {
-	// TODO(dbrower): check for errors
-	r.loadManifestFile("manifest-md5", (*Checksum).setmd5)
-	r.loadManifestFile("manifest-sha1", (*Checksum).setsha1)
-	r.loadManifestFile("manifest-sha256", (*Checksum).setsha256)
-	r.loadManifestFile("manifest-sha512", (*Checksum).setsha512)
+type chksumSetter func(*Checksum, []byte)
 
-	r.loadManifestFile("tagmanifest-md5", (*Checksum).setmd5)
+func (r *Reader) loadManifests() error {
+	var filelist = []struct {
+		filename string
+		setfunc  chksumSetter
+	}{
+		{"manifest-md5.txt", (*Checksum).setmd5},
+		{"manifest-sha1.txt", (*Checksum).setsha1},
+		{"manifest-sha256.txt", (*Checksum).setsha256},
+		{"manifest-sha512.txt", (*Checksum).setsha512},
+		{"tagmanifest-md5.txt", (*Checksum).setmd5},
+	}
+	for _, entry := range filelist {
+		err := r.loadManifestFile(entry.filename, entry.setfunc)
+		if err != nil && err != ErrNotFound {
+			return err
+		}
+	}
+	return nil
 }
 
-func (r *Reader) loadManifestFile(name string, fset func(*Checksum, []byte)) error {
-	// TODO(dbrower): handle errors on open?
-	rc, _ := r.open(name)
+func (r *Reader) loadManifestFile(name string, fset chksumSetter) error {
+	rc, err := r.open(name)
+	if err != nil {
+		return err
+	}
 	defer rc.Close()
 	scanner := bufio.NewScanner(rc)
 	for scanner.Scan() {
+		// each checksum line should look like
+		// HEXDIGEST  a/file/name
 		line := scanner.Text()
 		if len(line) == 0 {
 			continue
 		}
 		pieces := strings.Fields(line)
 		if len(pieces) != 2 {
-			continue
+			return err
 		}
 		fname := pieces[1]
 		chksm := r.t.manifest[fname]
@@ -181,7 +290,7 @@ func (r *Reader) loadManifestFile(name string, fset func(*Checksum, []byte)) err
 		}
 		h, err := hex.DecodeString(pieces[0])
 		if err != nil {
-			continue
+			return err
 		}
 		fset(chksm, h)
 	}

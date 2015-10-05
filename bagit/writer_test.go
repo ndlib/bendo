@@ -38,17 +38,29 @@ func TestHumansize(t *testing.T) {
 func TestRoundtrip(t *testing.T) {
 	// first save a bag
 	mstore := store.NewMemory()
-	f, _ := mstore.Create("test-bag.zip")
+	f, err := mstore.Create("test-bag.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
 	w := NewWriter(f, "zzz-test-bag")
 	w.SetTag("Contact-Name", "Nobody")
-	out, _ := w.Create("hello")
+	out, err := w.Create("hello")
+	if err != nil {
+		t.Fatal(err)
+	}
 	out.Write([]byte("hello there"))
 	w.Close()
 	f.Close()
 
 	// now read it and see if it matches what was written
-	f2, size, _ := mstore.Open("test-bag.zip")
-	r, _ := NewReader(f2, size)
+	f2, size, err := mstore.Open("test-bag.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewReader(f2, size)
+	if err != nil {
+		t.Fatal(err)
+	}
 	contactName := r.Tags()["Contact-Name"]
 	if contactName != "Nobody" {
 		t.Errorf("Read contact name %s, expected %s\n", contactName, "Nobody")
@@ -57,13 +69,34 @@ func TestRoundtrip(t *testing.T) {
 	if version != Version {
 		t.Errorf("Read version %s, expected %s\n", version, Version)
 	}
-	in, _ := r.Open("hello")
+
+	// does the hello payload file match?
+	in, err := r.Open("hello")
+	if err != nil {
+		t.Fatal(err)
+	}
 	buf := new(bytes.Buffer)
-	size, _ = buf.ReadFrom(in)
+	size, err = buf.ReadFrom(in)
+	if err != nil {
+		t.Error(err)
+	}
 	in.Close()
 	data := buf.String()
 	if data != "hello there" {
 		t.Errorf("Read %s, expected %s\n", data, "hello there")
 	}
-	f.Close()
+
+	// does the bag verification work?
+	err = r.Verify()
+	if err != nil {
+		t.Errorf("Valid returned %s\n", err.Error())
+	}
+
+	// does the file listing work?
+	filelist := r.Files()
+	if len(filelist) != 1 || filelist[0] != "hello" {
+		t.Errorf("File list is %v, expected [hello]", filelist)
+	}
+
+	f2.Close()
 }

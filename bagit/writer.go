@@ -15,7 +15,7 @@ import (
 // relevant tag files and manifests will be written out.
 type Writer struct {
 	z        *zip.Writer      // the underlying zip writer
-	t        Bag              // out bag structure to track the files
+	t        Bag              // our bag structure to track the files
 	checksum *Checksum        // pointer to current checksum
 	hw       *util.HashWriter // current hash writer
 	ns       int              // number of "streams" (i.e. payload files)
@@ -42,7 +42,6 @@ func (w *Writer) Close() error {
 	w.t.tags["Bag-Size"] = humansize(w.sz)
 
 	w.writeTags()
-	w.Checksum() // ensure any pending checksum is entered into the manifest
 	w.writeManifests()
 	return w.z.Close()
 }
@@ -67,7 +66,7 @@ func (w *Writer) Create(name string) (io.Writer, error) {
 
 // create is for internal use. It allows non-payload files to be written.
 func (w *Writer) create(name string) (io.Writer, error) {
-	// save checksums if there is an active writer
+	// save checksums in case there is an active writer
 	_ = w.Checksum()
 
 	ck := new(Checksum)
@@ -110,6 +109,9 @@ func (w *Writer) writeTags() {
 }
 
 func (w *Writer) writeManifests() {
+	// ensure any pending checksum is saved
+	_ = w.Checksum()
+
 	w.manifest(false, "md5", Checksum.md5)
 	w.manifest(false, "sha1", Checksum.sha1)
 	w.manifest(false, "sha256", Checksum.sha256)
@@ -158,6 +160,7 @@ func (w *Writer) manifest(istag bool, name string, hash func(Checksum) []byte) {
 	}
 }
 
+// countWriter is an io.Writer that counts the number of bytes written to it.
 type countWriter struct {
 	w     io.Writer
 	count *int64
