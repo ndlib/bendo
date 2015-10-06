@@ -21,8 +21,8 @@ func main() {
 
 	fmt.Printf("Using storage dir %s\n", *storeDir)
 	fmt.Printf("Using upload dir %s\n", *uploadDir)
-	fmt.Printf("Using port number %s \n", portNumber )
-	fmt.Printf("Using pprof port number %s \n", pProfPort )
+	fmt.Printf("Using port number %s \n", *portNumber )
+	fmt.Printf("Using pprof port number %s \n", *pProfPort )
 	os.MkdirAll(*uploadDir, 0664)
 	server.Items = items.New(store.NewFileSystem(*storeDir))
 	server.TxStore = transaction.New(store.NewFileSystem(*uploadDir))
