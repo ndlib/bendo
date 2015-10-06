@@ -13,12 +13,15 @@ import (
 	"github.com/ndlib/bendo/fragment"
 	"github.com/ndlib/bendo/items"
 	"github.com/ndlib/bendo/transaction"
+	"strings"
 )
 
 var (
 	Items     *items.Store
 	TxStore   *transaction.Store
 	FileStore *fragment.Store
+	PortNumber string = "14000"
+	PProfPort string = "14001"
 )
 
 var (
@@ -67,10 +70,10 @@ func Run() {
 
 	// for pprof
 	go func() {
-		log.Println(http.ListenAndServe("localhost:14001", nil))
+		log.Println(http.ListenAndServe(strings.Join("localhost:",PProfPort), nil))
 	}()
-	log.Println("Listening on :14000")
-	http.ListenAndServe(":14000", AddRoutes())
+	log.Println(strings.Join("Listening on :",PortNumber)
+	http.ListenAndServe(strings.Join(":",PortNumber), AddRoutes())
 }
 
 func initCommitQueue() {
