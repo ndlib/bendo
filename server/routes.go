@@ -19,8 +19,8 @@ var (
 	Items     *items.Store
 	TxStore   *transaction.Store
 	FileStore *fragment.Store
-	PortNumber string = ":14000"
-	PProfPort string = ":14001"
+	PortNumber *string
+	PProfPort *string
 )
 
 var (
@@ -69,10 +69,10 @@ func Run() {
 
 	// for pprof
 	go func() {
-		log.Println(http.ListenAndServe("localhost" + PProfPort), nil))
+		log.Println(http.ListenAndServe("localhost" + *PProfPort, nil))
 	}()
 	log.Println("Listening on ",PortNumber)
-	http.ListenAndServe(PortNumber, AddRoutes())
+	http.ListenAndServe(*PortNumber, AddRoutes())
 }
 
 func initCommitQueue() {
