@@ -15,8 +15,8 @@ import (
 func main() {
 	var storeDir = flag.String("storage", ".", "location of the storage directory")
 	var uploadDir = flag.String("upload", "upload", "location of the upload directory")
-	var portNumber = flag.String("port","14000","Port Number to Use")
-	var pProfPort = flag.String("port","14001","PPROF Port Number to Use")
+	var portNumber = flag.String("port",":14000","Port Number to Use")
+	var pProfPort = flag.String("port",":14001","PPROF Port Number to Use")
 	flag.Parse()
 
 	fmt.Printf("Using storage dir %s\n", *storeDir)
