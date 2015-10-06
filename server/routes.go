@@ -72,7 +72,7 @@ func Run() {
 	go func() {
 		log.Println(http.ListenAndServe(strings.Join("localhost:",PProfPort), nil))
 	}()
-	log.Println(strings.Join("Listening on :",PortNumber)
+	log.Println(strings.Join("Listening on :",PortNumber))
 	http.ListenAndServe(strings.Join(":",PortNumber), AddRoutes())
 }
 
