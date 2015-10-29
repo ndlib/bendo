@@ -209,3 +209,55 @@ func mapsEqual(a, b map[string]string) bool {
 	}
 	return true
 }
+
+func TestChecksum(t *testing.T) {
+	var table = []struct {
+		name     string
+		contents zdata
+		ok       bool
+	}{
+		// payload files split between two manifests
+		{"Checksum-1", zdata{
+			"data/hello1":         "hello",
+			"data/hello2":         "hello",
+			"manifest-md5.txt":    "5d41402abc4b2a76b9719d911017c592 data/hello1\n",
+			"manifest-sha256.txt": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824 data/hello2\n",
+			"tagmanifest-md5.txt": "49ce66cef8d32ec33eca290c2c731185 manifest-md5.txt\nbd41f3fc8aa771760265275d3576a30a manifest-sha256.txt\n",
+		}, true},
+	}
+
+	mstore := store.NewMemory()
+	for _, tab := range table {
+		t.Logf("Doing %s", tab.name)
+		f, err := mstore.Create(tab.name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		makezipfile(f, tab.contents)
+		f.Close()
+
+		f2, size, err := mstore.Open(tab.name)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		r, err := NewReader(f2, size)
+		if err != nil {
+			t.Error(err)
+		}
+
+		if ( r.Checksum("data/hello1") == nil ) {
+			t.Error("Checksum for file 'data/hello1' returns nil")
+                }
+
+		if ( r.Checksum("data/hello2") == nil ) {
+			t.Error("Checksum for file 'data/hello2' returns nil")
+                }
+
+		if ( r.Checksum("data/hello3") != nil ) {
+			t.Error("Checksum for nonexistent file 'data/hello3' returns value")
+                }
+
+		f2.Close()
+	}
+}

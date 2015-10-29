@@ -128,6 +128,23 @@ func (r *Reader) loadtagfile(name string) error {
 	return scanner.Err()
 }
 
+// Checksum returns a pointer to the Checksum struct of the given filername
+// culled from the manifests map
+// If one does not exist for the given file, it returns nil
+
+func (r *Reader) Checksum(name string) *Checksum {
+
+     // load the manifest files in from whereever
+
+     err := r.loadManifests()
+
+     if err != nil {
+                return nil // a null *Checksum
+     }
+
+      return r.t.manifest[name]
+}
+
 // Files returns a list of the payload files inside this bag (as opposed to
 // the tag and manifest files). The initial "data/" prefix is removed from
 // the file names.
