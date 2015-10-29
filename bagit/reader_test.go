@@ -2,6 +2,7 @@ package bagit
 
 import (
 	"archive/zip"
+	"encoding/hex"
 	"io"
 	"testing"
 	"time"
@@ -246,17 +247,23 @@ func TestChecksum(t *testing.T) {
 			t.Error(err)
 		}
 
-		if ( r.Checksum("data/hello1") == nil ) {
+		// Verify Existing Key can be retrieved
+		if r.Checksum("hello1") == nil {
 			t.Error("Checksum for file 'data/hello1' returns nil")
-                }
+		}
 
-		if ( r.Checksum("data/hello2") == nil ) {
+		if r.Checksum("hello2") == nil {
 			t.Error("Checksum for file 'data/hello2' returns nil")
-                }
+		}
 
-		if ( r.Checksum("data/hello3") != nil ) {
+		if hex.EncodeToString(r.Checksum("hello2").SHA256) != "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" {
+			t.Error("Checksum.SHA256 for file 'data/hello2' returns nil")
+		}
+
+		// Verify NonExisting Key Fails
+		if r.Checksum("hello3") != nil {
 			t.Error("Checksum for nonexistent file 'data/hello3' returns value")
-                }
+		}
 
 		f2.Close()
 	}
