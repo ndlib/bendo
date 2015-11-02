@@ -212,32 +212,25 @@ func mapsEqual(a, b map[string]string) bool {
 }
 
 func TestChecksum(t *testing.T) {
-	var table = []struct {
-		name     string
-		contents zdata
-		ok       bool
-	}{
-		// payload files split between two manifests
-		{"Checksum-1", zdata{
+	
+	// Test Data for Checksums tests
+	cksum  := zdata{
 			"data/hello1":         "hello",
 			"data/hello2":         "hello",
 			"manifest-md5.txt":    "5d41402abc4b2a76b9719d911017c592 data/hello1\n",
 			"manifest-sha256.txt": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824 data/hello2\n",
 			"tagmanifest-md5.txt": "49ce66cef8d32ec33eca290c2c731185 manifest-md5.txt\nbd41f3fc8aa771760265275d3576a30a manifest-sha256.txt\n",
-		}, true},
 	}
 
 	mstore := store.NewMemory()
-	for _, tab := range table {
-		t.Logf("Doing %s", tab.name)
-		f, err := mstore.Create(tab.name)
+		f, err := mstore.Create("cksum")
 		if err != nil {
 			t.Fatal(err)
 		}
-		makezipfile(f, tab.contents)
+		makezipfile(f, cksum )
 		f.Close()
 
-		f2, size, err := mstore.Open(tab.name)
+		f2, size, err := mstore.Open("cksum")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -252,19 +245,20 @@ func TestChecksum(t *testing.T) {
 			t.Error("Checksum for file 'data/hello1' returns nil")
 		}
 
+		// Verify Existing Key can be retrieved
 		if r.Checksum("hello2") == nil {
 			t.Error("Checksum for file 'data/hello2' returns nil")
 		}
 
+		// Verify Checksum of Existing Key is correct
 		if hex.EncodeToString(r.Checksum("hello2").SHA256) != "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" {
 			t.Error("Checksum.SHA256 for file 'data/hello2' returns nil")
 		}
 
-		// Verify NonExisting Key Fails
+		// Verify NonExistent Key Fails
 		if r.Checksum("hello3") != nil {
 			t.Error("Checksum for nonexistent file 'data/hello3' returns value")
 		}
 
 		f2.Close()
-	}
 }
