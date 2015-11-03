@@ -328,6 +328,7 @@ func (f *file) Stat() Stat {
 func (f *file) Append() (io.WriteCloser, error) {
 	f.m.Lock()
 	defer f.m.Unlock()
+	// TODO(dbrower): replace sprintf with string concat?
 	fragkey := fmt.Sprintf("%s+%04d", f.ID, f.N)
 	f.N++
 	w, err := f.parent.fstore.Create(fragkey)
