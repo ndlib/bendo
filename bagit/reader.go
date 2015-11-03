@@ -5,10 +5,9 @@ import (
 	"bufio"
 	"encoding/hex"
 	"errors"
+	"github.com/ndlib/bendo/util"
 	"io"
 	"strings"
-
-	"github.com/ndlib/bendo/util"
 )
 
 // Reader allows for reading an existing Bag file (in ZIP format).
@@ -126,6 +125,25 @@ func (r *Reader) loadtagfile(name string) error {
 		r.t.tags[previousKey] = strings.TrimSpace(pieces[1])
 	}
 	return scanner.Err()
+}
+
+// Checksum returns a pointer to the Checksum struct of the given filername
+// culled from the manifests map. It assumes that the request file
+// resides in the data directory of the bag, and so prepends "data/" to the filename
+// provided. If no entry exists for the given file, it returns nil
+func (r *Reader) Checksum(name string) *Checksum {
+
+	// load the manifest files in from whereever
+
+	if len(r.t.manifest) == 0 {
+		err := r.loadManifests()
+
+		if err != nil {
+			return nil // a null *Checksum
+		}
+	}
+
+	return r.t.manifest["data/"+name]
 }
 
 // Files returns a list of the payload files inside this bag (as opposed to
