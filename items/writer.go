@@ -1,6 +1,7 @@
 package items
 
 import (
+	"bytes"
 	"io"
 	"sort"
 	"time"
@@ -118,17 +119,29 @@ func (wr *Writer) doDeletes() error {
 	return nil
 }
 
-// WriteBlob copies the given io.Reader into the item as a new blob. The hashes
-// and size are compared with the data in r and an error is triggered if there
-// is a difference.  The hashes and size may be nil and 0 if unknown, in which
-// case they are calculated and stored as needed, and no error is triggered.
+// WriteBlob signifies the intent to copy the given io.Reader into this item.
+// If size and the hashes are provided, the item is checked to see if there is
+// already a blob with them in this item. If there is, that blob id is returned
+// and r is not read at all.
 //
-// The data in r is written immediately to the bundle file. The id of the new
-// blob is returned. If there is an error writing the blob, the blob is not
-// added to the item's blob list, and the id of 0 is returned. There may be a
-// remnant "blob/{id}" entry in the zip file, so it is best to close this Writer
-// and reopen to retry.
+// If such a blob is not already in the item, WriteBlob will copy the io.Reader
+// into the item as a new blob. The hashes and size are compared with the data
+// read from r and an error is triggered if there is a difference.
+//
+// The hashes and size may be nil and 0 if unknown, in which case they will be
+// calculated and stored as needed, and no mismatch error will be triggered.
+//
+// If there is an error writing the blob, the blob is not added to the item's
+// blob list, and the id of 0 is returned. There may be a remnant "blob/{id}"
+// entry in the zip file, so it is best to close this Writer and reopen before
+// retrying writing the blob.
 func (wr *Writer) WriteBlob(r io.Reader, size int64, md5, sha256 []byte) (BlobID, error) {
+	// see if this blob is already in the item
+	bid := wr.findBlobByHash(size, md5, sha256)
+	if bid != 0 {
+		return bid, nil
+	}
+
 	// lazily set up the blob counter
 	if wr.bnext == 0 {
 		wr.bnext = 1 // blob ids are 1 based
@@ -162,6 +175,25 @@ func (wr *Writer) WriteBlob(r io.Reader, size int64, md5, sha256 []byte) (BlobID
 	sort.Stable(byID(wr.item.Blobs))
 	wr.item.MaxBundle = wr.bw.CurrentBundle()
 	return blob.ID, nil
+}
+
+// If a blob exists in the associated item having the same size and
+// hash values, return the blob's id. Otherwise return zero.
+// It is okay if size is 0 or if one or both hashes are empty.
+// This function is conservative, and it is possible it may return 0 even
+// though there is a matching blob.
+func (wr *Writer) findBlobByHash(size int64, md5, sha256 []byte) BlobID {
+	if size == 0 || (len(md5) == 0 && len(sha256) == 0) {
+		return 0
+	}
+	for _, blob := range wr.item.Blobs {
+		if blob.Size == size &&
+			(len(md5) != 0 && bytes.Compare(md5, blob.MD5) == 0) &&
+			(len(sha256) != 0 && bytes.Compare(sha256, blob.SHA256) == 0) {
+			return blob.ID
+		}
+	}
+	return 0
 }
 
 type byID []*Blob

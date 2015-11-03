@@ -66,6 +66,53 @@ func TestWriteBlob(t *testing.T) {
 	})
 }
 
+func TestWriteDuplicate(t *testing.T) {
+	ms := store.NewMemory()
+	s := New(ms)
+	w, err := s.Open("item-name", "nobody")
+	if err != nil {
+		t.Fatalf("Unexpected error %s", err.Error())
+	}
+
+	// write a blob and remember its id
+	bid := writedata(t, w, "hello")
+	w.SetSlot("slotname", bid)
+
+	// try writing the blob again...see if we get the same id
+	bid2 := writedata(t, w, "hello")
+	if bid != bid2 {
+		t.Errorf("Received %d and expected %d for the blob id", bid2, bid)
+	}
+
+	// try writing a blob without hash values...it should make a new one
+	bid2, err = w.WriteBlob(strings.NewReader("hello"), 0, nil, nil)
+	if err != nil {
+		t.Fatalf("Got %s, expected nil", err.Error())
+	}
+	if bid == bid2 {
+		t.Errorf("Received %d and expected something different", bid2)
+	}
+
+	err = w.Close()
+	if err != nil {
+		t.Fatalf("Got %s, expected nil", err.Error())
+	}
+
+	// try opening a second time and see if the same id is still returned
+	w, err = s.Open("item-name", "nobody")
+	if err != nil {
+		t.Fatalf("Unexpected error %s", err.Error())
+	}
+	bid2 = writedata(t, w, "hello")
+	if bid != bid2 {
+		t.Errorf("Received %d and expected %d for the blob id", bid2, bid)
+	}
+	err = w.Close()
+	if err != nil {
+		t.Fatalf("Got %s, expected nil", err.Error())
+	}
+}
+
 func TestOpenCorrupt(t *testing.T) {
 	ms := store.NewMemory()
 	s := New(ms)
