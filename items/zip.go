@@ -12,28 +12,27 @@ import (
 // TODO(dbrower): This file could use some cleanup/rethinking after replacing
 // the zip file code with the bagit code. Can the code be reduced or removed?
 
-// A ZipreaderCloser is a zip.Reader which will also close the underlying file.
-type ZipreaderCloser struct {
+// A BagreaderCloser is a bagit.Reader which will also close the underlying file.
+type BagreaderCloser struct {
 	f             io.Closer // the underlying file
 	*bagit.Reader           // the zip reader
 }
 
-// Close this ZipreaderCloser.
-func (z *ZipreaderCloser) Close() error {
-	return z.f.Close()
+func (bg *BagreaderCloser) Close() error {
+	return bg.f.Close()
 }
 
-// OpenBundle opens the given key in the given store, and wraps a zip reader
-// around the resulting ReadAtCloser.
-func OpenBundle(s store.Store, key string) (*ZipreaderCloser, error) {
+// OpenBundle opens the provided key in the given store, and wraps it in a
+// bagit reader.
+func OpenBundle(s store.Store, key string) (*BagreaderCloser, error) {
 	stream, size, err := s.Open(key)
 	if err != nil {
 		return nil, err
 	}
-	var result *ZipreaderCloser
+	var result *BagreaderCloser
 	r, err := bagit.NewReader(stream, size)
 	if err == nil {
-		result = &ZipreaderCloser{
+		result = &BagreaderCloser{
 			Reader: r,
 			f:      stream,
 		}
