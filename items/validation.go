@@ -50,13 +50,15 @@ func (s *Store) Validate(id string) (nb int64, problems []string, err error) {
 		err = bag.Verify()
 		_ = stream.Close()
 		nb += size
-		if _, ok := err.(bagit.BagError); ok {
-			// there was a failed verification
-			problems = append(problems, err.Error())
-			err = nil
-		} else {
-			// there was an actual error in doing the verification
-			return
+		if err != nil {
+			if _, ok := err.(bagit.BagError); ok {
+				// there was a failed verification
+				problems = append(problems, err.Error())
+				err = nil
+			} else {
+				// there was an actual error in doing the verification
+				return
+			}
 		}
 	}
 
@@ -69,27 +71,27 @@ func (s *Store) Validate(id string) (nb int64, problems []string, err error) {
 	// First validate blob metadata
 	for _, blob := range item.Blobs {
 		if blob.SaveDate.IsZero() {
-			problems = append(problems, fmt.Sprintf("Blob (%d,%d) has a zero save date", id, blob.ID))
+			problems = append(problems, fmt.Sprintf("Blob (%s,%d) has a zero save date", id, blob.ID))
 		}
 		switch {
 		case blob.Size > 0:
 			if blob.Bundle <= 0 {
-				problems = append(problems, fmt.Sprintf("Blob (%d,%d) has non-positve bundle ID", id, blob.ID))
+				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has non-positve bundle ID", id, blob.ID))
 			}
 			if len(blob.MD5) != 16 {
-				problems = append(problems, fmt.Sprintf("Blob (%d,%d) has malformed MD5 hash", id, blob.ID))
+				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has malformed MD5 hash", id, blob.ID))
 			}
 			if len(blob.SHA256) != 32 {
-				problems = append(problems, fmt.Sprintf("Blob (%d,%d) has malformed SHA-256 hash", id, blob.ID))
+				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has malformed SHA-256 hash", id, blob.ID))
 			}
 			if !blob.DeleteDate.IsZero() {
-				problems = append(problems, fmt.Sprintf("Blob (%d,%d) has non-zero delete date", id, blob.ID))
+				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has non-zero delete date", id, blob.ID))
 			}
 			if blob.Deleter != "" {
-				problems = append(problems, fmt.Sprintf("Blob (%d,%d) has a deleter", id, blob.ID))
+				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has a deleter", id, blob.ID))
 			}
 			if blob.DeleteNote != "" {
-				problems = append(problems, fmt.Sprintf("Blob (%d,%d) has a delete note", id, blob.ID))
+				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has a delete note", id, blob.ID))
 			}
 			// now verify these hashes match what is stored in the manifest
 			// TODO(dbrower): Make the checksum verification more efficient.
@@ -100,30 +102,35 @@ func (s *Store) Validate(id string) (nb int64, problems []string, err error) {
 			}
 			checksum := bag.Checksum(fmt.Sprintf("blob/%d", blob.ID))
 			_ = bag.Close()
-			if bytes.Compare(blob.MD5, checksum.MD5) == 0 {
-				problems = append(problems, fmt.Sprintf("Blob (%d,%d) has MD5 mismatch", id, blob.ID))
+			if bytes.Compare(blob.MD5, checksum.MD5) != 0 {
+				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has MD5 mismatch", id, blob.ID))
 			}
-			if bytes.Compare(blob.SHA256, checksum.SHA256) == 0 {
-				problems = append(problems, fmt.Sprintf("Blob (%d,%d) has SHA-256 mismatch", id, blob.ID))
+			if bytes.Compare(blob.SHA256, checksum.SHA256) != 0 {
+				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has SHA-256 mismatch", id, blob.ID))
 			}
 
 		case blob.Size == 0:
 			// blob is deleted
 			if blob.Bundle != 0 {
-				problems = append(problems, fmt.Sprintf("Blob (%d,%d) is deleted and has non-zero bundle ID", id, blob.ID))
+				problems = append(problems, fmt.Sprintf("Blob (%s,%d) is deleted and has non-zero bundle ID", id, blob.ID))
 			}
 			if blob.DeleteDate.IsZero() {
-				problems = append(problems, fmt.Sprintf("Blob (%d,%d) is deleted and has no delete date", id, blob.ID))
+				problems = append(problems, fmt.Sprintf("Blob (%s,%d) is deleted and has no delete date", id, blob.ID))
 			}
 			if blob.Deleter == "" {
-				problems = append(problems, fmt.Sprintf("Blob (%d,%d) is deleted and has no deleter", id, blob.ID))
+				problems = append(problems, fmt.Sprintf("Blob (%s,%d) is deleted and has no deleter", id, blob.ID))
 			}
 
 		case blob.Size < 0:
-			problems = append(problems, fmt.Sprintf("Blob (%d,%d) has negative size", id, blob.ID))
+			problems = append(problems, fmt.Sprintf("Blob (%s,%d) has negative size", id, blob.ID))
 		}
 	}
 
 	// TODO(dbrower): validate version metadata
 	return
+}
+
+// validateItemMetadata checks that the metadata for an item are consistent
+// and matches the bag checksums as stored.
+func (s *Store) validateItemMetadata() {
 }
