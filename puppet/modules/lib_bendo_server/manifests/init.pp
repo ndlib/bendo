@@ -5,6 +5,8 @@
 
 class lib_bendo_server( $bendo_root = '/opt/bendo', $branch='master') {
 
+include lib_runit
+
 $goroot = "${bendo_root}/gocode"
 $target = 'github.com/ndlib/bendo/cmd/bendo'
 $repo = "github.com/ndlib/bendo"
@@ -46,14 +48,14 @@ $bendo_storage_dir = hiera("bendo_storage_dir")
 
 # Create bendo runit service directories
 
-	$bendorunitdirs = [ "/etc/sv", "/etc/sv/bendo", "/etc/sv/bendo/log" ]
+	$bendorunitdirs = [ "/etc/sv/bendo", "/etc/sv/bendo/log" ]
 
 	file { $bendorunitdirs:
 		ensure => directory,
 		owner => "app",
 		group => "app",
-		require => Class['lib_go::build'],
-	} ->
+		require => Class[['lib_runit','lib_go::build']],
+	} 
 
 # make exec and log files for runit
 
@@ -64,7 +66,8 @@ $bendo_storage_dir = hiera("bendo_storage_dir")
 		mode => '0755',
 		replace => true,
 		content => template('lib_bendo_server/bendo.exec.erb'),
-	} ->
+                require => File[$bendorunitdirs],
+	} 
 
 
 	file { 'bendorunitlog':
@@ -74,20 +77,22 @@ $bendo_storage_dir = hiera("bendo_storage_dir")
 		replace => true,
 		mode => '0755',
 		content => template('lib_bendo_server/bendo.log.erb'),
-	} ->
-
-# Enable the Service
-
-	service { 'bendo':
-		provider => 'base',
-		ensure => running,
-		enable => true,
-		hasstatus => false,
-		hasrestart => false,
-		restart => '/sbin/sv restart bendo',
-		start => '/sbin/sv start bendo',
-		stop => '/sbin/sv stop bendo',
-		status => '/sbin/sv status bendo'
+                require => File['bendorunitexec'],
 	}
+
+# Enable the Service ( leave this out until app can run /sbin/sv ) 
+
+#	service { 'bendo':
+#		provider => 'base',
+#		ensure => running,
+#		enable => true,
+#		hasstatus => false,
+#		hasrestart => false,
+#		restart => '/sbin/sv restart bendo',
+#		start => '/sbin/sv start bendo',
+#		stop => '/sbin/sv stop bendo',
+#		status => '/sbin/sv status bendo',
+#		require => File['bendorunitlog'],
+#	}
 
 }
