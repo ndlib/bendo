@@ -8,9 +8,7 @@ import (
 
 func TestValidate(t *testing.T) {
 	// Testing validation is difficult since the data needs to be in bundles.
-	// We make a good item spread over two bundles to test the happy path
-	// and a bad item with bad metadata over two bundles to test the error path.
-	// We do not explicitly test the bag verify function.
+	// We spread a our items over two bundles for testing.
 
 	// make good item
 	ms := store.NewMemory()
@@ -44,6 +42,8 @@ func TestValidate(t *testing.T) {
 		t.Errorf("Received error %s", err.Error())
 	}
 
+	// making bad items requires mucking with the bundle innards.
+	// TODO(dbrower): add tests for bad items.
 }
 
 type itemData struct {
