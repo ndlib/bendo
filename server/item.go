@@ -31,6 +31,7 @@ func SlotHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	item, err := Items.Item(id)
 	if err != nil {
 		fmt.Fprintln(w, err.Error())
+		return
 	}
 	version := ps.ByName("version")
 	var vid int64
@@ -70,11 +71,13 @@ func getblob(w http.ResponseWriter, r *http.Request, id string, bid items.BlobID
 func ItemHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
 	item, err := Items.Item(id)
-	if err != nil {
+	if err != nil  {
 		w.WriteHeader(404)
 		fmt.Fprintln(w, err.Error())
+		return
 	}
-	w.Header().Set("ETag", fmt.Sprintf("%d", item.Versions[len(item.Versions)-1].ID))
+	vid := int64(item.Versions[len(item.Versions)-1].ID)
+	w.Header().Set("ETag", fmt.Sprintf("%d", vid))
 	enc := json.NewEncoder(w)
 	enc.Encode(item)
 }
