@@ -22,6 +22,7 @@ func BlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		fmt.Fprintln(w, err)
 		return
 	}
+	w.Header().Set("ETag", fmt.Sprintf("%d",  bid))
 	getblob(w, r, id, items.BlobID(bid))
 }
 
@@ -52,6 +53,7 @@ func SlotHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		return
 	}
 	w.Header().Set("Location", fmt.Sprintf("/blob/%s/%d", item.ID, bid))
+	w.Header().Set("Etag", fmt.Sprintf("%d",  bid))
 	getblob(w, r, id, items.BlobID(bid))
 }
 
@@ -72,6 +74,7 @@ func ItemHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		w.WriteHeader(404)
 		fmt.Fprintln(w, err.Error())
 	}
+	w.Header().Set("ETag", fmt.Sprintf("%d", item.Versions[len(item.Versions)-1].ID))
 	enc := json.NewEncoder(w)
 	enc.Encode(item)
 }
