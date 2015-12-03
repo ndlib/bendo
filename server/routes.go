@@ -16,11 +16,11 @@ import (
 )
 
 var (
-	Items     *items.Store
-	TxStore   *transaction.Store
-	FileStore *fragment.Store
+	Items      *items.Store
+	TxStore    *transaction.Store
+	FileStore  *fragment.Store
 	PortNumber *string
-	PProfPort *string
+	PProfPort  *string
 )
 
 var (
@@ -69,9 +69,9 @@ func Run() {
 
 	// for pprof
 	go func() {
-		log.Println(http.ListenAndServe("localhost" + *PProfPort, nil))
+		log.Println(http.ListenAndServe("localhost"+*PProfPort, nil))
 	}()
-	log.Println("Listening on ",PortNumber)
+	log.Println("Listening on ", PortNumber)
 	http.ListenAndServe(*PortNumber, AddRoutes())
 }
 
