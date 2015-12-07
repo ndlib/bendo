@@ -15,13 +15,11 @@ func BundleListHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Par
 	c := Items.S.List()
 	// we encode this as JSON ourselves....how could it go wrong?
 	w.Write([]byte("["))
-	var needcomma bool
+	// comma starts as a space
+	var comma = ' '
 	for key := range c {
-		if needcomma {
-			w.Write([]byte(","))
-		}
-		needcomma = true
-		fmt.Fprintf(w, "\"%s\"", key)
+		fmt.Fprintf(w, "%c\"%s\"", comma, key)
+		comma = ','
 	}
 	w.Write([]byte("]"))
 }

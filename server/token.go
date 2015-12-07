@@ -1,0 +1,145 @@
+package server
+
+import (
+	"bufio"
+	"io"
+	"os"
+	"sort"
+	"strings"
+)
+
+// A TokenValidator validates and decodes user tokens passed into the web API. If
+// the given token is not valid, for whatever reason, the user "" with a role of
+// RoleUnknown is returned. An error is returned only if there is some kind of error doing
+// the lookup and the ultimate status of the token is unknown.
+type TokenValidator interface {
+	TokenValid(token string) (user string, role Role, err error)
+}
+
+type Role int
+
+const (
+	RoleUnknown Role = iota
+	RoleMDOnly
+	RoleRead
+	RoleWrite
+	RoleAdmin
+)
+
+// AtoRole converts a string into a Role. The strings are case-insensitive,
+// and are "mdonly", "read", "write", "admin". If the string cannot be decoded
+// RoleUnknown is returned.
+func AtoRole(s string) Role {
+	switch strings.ToLower(s) {
+	case "mdonly":
+		return RoleMDOnly
+	case "read":
+		return RoleRead
+	case "write":
+		return RoleWrite
+	case "admin":
+		return RoleAdmin
+	default:
+		return RoleUnknown
+	}
+}
+
+// NewNobodyValidator creates a TokenValidator that for every possible token
+// returns a user named "nobody" with the Admin role.
+func NewNobodyValidator() TokenValidator {
+	return new(nobodyValidator)
+}
+
+type nobodyValidator struct{}
+
+func (_ nobodyValidator) TokenValid(token string) (user string, role Role, err error) {
+	return "nobody", RoleAdmin, nil
+}
+
+// A ListValidator is backed by a predefined list of users, which are read from r upon creation.
+// The reader r should consist of a sequence of user entries, separated by newlines.
+// Each entry has the form:
+//
+//     <user name>  <role>  <token>
+//
+// The fields are delineated by whitespace (spaces or tabs).
+// This decoder does not permit spaces in either the user
+// name or the token. The role is one of "MDOnly", "Read",
+// "Write", "Admin" (case insensitive). Empty lines and lines beginning with a
+// hash '#' are skipped.
+func NewListValidator(r io.Reader) (TokenValidator, error) {
+	users, err := parseListFile(r)
+	if err != nil {
+		return nil, err
+	}
+	sort.Sort(byToken(users))
+	return listValidator{users}, nil
+}
+
+// NewListValidatorFile is a convenience function that reads the contents of
+// the given file into a ListValidator. The file should have the same format
+// that NewListValidator expects.
+func NewListValidatorFile(fname string) (TokenValidator, error) {
+	f, err := os.Open(fname)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return NewListValidator(f)
+}
+
+// NewListValidatorString is a convenience function that passes the given string
+// into a ListValidator. The format of the string is the same as that expected
+// by NewListValidator.
+func NewListValidatorString(data string) (TokenValidator, error) {
+	return NewListValidator(strings.NewReader(data))
+}
+
+func parseListFile(r io.Reader) ([]userEntry, error) {
+	var result []userEntry
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		// split on whitespace
+		pieces := strings.Fields(scanner.Text())
+		// skip blank lines or lines beginning with a '#'
+		if len(pieces) == 0 || pieces[0][0] == '#' {
+			continue
+		}
+		if len(pieces) != 3 {
+			// wrong number of columns
+			continue
+		}
+		result = append(result, userEntry{
+			token: pieces[2],
+			user:  pieces[0],
+			role:  AtoRole(pieces[1]),
+		})
+	}
+	return result, scanner.Err()
+}
+
+type listValidator struct {
+	data []userEntry
+}
+
+type byToken []userEntry
+
+func (ue byToken) Len() int           { return len(ue) }
+func (ue byToken) Less(i, j int) bool { return ue[i].token < ue[j].token }
+func (ue byToken) Swap(i, j int)      { ue[i], ue[j] = ue[j], ue[i] }
+
+type userEntry struct {
+	token string
+	user  string
+	role  Role
+}
+
+func (ld listValidator) TokenValid(token string) (string, Role, error) {
+	users := ld.data
+	i := sort.Search(len(users), func(i int) bool { return users[i].token >= token })
+	if i < len(users) && users[i].token == token {
+		return users[i].user, users[i].role, nil
+	} else {
+		return "", RoleUnknown, nil
+	}
+}
