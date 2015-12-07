@@ -8,12 +8,12 @@ import (
 	"strings"
 )
 
-// A TokenDecoder validates and decodes user tokens passed into the web API. If
+// A TokenValidator validates and decodes user tokens passed into the web API. If
 // the given token is not valid, for whatever reason, the user "" with a role of
 // RoleUnknown is returned. An error is returned only if there is some kind of error doing
 // the lookup and the ultimate status of the token is unknown.
-type TokenDecoder interface {
-	TokenDecode(token string) (user string, role Role, err error)
+type TokenValidator interface {
+	TokenValid(token string) (user string, role Role, err error)
 }
 
 type Role int
@@ -26,7 +26,10 @@ const (
 	RoleAdmin
 )
 
-func atoRole(s string) Role {
+// AtoRole converts a string into a Role. The strings are case-insensitive,
+// and are "mdonly", "read", "write", "admin". If the string cannot be decoded
+// RoleUnknown is returned.
+func AtoRole(s string) Role {
 	switch strings.ToLower(s) {
 	case "mdonly":
 		return RoleMDOnly
@@ -41,19 +44,19 @@ func atoRole(s string) Role {
 	}
 }
 
-// NewNobodyDecoder creates a TokenDecoder that for every possible token
+// NewNobodyValidator creates a TokenValidator that for every possible token
 // returns a user named "nobody" with the Admin role.
-func NewNobodyDecoder() TokenDecoder {
-	return new(nobodyDecoder)
+func NewNobodyValidator() TokenValidator {
+	return new(nobodyValidator)
 }
 
-type nobodyDecoder struct{}
+type nobodyValidator struct{}
 
-func (_ nobodyDecoder) TokenDecode(token string) (user string, role Role, err error) {
+func (_ nobodyValidator) TokenValid(token string) (user string, role Role, err error) {
 	return "nobody", RoleAdmin, nil
 }
 
-// A ListDecoder is backed by a predefined list of users, which are read from r upon creation.
+// A ListValidator is backed by a predefined list of users, which are read from r upon creation.
 // The reader r should consist of a sequence of user entries, separated by newlines.
 // Each entry has the form:
 //
@@ -64,32 +67,32 @@ func (_ nobodyDecoder) TokenDecode(token string) (user string, role Role, err er
 // name or the token. The role is one of "MDOnly", "Read",
 // "Write", "Admin" (case insensitive). Empty lines and lines beginning with a
 // hash '#' are skipped.
-func NewListDecoder(r io.Reader) (TokenDecoder, error) {
+func NewListValidator(r io.Reader) (TokenValidator, error) {
 	users, err := parseListFile(r)
 	if err != nil {
 		return nil, err
 	}
 	sort.Sort(byToken(users))
-	return listDecoder{users}, nil
+	return listValidator{users}, nil
 }
 
-// NewListDecoderFile is a convenience function that reads the contents of
-// the given file into a ListDecoder. The file should have the same format
-// that NewListDecoder expects.
-func NewListDecoderFile(fname string) (TokenDecoder, error) {
+// NewListValidatorFile is a convenience function that reads the contents of
+// the given file into a ListValidator. The file should have the same format
+// that NewListValidator expects.
+func NewListValidatorFile(fname string) (TokenValidator, error) {
 	f, err := os.Open(fname)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	return NewListDecoder(f)
+	return NewListValidator(f)
 }
 
-// NewListDecoderString is a convenience function that passes the given string
-// into a ListDecoder. The format of the string is the same as that expected
-// by NewListDecoder.
-func NewListDecoderString(data string) (TokenDecoder, error) {
-	return NewListDecoder(strings.NewReader(data))
+// NewListValidatorString is a convenience function that passes the given string
+// into a ListValidator. The format of the string is the same as that expected
+// by NewListValidator.
+func NewListValidatorString(data string) (TokenValidator, error) {
+	return NewListValidator(strings.NewReader(data))
 }
 
 func parseListFile(r io.Reader) ([]userEntry, error) {
@@ -109,13 +112,13 @@ func parseListFile(r io.Reader) ([]userEntry, error) {
 		result = append(result, userEntry{
 			token: pieces[2],
 			user:  pieces[0],
-			role:  atoRole(pieces[1]),
+			role:  AtoRole(pieces[1]),
 		})
 	}
 	return result, scanner.Err()
 }
 
-type listDecoder struct {
+type listValidator struct {
 	data []userEntry
 }
 
@@ -131,7 +134,7 @@ type userEntry struct {
 	role  Role
 }
 
-func (ld listDecoder) TokenDecode(token string) (string, Role, error) {
+func (ld listValidator) TokenValid(token string) (string, Role, error) {
 	users := ld.data
 	i := sort.Search(len(users), func(i int) bool { return users[i].token >= token })
 	if i < len(users) && users[i].token == token {
