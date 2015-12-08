@@ -236,6 +236,7 @@ func init() {
 	if err != nil {
 		log.Println(err.Error())
 	}
+	Validator = NewNobodyValidator()
 	Items = items.New(store.NewMemory())
 	TxStore = transaction.New(store.NewMemory())
 	TxStore.Load()

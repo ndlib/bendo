@@ -21,44 +21,47 @@ var (
 	FileStore  *fragment.Store
 	PortNumber *string
 	PProfPort  *string
+	Validator  TokenValidator
 )
 
 var (
 	routes = []struct {
 		method  string
 		route   string
+		role    Role
 		handler httprouter.Handle
 	}{
-		{"GET", "/blob/:id/:bid", BlobHandler},
-		{"HEAD", "/blob/:id/:bid", BlobHandler},
-		{"GET", "/item/:id/:version/*slot", SlotHandler},
-		{"HEAD", "/item/:id/:version/*slot", SlotHandler},
-		{"GET", "/item/:id", ItemHandler},
+		{"GET", "/blob/:id/:bid", RoleRead, BlobHandler},
+		{"HEAD", "/blob/:id/:bid", RoleRead, BlobHandler},
+		{"GET", "/item/:id/:version/*slot", RoleRead, SlotHandler},
+		{"HEAD", "/item/:id/:version/*slot", RoleRead, SlotHandler},
+		{"GET", "/item/:id", RoleRead, ItemHandler},
 		// all the transaction things. Sooo many transaction things.
-		{"POST", "/item/:id/transaction", NewTxHandler},
-		{"GET", "/transaction", ListTxHandler},
-		{"GET", "/transaction/:tid", TxInfoHandler},
-		{"POST", "/transaction/:tid/cancel", CancelTxHandler}, //keep?
+		{"POST", "/item/:id/transaction", RoleWrite, NewTxHandler},
+		{"GET", "/transaction", RoleRead, ListTxHandler},
+		{"GET", "/transaction/:tid", RoleRead, TxInfoHandler},
+		{"POST", "/transaction/:tid/cancel", RoleWrite, CancelTxHandler}, //keep?
 		// file upload things
-		{"GET", "/upload", ListFileHandler},
-		{"POST", "/upload", AppendFileHandler},
-		{"GET", "/upload/:fileid", GetFileHandler},
-		{"POST", "/upload/:fileid", AppendFileHandler},
-		{"DELETE", "/upload/:fileid", DeleteFileHandler},
-		{"GET", "/upload/:fileid/metadata", GetFileInfoHandler},
-		{"PUT", "/upload/:fileid/metadata", SetFileInfoHandler},
+		{"GET", "/upload", RoleRead, ListFileHandler},
+		{"POST", "/upload", RoleWrite, AppendFileHandler},
+		{"GET", "/upload/:fileid", RoleRead, GetFileHandler},
+		{"POST", "/upload/:fileid", RoleWrite, AppendFileHandler},
+		{"DELETE", "/upload/:fileid", RoleWrite, DeleteFileHandler},
+		{"GET", "/upload/:fileid/metadata", RoleMDOnly, GetFileInfoHandler},
+		{"PUT", "/upload/:fileid/metadata", RoleWrite, SetFileInfoHandler},
 		// the read only bundle stuff
-		{"GET", "/bundle/list/", BundleListHandler},
-		{"GET", "/bundle/listprefix/:prefix", BundleListPrefixHandler},
-		{"GET", "/bundle/open/:key", BundleOpenHandler},
+		{"GET", "/bundle/list/", RoleRead, BundleListHandler},
+		{"GET", "/bundle/listprefix/:prefix", RoleRead, BundleListPrefixHandler},
+		{"GET", "/bundle/open/:key", RoleRead, BundleOpenHandler},
 		// other
-		{"GET", "/", WelcomeHandler},
-		{"GET", "/stats", NotImplementedHandler},
+		{"GET", "/", RoleUnknown, WelcomeHandler},
+		{"GET", "/stats", RoleUnknown, NotImplementedHandler},
 	}
 )
 
 func Run() {
 	openDatabase("memory")
+	Validator = NewNobodyValidator()
 
 	log.Println("Loading Transactions")
 	TxStore.Load()
@@ -91,7 +94,9 @@ func AddRoutes() http.Handler {
 	r := httprouter.New()
 
 	for _, route := range routes {
-		r.Handle(route.method, route.route, route.handler)
+		r.Handle(route.method,
+			route.route,
+			checkTokenWrapper(route.handler, route.role))
 	}
 	return r
 }
@@ -110,4 +115,40 @@ func writeHTMLorJSON(w http.ResponseWriter,
 		return
 	}
 	tmpl.Execute(w, val)
+}
+
+// checkTokenWrapper returns a Handler which will first verify the user token
+// as having at least the given Role. The user name is added as a parameter
+// "username".
+func checkTokenWrapper(handler httprouter.Handle, leastRole Role) httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+		// user token exists? "X-Api-Key"
+
+		token := r.Header.Get("X-Api-Key")
+		user, role, err := Validator.TokenValid(token)
+		if err != nil {
+			w.WriteHeader(500)
+			fmt.Fprintln(w, err.Error())
+			return
+		}
+
+		// is role valid?
+		if role < leastRole {
+			w.WriteHeader(401)
+			fmt.Fprintln(w, "Forbidden")
+			return
+		}
+
+		// remove any previous username
+		for i := range ps {
+			if ps[i].Key == "username" {
+				ps[i].Value = user
+				goto out
+			}
+		}
+		// add a new username
+		ps = append(ps, httprouter.Param{"username", user})
+	out:
+		handler(w, r, ps)
+	}
 }
