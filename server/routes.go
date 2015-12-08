@@ -58,6 +58,9 @@ var (
 )
 
 func Run() {
+	log.Println("==========")
+	log.Println("Starting Bendo Server version", Version)
+
 	openDatabase("memory")
 
 	log.Println("Loading Transactions")
