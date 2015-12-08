@@ -46,14 +46,22 @@ func AtoRole(s string) Role {
 
 // NewNobodyValidator creates a TokenValidator that for every possible token
 // returns a user named "nobody" with the Admin role.
-func NewNobodyValidator() TokenValidator {
-	return new(nobodyValidator)
-}
+func NewNobodyValidator() TokenValidator { return new(nobodyValidator) }
 
 type nobodyValidator struct{}
 
-func (_ nobodyValidator) TokenValid(token string) (user string, role Role, err error) {
+func (_ nobodyValidator) TokenValid(token string) (string, Role, error) {
 	return "nobody", RoleAdmin, nil
+}
+
+// NewInvalidValidator creates a TokenValidator that for which every token is
+// invalid. That is, it always returns the user "" with the Unknown role.
+func NewInvalidValidator() TokenValidator { return new(invalidValidator) }
+
+type invalidValidator struct{}
+
+func (_ invalidValidator) TokenValid(token string) (string, Role, error) {
+	return "", RoleUnknown, nil
 }
 
 // A ListValidator is backed by a predefined list of users, which are read from r upon creation.

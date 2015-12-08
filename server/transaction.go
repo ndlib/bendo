@@ -72,7 +72,7 @@ func NewTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) 
 		return
 	}
 	w.Header().Set("Location", "/transaction/"+tx.ID)
-	tx.Creator = "nobody"
+	tx.Creator = ps.ByName("username")
 	// TODO(dbrower): use a limit reader to 1MB(?) for this
 	var cmds [][]string
 	err = json.NewDecoder(r.Body).Decode(&cmds)
