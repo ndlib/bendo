@@ -180,7 +180,12 @@ func (w *moveCloser) Close() error {
 	if !os.IsNotExist(err) {
 		return ErrKeyExists
 	}
-	return os.Rename(w.source, w.target)
+	err = os.Rename(w.source, w.target)
+	if err != nil {
+		return err
+	}
+	// Remove scratch directory
+	return os.RemoveAll(path.Dir(w.source))
 }
 
 // Delete the given key from the store. It is not an error if the key doesn't

@@ -182,6 +182,10 @@ func TestCreate(t *testing.T) {
 	if exists(root, scratchdir, "abc") {
 		t.Errorf("File scratch abc exists")
 	}
+	// make sure scratch directory is removed
+	if exists(root, scratchdir) {
+		t.Errorf("Directory scratch exists")
+	}
 }
 
 func TestOpenTwice(t *testing.T) {
