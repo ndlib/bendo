@@ -15,8 +15,8 @@ import (
 func main() {
 	var storeDir = flag.String("storage", ".", "location of the storage directory")
 	var uploadDir = flag.String("upload", "upload", "location of the upload directory")
-	var portNumber = flag.String("port", ":14000", "Port Number to Use")
-	var pProfPort = flag.String("pfport", ":14001", "PPROF Port Number to Use")
+	var portNumber = flag.String("port", "14000", "Port Number to Use")
+	var pProfPort = flag.String("pfport", "14001", "PPROF Port Number to Use")
 	flag.Parse()
 
 	fmt.Printf("Using storage dir %s\n", *storeDir)
@@ -27,7 +27,9 @@ func main() {
 	server.Items = items.New(store.NewFileSystem(*storeDir))
 	server.TxStore = transaction.New(store.NewFileSystem(*uploadDir))
 	server.FileStore = fragment.New(store.NewFileSystem(*uploadDir))
-	server.PortNumber = portNumber
-	server.PProfPort = pProfPort
-	server.Run()
+	var s server.RESTServer
+	s.PortNumber = *portNumber
+	s.PProfPort = *pProfPort
+	s.Items = server.Items
+	s.Run()
 }

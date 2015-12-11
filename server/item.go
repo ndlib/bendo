@@ -14,7 +14,7 @@ import (
 	"github.com/ndlib/bendo/items"
 )
 
-func BlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *RESTServer) BlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
 	bid, err := strconv.ParseInt(ps.ByName("bid"), 10, 0)
 	if err != nil || bid <= 0 {
@@ -23,12 +23,12 @@ func BlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		return
 	}
 	w.Header().Set("ETag", fmt.Sprintf("%d", bid))
-	getblob(w, r, id, items.BlobID(bid))
+	s.getblob(w, r, id, items.BlobID(bid))
 }
 
-func SlotHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
-	item, err := Items.Item(id)
+	item, err := s.Items.Item(id)
 	if err != nil {
 		fmt.Fprintln(w, err.Error())
 		return
@@ -55,11 +55,11 @@ func SlotHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	}
 	w.Header().Set("Location", fmt.Sprintf("/blob/%s/%d", item.ID, bid))
 	w.Header().Set("Etag", fmt.Sprintf("%d", bid))
-	getblob(w, r, id, items.BlobID(bid))
+	s.getblob(w, r, id, items.BlobID(bid))
 }
 
-func getblob(w http.ResponseWriter, r *http.Request, id string, bid items.BlobID) {
-	src, err := Items.Blob(id, bid)
+func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, bid items.BlobID) {
+	src, err := s.Items.Blob(id, bid)
 	if err != nil {
 		w.WriteHeader(404)
 		fmt.Fprintln(w, err)
@@ -68,9 +68,9 @@ func getblob(w http.ResponseWriter, r *http.Request, id string, bid items.BlobID
 	io.Copy(w, src)
 }
 
-func ItemHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *RESTServer) ItemHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
-	item, err := Items.Item(id)
+	item, err := s.Items.Item(id)
 	if err != nil {
 		w.WriteHeader(404)
 		fmt.Fprintln(w, err.Error())
