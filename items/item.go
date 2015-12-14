@@ -180,6 +180,35 @@ func (item Item) BlobByVersionSlot(vid VersionID, slot string) BlobID {
 	return 0
 }
 
+// BlobByExtendedSlot return the blob idenfifer for the given extended slot
+// name. An extended slot name is a slot name with an optional "@nnn/" prefix,
+// where nnn is the version number of the item to use (in decimal). If a
+// version prefix is not present, the most recent version of the item is used.
+// Like BlobByVersionSlot, 0 is returned if the slot path does not
+// resolve to anything.
+func (item Item) BlobByExtendedSlot(slot string) BlobID {
+	var vid VersionID
+	var vmax = item.Versions[len(item.Versions)-1].ID
+	if len(slot) >= 1 && slot[0] == '@' {
+		var err error
+		j := strings.Index(slot, "/")
+		if j >= 1 {
+			var v int64
+			// start from index 1 to skip initial "@"
+			v, err = strconv.ParseInt(slot[1:j], 10, 0)
+			vid = VersionID(v)
+		}
+		// if j was invalid, then vid == 0, so following will catch it
+		if err != nil || vid <= 0 || vid > vmax {
+			return 0
+		}
+		slot = slot[j+1:]
+	} else {
+		vid = vmax
+	}
+	return item.BlobByVersionSlot(vid, slot)
+}
+
 // used to implement a no-op cache
 type cache struct{}
 

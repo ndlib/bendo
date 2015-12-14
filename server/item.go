@@ -33,24 +33,13 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 		fmt.Fprintln(w, err.Error())
 		return
 	}
-	version := ps.ByName("version")
-	var vid int64
-	if version == "latest" {
-		vid = int64(item.Versions[len(item.Versions)-1].ID)
-	} else {
-		vid, err = strconv.ParseInt(ps.ByName("version"), 10, 0)
-		if err != nil || vid <= 0 {
-			w.WriteHeader(404)
-			fmt.Fprintf(w, "Invalid version")
-			return
-		}
-	}
+	// see if there is a "@nnn" version present
 	// the star parameter in httprouter returns the leading slash
 	slot := strings.TrimPrefix(ps.ByName("slot"), "/")
-	bid := item.BlobByVersionSlot(items.VersionID(vid), slot)
+	bid := item.BlobByExtendedSlot(slot)
 	if bid == 0 {
 		w.WriteHeader(404)
-		fmt.Fprintf(w, "Cannot resolve (%d, %s) pair", vid, slot)
+		fmt.Fprintf(w, "Invalid Version")
 		return
 	}
 	w.Header().Set("Location", fmt.Sprintf("/blob/%s/%d", item.ID, bid))
@@ -76,7 +65,7 @@ func (s *RESTServer) ItemHandler(w http.ResponseWriter, r *http.Request, ps http
 		fmt.Fprintln(w, err.Error())
 		return
 	}
-	vid := int64(item.Versions[len(item.Versions)-1].ID)
+	vid := item.Versions[len(item.Versions)-1].ID
 	w.Header().Set("ETag", fmt.Sprintf("%d", vid))
 	enc := json.NewEncoder(w)
 	enc.Encode(item)
