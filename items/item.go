@@ -59,12 +59,12 @@ func sugar(id string, n int) string {
 // Returns an id of "" if the key could not be decoded.
 func desugar(s string) (id string, n int) {
 	s = strings.TrimSuffix(s, ".zip")
-	pieces := strings.Split(s, "-")
-	if len(pieces) != 2 {
+	j := strings.LastIndex(s, "-")
+	if j == -1 {
 		return "", 0
 	}
-	id = pieces[0]
-	n64, err := strconv.ParseInt(pieces[1], 10, 0)
+	id = s[0:j]
+	n64, err := strconv.ParseInt(s[j+1:], 10, 0)
 	if err != nil {
 		return "", 0
 	}
