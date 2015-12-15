@@ -24,12 +24,12 @@ func main() {
 	fmt.Printf("Using port number %s \n", *portNumber)
 	fmt.Printf("Using pprof port number %s \n", *pProfPort)
 	os.MkdirAll(*uploadDir, 0664)
-	server.Items = items.New(store.NewFileSystem(*storeDir))
-	server.TxStore = transaction.New(store.NewFileSystem(*uploadDir))
-	server.FileStore = fragment.New(store.NewFileSystem(*uploadDir))
-	var s server.RESTServer
-	s.PortNumber = *portNumber
-	s.PProfPort = *pProfPort
-	s.Items = server.Items
+	var s = server.RESTServer{
+		Items:      items.New(store.NewFileSystem(*storeDir)),
+		TxStore:    transaction.New(store.NewFileSystem(*uploadDir)),
+		FileStore:  fragment.New(store.NewFileSystem(*uploadDir)),
+		PortNumber: *portNumber,
+		PProfPort:  *pProfPort,
+	}
 	s.Run()
 }
