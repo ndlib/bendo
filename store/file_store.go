@@ -8,6 +8,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // FileSystem implements the simple file system based store. It tries to
@@ -34,6 +36,15 @@ var (
 
 	// ErrKeyContainsSlash means the key provided contains a forward slash '/'
 	ErrKeyContainsSlash = errors.New("Key contains forward slash")
+
+	// ErrKeyContainsNonUnicode means the key provided contains a Non Unicode Rune
+	ErrKeyContainsNonUnicode = errors.New("Key contains Non-Unicode character")
+
+	// ErrKeyContainsWhiteSpace  means the key provided contains WhiteSpace
+	ErrKeyContainsWhiteSpace = errors.New("Key contains White Space")
+
+	// ErrKeyContainsControlChar  means the key provided contains Control Characters
+	ErrKeyContainsControlChar = errors.New("Key contains Control  Characters")
 )
 
 // NewFileSystem creates a new FileSystem store based at the given root path.
@@ -129,8 +140,12 @@ func (s *FileSystem) Open(key string) (ReadAtCloser, int64, error) {
 // Create creates a new item with the given key, and a writer to allow for
 // saving data into the new item.
 func (s *FileSystem) Create(key string) (io.WriteCloser, error) {
-	if strings.Contains(key, "/") {
-		return nil, ErrKeyContainsSlash
+
+	// Perform Key Name Validation
+	err := isKeyValid(key)
+
+	if err != nil {
+		return nil, err
 	}
 	var w io.WriteCloser
 	// first set up the eventual home dir of this file
@@ -215,4 +230,34 @@ func itemSubdir(key string) string {
 		result = key[0:2] + "/" + key[2:4] + "/"
 	}
 	return result
+}
+
+// Some Simple Item Key Validations
+func isKeyValid(key string) error {
+
+	// Valid Unicode
+
+	if !utf8.ValidString(key) {
+		return ErrKeyContainsNonUnicode
+	}
+
+	// No Slashes
+	if strings.Contains(key, "/") {
+		return ErrKeyContainsSlash
+	}
+
+	for _, rune := range key {
+		// No White Space
+		if unicode.IsSpace(rune) {
+			return ErrKeyContainsWhiteSpace
+		}
+
+		// No Control Characters
+		if unicode.IsControl(rune) {
+			return ErrKeyContainsControlChar
+		}
+	}
+
+	// return an empty error on success
+	return nil
 }
