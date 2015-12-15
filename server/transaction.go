@@ -14,8 +14,8 @@ import (
 )
 
 //r.Handle("GET", "/transaction", ListTx)
-func ListTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	writeHTMLorJSON(w, r, listTxTemplate, TxStore.List())
+func (s *RESTServer) ListTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	writeHTMLorJSON(w, r, listTxTemplate, s.TxStore.List())
 }
 
 var (
@@ -32,9 +32,9 @@ var (
 )
 
 //r.Handle("GET", "/transaction/:tid", ListTxInfo)
-func TxInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *RESTServer) TxInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("tid")
-	tx := TxStore.Lookup(id)
+	tx := s.TxStore.Lookup(id)
 	if tx == nil {
 		w.WriteHeader(404)
 		fmt.Fprintln(w, "cannot find transaction")
@@ -61,9 +61,9 @@ var (
 )
 
 //r.Handle("POST", "/item/:id", NewTxHandler)
-func NewTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *RESTServer) NewTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
-	tx, err := TxStore.Create(id)
+	tx, err := s.TxStore.Create(id)
 	if err != nil {
 		// the err is probably that there is already a transaction open
 		// on the item
@@ -90,13 +90,13 @@ func NewTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) 
 		return
 	}
 	tx.SetStatus(transaction.StatusWaiting)
-	go processCommit(tx)
+	go s.processCommit(tx)
 	w.WriteHeader(202)
 }
 
 // The transaction's status must be set to StatusWaiting before entering,
 // or nothing will happen to the transaction.
-func processCommit(tx *transaction.T) {
+func (s *RESTServer) processCommit(tx *transaction.T) {
 	// probably should hold lock on tx to access these fields directly
 	log.Printf("Starting transaction %s on %s (%s)", tx.ID, tx.ItemID,
 		tx.Status.String())
@@ -116,12 +116,12 @@ func processCommit(tx *transaction.T) {
 		tx.SetStatus(transaction.StatusChecking)
 		fallthrough
 	case transaction.StatusChecking:
-		tx.VerifyFiles(FileStore)
+		tx.VerifyFiles(s.FileStore)
 		// check for len(tx.Err) > 0
 		tx.SetStatus(transaction.StatusIngest)
 		fallthrough
 	case transaction.StatusIngest:
-		tx.Commit(*Items, FileStore)
+		tx.Commit(*s.Items, s.FileStore)
 	}
 }
 
@@ -131,10 +131,10 @@ const MaxConcurrentCommits = 10
 var gate = util.NewGate(MaxConcurrentCommits)
 
 //r.Handle("POST", "/transaction/:tid/cancel", CancelTx)
-func CancelTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *RESTServer) CancelTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	tid := ps.ByName("tid")
 	// TODO(dbrower): only delete tx if it is modifiable
 	//TODO(dbrower): how to remove waiting goroutine?
-	err := TxStore.Delete(tid)
+	err := s.TxStore.Delete(tid)
 	fmt.Fprintf(w, err.Error())
 }

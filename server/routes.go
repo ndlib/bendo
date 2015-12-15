@@ -27,48 +27,54 @@ import (
 type RESTServer struct {
 	PortNumber string
 	PProfPort  string
-	Validator  TokenValidator
-	Items      *items.Store
+
+	// Validator does authentication by validating any user tokens
+	// presented to the API.
+	Validator TokenValidator
+
+	// Items is the base item store.
+	Items *items.Store
+
+	// TxStore keeps information on transactions in progress.
+	TxStore *transaction.Store
+
+	// FileStore keeps the uploaded file waiting to be saved into the
+	// Item store.
+	FileStore *fragment.Store
 }
 
-var (
-	Items     *items.Store
-	TxStore   *transaction.Store
-	FileStore *fragment.Store
-)
-
-func (server *RESTServer) Run() {
+func (s *RESTServer) Run() {
 	log.Println("==========")
 	log.Println("Starting Bendo Server version", Version)
 
 	openDatabase("memory")
-	server.Validator = NewNobodyValidator()
+	s.Validator = NewNobodyValidator()
 
 	log.Println("Loading Transactions")
-	TxStore.Load()
+	s.TxStore.Load()
 	log.Println("Loading Upload Queue")
-	FileStore.Load()
+	s.FileStore.Load()
 	log.Println("Starting pending transactions")
-	go initCommitQueue()
+	go s.initCommitQueue()
 
 	// for pprof
-	if server.PProfPort != "" {
-		log.Println("Starting PProf on port", server.PProfPort)
+	if s.PProfPort != "" {
+		log.Println("Starting PProf on port", s.PProfPort)
 		go func() {
-			log.Println(http.ListenAndServe(":"+server.PProfPort, nil))
+			log.Println(http.ListenAndServe(":"+s.PProfPort, nil))
 		}()
 	}
-	log.Println("Listening on", server.PortNumber)
-	http.ListenAndServe(":"+server.PortNumber, server.addRoutes())
+	log.Println("Listening on", s.PortNumber)
+	http.ListenAndServe(":"+s.PortNumber, s.addRoutes())
 }
 
-func initCommitQueue() {
+func (s *RESTServer) initCommitQueue() {
 	// for each commit, pass to processCommit, and let it sort things out
-	for _, tid := range TxStore.List() {
-		tx := TxStore.Lookup(tid)
+	for _, tid := range s.TxStore.List() {
+		tx := s.TxStore.Lookup(tid)
 		if tx.Status == transaction.StatusWaiting || tx.Status == transaction.StatusIngest {
 			tx.SetStatus(transaction.StatusWaiting)
-			go processCommit(tx)
+			go s.processCommit(tx)
 		}
 	}
 	// also! put username into tx record
@@ -88,19 +94,19 @@ func (s *RESTServer) addRoutes() http.Handler {
 		{"GET", "/item/:id", RoleMDOnly, s.ItemHandler},
 
 		// all the transaction things.
-		{"POST", "/item/:id/transaction", RoleWrite, NewTxHandler},
-		{"GET", "/transaction", RoleRead, ListTxHandler},
-		{"GET", "/transaction/:tid", RoleRead, TxInfoHandler},
-		{"POST", "/transaction/:tid/cancel", RoleWrite, CancelTxHandler}, //keep?
+		{"POST", "/item/:id/transaction", RoleWrite, s.NewTxHandler},
+		{"GET", "/transaction", RoleRead, s.ListTxHandler},
+		{"GET", "/transaction/:tid", RoleRead, s.TxInfoHandler},
+		{"POST", "/transaction/:tid/cancel", RoleWrite, s.CancelTxHandler}, //keep?
 
 		// file upload things
-		{"GET", "/upload", RoleRead, ListFileHandler},
-		{"POST", "/upload", RoleWrite, AppendFileHandler},
-		{"GET", "/upload/:fileid", RoleRead, GetFileHandler},
-		{"POST", "/upload/:fileid", RoleWrite, AppendFileHandler},
-		{"DELETE", "/upload/:fileid", RoleWrite, DeleteFileHandler},
-		{"GET", "/upload/:fileid/metadata", RoleMDOnly, GetFileInfoHandler},
-		{"PUT", "/upload/:fileid/metadata", RoleWrite, SetFileInfoHandler},
+		{"GET", "/upload", RoleRead, s.ListFileHandler},
+		{"POST", "/upload", RoleWrite, s.AppendFileHandler},
+		{"GET", "/upload/:fileid", RoleRead, s.GetFileHandler},
+		{"POST", "/upload/:fileid", RoleWrite, s.AppendFileHandler},
+		{"DELETE", "/upload/:fileid", RoleWrite, s.DeleteFileHandler},
+		{"GET", "/upload/:fileid/metadata", RoleMDOnly, s.GetFileInfoHandler},
+		{"PUT", "/upload/:fileid/metadata", RoleWrite, s.SetFileInfoHandler},
 
 		// the read only bundle stuff
 		{"GET", "/bundle/list/:prefix", RoleRead, s.BundleListPrefixHandler},

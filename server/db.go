@@ -80,7 +80,7 @@ func UpdateChecksum(itemid string, status string) error {
 // store (which is the canonical source of information). Items which are
 // missing in the database will be added, and items in the database missing
 // from the store are removed from the database.
-func SyncItems() {
+func (s *RESTServer) SyncItems() {
 	const dbItemAddQL = `INSERT INTO items VALUES (?1, now(), "", ?2, now())`
 	const dbItemUpdateQL = `UPDATE items
 		data = ?2,
@@ -91,9 +91,9 @@ func SyncItems() {
 	// not synced with ours. Also do this before we start loading items
 	// since we do not know how long that will take.
 	updateTime := time.Now().Add(-1 * time.Hour)
-	for id := range Items.List() {
+	for id := range s.Items.List() {
 		// we force a reload of the JSON
-		item, err := Items.Item(id)
+		item, err := s.Items.Item(id)
 		if err != nil {
 			log.Printf(err.Error())
 			continue

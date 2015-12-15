@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -55,7 +56,10 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 		return
 	}
 	w.Header().Set("ETag", fmt.Sprintf("%d", bid))
-	io.Copy(w, src)
+	n, err := io.Copy(w, src)
+	if err != nil {
+		log.Printf("getblob (%s,%d) %d,%s", id, bid, n, err.Error())
+	}
 }
 
 func (s *RESTServer) ItemHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
@@ -71,12 +75,3 @@ func (s *RESTServer) ItemHandler(w http.ResponseWriter, r *http.Request, ps http
 	enc := json.NewEncoder(w)
 	enc.Encode(item)
 }
-
-// Wrap the item store in the singleflight so we only ask for metadata once
-
-/*
-// add  commit  button  to  item  info  page?
-	<form action="/transaction/{{ .ID }}/commit" method="post">
-		<button type="submit">Commit</button>
-	</form>
-*/

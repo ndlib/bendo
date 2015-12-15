@@ -236,12 +236,12 @@ func init() {
 	if err != nil {
 		log.Println(err.Error())
 	}
-	Items = items.New(store.NewMemory())
-	TxStore = transaction.New(store.NewMemory())
-	TxStore.Load()
-	FileStore = fragment.New(store.NewMemory())
-	server := new(RESTServer)
-	server.Validator = NewNobodyValidator()
-	server.Items = Items
+	server := &RESTServer{
+		Validator: NewNobodyValidator(),
+		Items:     items.New(store.NewMemory()),
+		TxStore:   transaction.New(store.NewMemory()),
+		FileStore: fragment.New(store.NewMemory()),
+	}
+	server.TxStore.Load()
 	testServer = httptest.NewServer(server.addRoutes())
 }
