@@ -8,6 +8,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // FileSystem implements the simple file system based store. It tries to
@@ -34,6 +36,15 @@ var (
 
 	// ErrKeyContainsSlash means the key provided contains a forward slash '/'
 	ErrKeyContainsSlash = errors.New("Key contains forward slash")
+
+	// ErrKeyContainsNonUnicode means the key provided contains a Non Unicode Rune
+	ErrKeyContainsNonUnicode = errors.New("Key contains Non-Unicode character")
+
+	// ErrKeyContainsWhiteSpace  means the key provided contains WhiteSpace
+	ErrKeyContainsWhiteSpace = errors.New("Key contains White Space")
+
+	// ErrKeyContainsControlChar  means the key provided contains Control Characters
+	ErrKeyContainsControlChar = errors.New("Key contains Control  Characters")
 )
 
 // NewFileSystem creates a new FileSystem store based at the given root path.
@@ -131,11 +142,11 @@ func (s *FileSystem) Open(key string) (ReadAtCloser, int64, error) {
 func (s *FileSystem) Create(key string) (io.WriteCloser, error) {
 
 	// Perform Key Name Validation
-        keyNameValid, err := isKeyValid(key)
+	keyNameValid, err := isKeyValid(key)
 
-        if !keyNameValid {
+	if !keyNameValid {
 		return nil, err
-	}  
+	}
 	var w io.WriteCloser
 	// first set up the eventual home dir of this file
 	target, err := s.setupSubDir(itemSubdir(key), key)
@@ -222,14 +233,30 @@ func itemSubdir(key string) string {
 }
 
 // Some Simple Item Key Validations
-func isKeyValid(key string) ( bool, error ) {
+func isKeyValid(key string) (bool, error) {
+
+	// Valid Unicode
+
+	if !utf8.ValidString(key) {
+		return false, ErrKeyContainsNonUnicode
+	}
 
 	// No Slashes
 	if strings.Contains(key, "/") {
 		return false, ErrKeyContainsSlash
 	}
 
+	for _, rune := range key {
+		// No White Space
+		if unicode.IsSpace(rune) {
+			return false, ErrKeyContainsWhiteSpace
+		}
+
+		// No Control Characters
+		if unicode.IsControl(rune) {
+			return false, ErrKeyContainsControlChar
+		}
+	}
+
 	return true, nil
 }
-
-

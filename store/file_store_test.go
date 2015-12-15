@@ -182,6 +182,22 @@ func TestCreate(t *testing.T) {
 	if exists(root, scratchdir, "abc") {
 		t.Errorf("File scratch abc exists")
 	}
+
+	_, err = s.Create("abc/abc")
+	if err != ErrKeyContainsSlash {
+		t.Errorf("Received error %s", err.Error())
+	}
+
+	_, err = s.Create("def abc")
+	if err != ErrKeyContainsWhiteSpace {
+		t.Errorf("Received error %s", err.Error())
+	}
+
+	_, err = s.Create("defabc")
+	if err != ErrKeyContainsControlChar {
+		t.Errorf("Received error %s", err.Error())
+	}
+
 }
 
 func TestOpenTwice(t *testing.T) {
