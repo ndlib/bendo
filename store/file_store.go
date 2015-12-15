@@ -142,9 +142,9 @@ func (s *FileSystem) Open(key string) (ReadAtCloser, int64, error) {
 func (s *FileSystem) Create(key string) (io.WriteCloser, error) {
 
 	// Perform Key Name Validation
-	keyNameValid, err := isKeyValid(key)
+	err := isKeyValid(key)
 
-	if !keyNameValid {
+	if err != nil {
 		return nil, err
 	}
 	var w io.WriteCloser
@@ -233,30 +233,31 @@ func itemSubdir(key string) string {
 }
 
 // Some Simple Item Key Validations
-func isKeyValid(key string) (bool, error) {
+func isKeyValid(key string) error {
 
 	// Valid Unicode
 
 	if !utf8.ValidString(key) {
-		return false, ErrKeyContainsNonUnicode
+		return ErrKeyContainsNonUnicode
 	}
 
 	// No Slashes
 	if strings.Contains(key, "/") {
-		return false, ErrKeyContainsSlash
+		return ErrKeyContainsSlash
 	}
 
 	for _, rune := range key {
 		// No White Space
 		if unicode.IsSpace(rune) {
-			return false, ErrKeyContainsWhiteSpace
+			return ErrKeyContainsWhiteSpace
 		}
 
 		// No Control Characters
 		if unicode.IsControl(rune) {
-			return false, ErrKeyContainsControlChar
+			return ErrKeyContainsControlChar
 		}
 	}
 
-	return true, nil
+	// return an empty error on success
+	return nil
 }

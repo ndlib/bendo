@@ -183,21 +183,27 @@ func TestCreate(t *testing.T) {
 		t.Errorf("File scratch abc exists")
 	}
 
-	_, err = s.Create("abc/abc")
-	if err != ErrKeyContainsSlash {
-		t.Errorf("Received error %s", err.Error())
-	}
+}
 
-	_, err = s.Create("def abc")
-	if err != ErrKeyContainsWhiteSpace {
-		t.Errorf("Received error %s", err.Error())
-	}
+func TestInvalidKeys(t *testing.T) {
+        var tests = []struct{ input string; result error }{
+                {"\u0010FFFF", ErrKeyContainsControlChar},
+                {"\xbd\xb2\x3d\xbc\x20\xe2\x8c\x98", ErrKeyContainsNonUnicode},
+                {"def abc", ErrKeyContainsWhiteSpace },
+                {"abc/def", ErrKeyContainsSlash},
 
-	_, err = s.Create("defabc")
-	if err != ErrKeyContainsControlChar {
-		t.Errorf("Received error %s", err.Error())
-	}
+        }
 
+ 	root, _ := ioutil.TempDir("", "")
+        defer os.RemoveAll(root)
+        s := NewFileSystem(root)
+
+        for _, test := range tests {
+                _, err := s.Create(test.input)
+                if err != test.result {
+                        t.Errorf("Got %s, expected %s", err, test.result)
+                }
+        }
 }
 
 func TestOpenTwice(t *testing.T) {
