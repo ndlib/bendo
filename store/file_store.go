@@ -129,9 +129,13 @@ func (s *FileSystem) Open(key string) (ReadAtCloser, int64, error) {
 // Create creates a new item with the given key, and a writer to allow for
 // saving data into the new item.
 func (s *FileSystem) Create(key string) (io.WriteCloser, error) {
-	if strings.Contains(key, "/") {
-		return nil, ErrKeyContainsSlash
-	}
+
+	// Perform Key Name Validation
+        keyNameValid, err := isKeyValid(key)
+
+        if !keyNameValid {
+		return nil, err
+	}  
 	var w io.WriteCloser
 	// first set up the eventual home dir of this file
 	target, err := s.setupSubDir(itemSubdir(key), key)
@@ -216,3 +220,16 @@ func itemSubdir(key string) string {
 	}
 	return result
 }
+
+// Some Simple Item Key Validations
+func isKeyValid(key string) ( bool, error ) {
+
+	// No Slashes
+	if strings.Contains(key, "/") {
+		return false, ErrKeyContainsSlash
+	}
+
+	return true, nil
+}
+
+
