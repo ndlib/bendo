@@ -85,9 +85,9 @@ func (s *RESTServer) addRoutes() http.Handler {
 		{"HEAD", "/blob/:id/:bid", RoleRead, s.BlobHandler},
 		{"GET", "/item/:id/*slot", RoleRead, s.SlotHandler},
 		{"HEAD", "/item/:id/*slot", RoleRead, s.SlotHandler},
-		{"GET", "/item/:id", RoleRead, s.ItemHandler},
+		{"GET", "/item/:id", RoleMDOnly, s.ItemHandler},
 
-		// all the transaction things. Sooo many transaction things.
+		// all the transaction things.
 		{"POST", "/item/:id/transaction", RoleWrite, NewTxHandler},
 		{"GET", "/transaction", RoleRead, ListTxHandler},
 		{"GET", "/transaction/:tid", RoleRead, TxInfoHandler},
@@ -130,6 +130,7 @@ func writeHTMLorJSON(w http.ResponseWriter,
 	r *http.Request,
 	tmpl *template.Template,
 	val interface{}) {
+
 	if r.Header.Get("Accept-Encoding") == "application/json" {
 		json.NewEncoder(w).Encode(val)
 		return

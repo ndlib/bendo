@@ -14,6 +14,7 @@ import (
 	"github.com/ndlib/bendo/items"
 )
 
+// GET /blob/:id/:bid
 func (s *RESTServer) BlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
 	bid, err := strconv.ParseInt(ps.ByName("bid"), 10, 0)
@@ -22,10 +23,10 @@ func (s *RESTServer) BlobHandler(w http.ResponseWriter, r *http.Request, ps http
 		fmt.Fprintln(w, err)
 		return
 	}
-	w.Header().Set("ETag", fmt.Sprintf("%d", bid))
 	s.getblob(w, r, id, items.BlobID(bid))
 }
 
+// GET /item/:id/*slot
 func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
 	item, err := s.Items.Item(id)
@@ -33,17 +34,16 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 		fmt.Fprintln(w, err.Error())
 		return
 	}
-	// see if there is a "@nnn" version present
 	// the star parameter in httprouter returns the leading slash
 	slot := strings.TrimPrefix(ps.ByName("slot"), "/")
+	// slot might have a "@nnn" version prefix
 	bid := item.BlobByExtendedSlot(slot)
 	if bid == 0 {
 		w.WriteHeader(404)
 		fmt.Fprintf(w, "Invalid Version")
 		return
 	}
-	w.Header().Set("Location", fmt.Sprintf("/blob/%s/%d", item.ID, bid))
-	w.Header().Set("Etag", fmt.Sprintf("%d", bid))
+	w.Header().Set("Location", fmt.Sprintf("/blob/%s/%d", id, bid))
 	s.getblob(w, r, id, items.BlobID(bid))
 }
 
@@ -54,6 +54,7 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 		fmt.Fprintln(w, err)
 		return
 	}
+	w.Header().Set("ETag", fmt.Sprintf("%d", bid))
 	io.Copy(w, src)
 }
 
