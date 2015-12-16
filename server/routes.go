@@ -43,12 +43,17 @@ type RESTServer struct {
 	FileStore *fragment.Store
 }
 
+// Run initializes and starts all the goroutines used by the server. It then
+// blocks listening for and handling http requests.
 func (s *RESTServer) Run() {
 	log.Println("==========")
 	log.Println("Starting Bendo Server version", Version)
 
+	if s.Validator == nil {
+		panic("Validator is nil")
+	}
+
 	openDatabase("memory")
-	s.Validator = NewNobodyValidator()
 
 	log.Println("Loading Transactions")
 	s.TxStore.Load()
@@ -147,10 +152,10 @@ func writeHTMLorJSON(w http.ResponseWriter,
 // authzWrapper returns a Handler which will first verify the user token as
 // having at least the given Role. The user name is added as a parameter
 // "username".
-func (server *RESTServer) authzWrapper(handler httprouter.Handle, leastRole Role) httprouter.Handle {
+func (s *RESTServer) authzWrapper(handler httprouter.Handle, leastRole Role) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		token := r.Header.Get("X-Api-Key")
-		user, role, err := server.Validator.TokenValid(token)
+		user, role, err := s.Validator.TokenValid(token)
 		if err != nil {
 			w.WriteHeader(500)
 			fmt.Fprintln(w, err.Error())
