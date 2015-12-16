@@ -39,7 +39,18 @@ TBD
 
 # Contributions
 
-TBD
+Structure imports like:
+
+    import (
+        // standard library packages
+
+        // other external packages
+
+        // ndlib packages
+    )
+
+Before committing, run `go fmt` on the repository.
+We also use `go vet` and `golint` occasionally, but for now they are not required on each check-in.
 
 # TODO
 
