@@ -11,8 +11,8 @@ import (
 	"github.com/ndlib/bendo/store"
 )
 
-func BundleListHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	c := Items.S.List()
+func (s *RESTServer) BundleListHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	c := s.Items.S.List()
 	// we encode this as JSON ourselves....how could it go wrong?
 	w.Write([]byte("["))
 	// comma starts as a space
@@ -24,9 +24,9 @@ func BundleListHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Par
 	w.Write([]byte("]"))
 }
 
-func BundleListPrefixHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *RESTServer) BundleListPrefixHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	prefix := ps.ByName("prefix")
-	result, err := Items.S.ListPrefix(prefix)
+	result, err := s.Items.S.ListPrefix(prefix)
 	if err != nil {
 		fmt.Fprintln(w, err)
 		return
@@ -35,9 +35,9 @@ func BundleListPrefixHandler(w http.ResponseWriter, r *http.Request, ps httprout
 	enc.Encode(result) // ignore any error
 }
 
-func BundleOpenHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *RESTServer) BundleOpenHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	key := ps.ByName("key")
-	data, _, err := Items.S.Open(key)
+	data, _, err := s.Items.S.Open(key)
 	if err != nil {
 		fmt.Fprintln(w, err)
 		return

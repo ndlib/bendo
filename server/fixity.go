@@ -12,17 +12,17 @@ import (
 
 // Start a background goroutine to check item fixity at the given rate
 // (in MB/hour). If the rate is 0, no background process is started.
-func FixityCheck(rate int64) {
+func (s *RESTServer) FixityCheck(rate int64) {
 	if rate > 0 {
 		bytesPerSec := float64(rate) * 1000000 / 3600
 		fixityratelimiter = newRateCounter(bytesPerSec)
-		go fixity(fixityratelimiter)
+		go s.fixity(fixityratelimiter)
 	}
 }
 
 // StopFixity halts the background fixity checking process. The process is not
 // resumable once stopped.
-func StopFixity() {
+func (s *RESTServer) StopFixity() {
 	fixityratelimiter.Stop()
 }
 
@@ -35,11 +35,11 @@ var (
 )
 
 // start a goroutine to do fixity checking using the given rateCounter
-func fixity(r *rateCounter) {
+func (s *RESTServer) fixity(r *rateCounter) {
 	c := make(chan string)
 	go itemlist(c)
 	for itemid := range c {
-		status, _, err := fixityItem(r, itemid)
+		status, _, err := s.fixityItem(r, itemid)
 		// TODO(dbrower): exit if fixityItem returns a timeout
 		if err == ErrStopped {
 			return
@@ -52,9 +52,9 @@ func fixity(r *rateCounter) {
 // rateCounter to limit its reads. When finished it returns a status of "ok",
 // "error", or "mismatch", a (possibly empty) list of messages, and an actual
 // error if there was a transient error (not a validation error).
-func fixityItem(r *rateCounter, itemid string) (status string, msgs []string, err error) {
+func (s *RESTServer) fixityItem(r *rateCounter, itemid string) (status string, msgs []string, err error) {
 	status = "error"
-	item, err := Items.Item(itemid)
+	item, err := s.Items.Item(itemid)
 	if err != nil {
 		msgs = append(msgs, err.Error())
 		log.Printf("fixity for %s: %s", itemid, err.Error())
@@ -65,7 +65,7 @@ func fixityItem(r *rateCounter, itemid string) (status string, msgs []string, er
 	for _, b := range item.Blobs {
 		// open the blob stream
 		var blobreader io.ReadCloser
-		blobreader, err = Items.Blob(itemid, b.ID)
+		blobreader, err = s.Items.Blob(itemid, b.ID)
 		if err != nil {
 			msgs = append(msgs, err.Error())
 			log.Printf("fixity for: (%s, %d): %s", itemid, b.ID, err.Error())

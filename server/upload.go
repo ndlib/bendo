@@ -17,12 +17,12 @@ import (
 )
 
 //{"GET", "/upload", ListFileHandler},
-func ListFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *RESTServer) ListFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	q := r.URL.Query()
 	if len(q["label"]) > 0 {
-		writeHTMLorJSON(w, r, listFileTemplate, FileStore.ListFiltered(q["label"]))
+		writeHTMLorJSON(w, r, listFileTemplate, s.FileStore.ListFiltered(q["label"]))
 	} else {
-		writeHTMLorJSON(w, r, listFileTemplate, FileStore.List())
+		writeHTMLorJSON(w, r, listFileTemplate, s.FileStore.List())
 	}
 }
 
@@ -40,9 +40,9 @@ var (
 )
 
 //{"GET", "/upload/:fileid/metadata", GetFileInfoHandler},
-func GetFileInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *RESTServer) GetFileInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("fileid")
-	f := FileStore.Lookup(id)
+	f := s.FileStore.Lookup(id)
 	if f == nil {
 		w.WriteHeader(404)
 		fmt.Fprintln(w, "cannot find file")
@@ -72,7 +72,7 @@ var (
 
 //{"POST", "/upload", AppendFileHandler},
 //{"POST", "/upload/:fileid", AppendFileHandler},
-func AppendFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *RESTServer) AppendFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	md5hash64 := r.Header.Get("X-Upload-Md5")
 	sha256hash64 := r.Header.Get("X-Upload-Sha256")
 	if md5hash64 == "" && sha256hash64 == "" {
@@ -97,13 +97,13 @@ func AppendFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Par
 	if fileid == "" {
 		for f == nil {
 			id := randomid()
-			f = FileStore.New(id)
+			f = s.FileStore.New(id)
 		}
 	} else {
 		// New returns nil if the file already exists!
-		f = FileStore.New(fileid)
+		f = s.FileStore.New(fileid)
 		if f == nil {
-			f = FileStore.Lookup(fileid)
+			f = s.FileStore.Lookup(fileid)
 		}
 		// f should not be nil at this point...
 		if f == nil {
@@ -157,9 +157,9 @@ func randomid() string {
 //{"DELETE", "/upload/:fileid", DeleteFileHandler},
 // This deletes a file which has been uploaded and is in the temporary
 // holding area.
-func DeleteFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *RESTServer) DeleteFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	fileid := ps.ByName("fileid")
-	err := FileStore.Delete(fileid)
+	err := s.FileStore.Delete(fileid)
 	if err != nil {
 		w.WriteHeader(500)
 		fmt.Fprintln(w, err.Error())
@@ -167,9 +167,9 @@ func DeleteFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Par
 }
 
 //{"PUT", "/upload/:fileid/metadata", SetFileInfoHandler},
-func SetFileInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *RESTServer) SetFileInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	fileid := ps.ByName("fileid")
-	f := FileStore.Lookup(fileid)
+	f := s.FileStore.Lookup(fileid)
 	if f == nil {
 		w.WriteHeader(404)
 		fmt.Fprintln(w, "cannot find file")
@@ -192,9 +192,9 @@ func SetFileInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Pa
 }
 
 //{"GET", "/upload/:fileid", GetFileHandler},
-func GetFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (s *RESTServer) GetFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	fileid := ps.ByName("fileid")
-	f := FileStore.Lookup(fileid)
+	f := s.FileStore.Lookup(fileid)
 	if f == nil {
 		w.WriteHeader(404)
 		fmt.Fprintln(w, "Unknown file identifier")

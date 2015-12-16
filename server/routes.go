@@ -15,91 +15,114 @@ import (
 	"github.com/ndlib/bendo/transaction"
 )
 
-var (
-	Items      *items.Store
-	TxStore    *transaction.Store
-	FileStore  *fragment.Store
-	PortNumber *string
-	PProfPort  *string
-	Validator  TokenValidator
-)
+// RESTServer is the base type containing the configuration for a Bendo REST
+// API server.
+//
+// Set all the public fields and then call Run. Run will listen on the given
+// port and handle requests. (At the moment there is no maximum simultaneous
+// request limit). Do not change any fields after calling Run.
+//
+// Run will start a goroutine to handle serializing new file uploads
+// into storage bags, and a goroutine to do fixity checking.
+type RESTServer struct {
+	PortNumber string
+	PProfPort  string
 
-var (
-	routes = []struct {
-		method  string
-		route   string
-		role    Role
-		handler httprouter.Handle
-	}{
-		{"GET", "/blob/:id/:bid", RoleRead, BlobHandler},
-		{"HEAD", "/blob/:id/:bid", RoleRead, BlobHandler},
-		{"GET", "/item/:id/:version/*slot", RoleRead, SlotHandler},
-		{"HEAD", "/item/:id/:version/*slot", RoleRead, SlotHandler},
-		{"GET", "/item/:id", RoleRead, ItemHandler},
-		// all the transaction things. Sooo many transaction things.
-		{"POST", "/item/:id/transaction", RoleWrite, NewTxHandler},
-		{"GET", "/transaction", RoleRead, ListTxHandler},
-		{"GET", "/transaction/:tid", RoleRead, TxInfoHandler},
-		{"POST", "/transaction/:tid/cancel", RoleWrite, CancelTxHandler}, //keep?
-		// file upload things
-		{"GET", "/upload", RoleRead, ListFileHandler},
-		{"POST", "/upload", RoleWrite, AppendFileHandler},
-		{"GET", "/upload/:fileid", RoleRead, GetFileHandler},
-		{"POST", "/upload/:fileid", RoleWrite, AppendFileHandler},
-		{"DELETE", "/upload/:fileid", RoleWrite, DeleteFileHandler},
-		{"GET", "/upload/:fileid/metadata", RoleMDOnly, GetFileInfoHandler},
-		{"PUT", "/upload/:fileid/metadata", RoleWrite, SetFileInfoHandler},
-		// the read only bundle stuff
-		{"GET", "/bundle/list/", RoleRead, BundleListHandler},
-		{"GET", "/bundle/listprefix/:prefix", RoleRead, BundleListPrefixHandler},
-		{"GET", "/bundle/open/:key", RoleRead, BundleOpenHandler},
-		// other
-		{"GET", "/", RoleUnknown, WelcomeHandler},
-		{"GET", "/stats", RoleUnknown, NotImplementedHandler},
-	}
-)
+	// Validator does authentication by validating any user tokens
+	// presented to the API.
+	Validator TokenValidator
 
-func Run() {
+	// Items is the base item store.
+	Items *items.Store
+
+	// TxStore keeps information on transactions in progress.
+	TxStore *transaction.Store
+
+	// FileStore keeps the uploaded file waiting to be saved into the
+	// Item store.
+	FileStore *fragment.Store
+}
+
+func (s *RESTServer) Run() {
 	log.Println("==========")
 	log.Println("Starting Bendo Server version", Version)
 
 	openDatabase("memory")
-	Validator = NewNobodyValidator()
+	s.Validator = NewNobodyValidator()
 
 	log.Println("Loading Transactions")
-	TxStore.Load()
+	s.TxStore.Load()
 	log.Println("Loading Upload Queue")
-	FileStore.Load()
+	s.FileStore.Load()
 	log.Println("Starting pending transactions")
-	go initCommitQueue()
+	go s.initCommitQueue()
 
 	// for pprof
-	go func() {
-		log.Println(http.ListenAndServe("localhost"+*PProfPort, nil))
-	}()
-	log.Println("Listening on ", PortNumber)
-	http.ListenAndServe(*PortNumber, AddRoutes())
+	if s.PProfPort != "" {
+		log.Println("Starting PProf on port", s.PProfPort)
+		go func() {
+			log.Println(http.ListenAndServe(":"+s.PProfPort, nil))
+		}()
+	}
+	log.Println("Listening on", s.PortNumber)
+	http.ListenAndServe(":"+s.PortNumber, s.addRoutes())
 }
 
-func initCommitQueue() {
+func (s *RESTServer) initCommitQueue() {
 	// for each commit, pass to processCommit, and let it sort things out
-	for _, tid := range TxStore.List() {
-		tx := TxStore.Lookup(tid)
+	for _, tid := range s.TxStore.List() {
+		tx := s.TxStore.Lookup(tid)
 		if tx.Status == transaction.StatusWaiting || tx.Status == transaction.StatusIngest {
 			tx.SetStatus(transaction.StatusWaiting)
-			go processCommit(tx)
+			go s.processCommit(tx)
 		}
 	}
 	// also! put username into tx record
 }
 
-func AddRoutes() http.Handler {
-	r := httprouter.New()
+func (s *RESTServer) addRoutes() http.Handler {
+	var routes = []struct {
+		method  string
+		route   string
+		role    Role // RoleUnknown means no API key is needed to access
+		handler httprouter.Handle
+	}{
+		{"GET", "/blob/:id/:bid", RoleRead, s.BlobHandler},
+		{"HEAD", "/blob/:id/:bid", RoleRead, s.BlobHandler},
+		{"GET", "/item/:id/*slot", RoleRead, s.SlotHandler},
+		{"HEAD", "/item/:id/*slot", RoleRead, s.SlotHandler},
+		{"GET", "/item/:id", RoleMDOnly, s.ItemHandler},
 
+		// all the transaction things.
+		{"POST", "/item/:id/transaction", RoleWrite, s.NewTxHandler},
+		{"GET", "/transaction", RoleRead, s.ListTxHandler},
+		{"GET", "/transaction/:tid", RoleRead, s.TxInfoHandler},
+		{"POST", "/transaction/:tid/cancel", RoleWrite, s.CancelTxHandler}, //keep?
+
+		// file upload things
+		{"GET", "/upload", RoleRead, s.ListFileHandler},
+		{"POST", "/upload", RoleWrite, s.AppendFileHandler},
+		{"GET", "/upload/:fileid", RoleRead, s.GetFileHandler},
+		{"POST", "/upload/:fileid", RoleWrite, s.AppendFileHandler},
+		{"DELETE", "/upload/:fileid", RoleWrite, s.DeleteFileHandler},
+		{"GET", "/upload/:fileid/metadata", RoleMDOnly, s.GetFileInfoHandler},
+		{"PUT", "/upload/:fileid/metadata", RoleWrite, s.SetFileInfoHandler},
+
+		// the read only bundle stuff
+		{"GET", "/bundle/list/:prefix", RoleRead, s.BundleListPrefixHandler},
+		{"GET", "/bundle/list/", RoleRead, s.BundleListHandler},
+		{"GET", "/bundle/open/:key", RoleRead, s.BundleOpenHandler},
+
+		// other
+		{"GET", "/", RoleUnknown, WelcomeHandler},
+		{"GET", "/stats", RoleUnknown, NotImplementedHandler},
+	}
+
+	r := httprouter.New()
 	for _, route := range routes {
 		r.Handle(route.method,
 			route.route,
-			checkTokenWrapper(route.handler, route.role))
+			s.authzWrapper(route.handler, route.role))
 	}
 	return r
 }
@@ -113,6 +136,7 @@ func writeHTMLorJSON(w http.ResponseWriter,
 	r *http.Request,
 	tmpl *template.Template,
 	val interface{}) {
+
 	if r.Header.Get("Accept-Encoding") == "application/json" {
 		json.NewEncoder(w).Encode(val)
 		return
@@ -120,15 +144,13 @@ func writeHTMLorJSON(w http.ResponseWriter,
 	tmpl.Execute(w, val)
 }
 
-// checkTokenWrapper returns a Handler which will first verify the user token
-// as having at least the given Role. The user name is added as a parameter
+// authzWrapper returns a Handler which will first verify the user token as
+// having at least the given Role. The user name is added as a parameter
 // "username".
-func checkTokenWrapper(handler httprouter.Handle, leastRole Role) httprouter.Handle {
+func (server *RESTServer) authzWrapper(handler httprouter.Handle, leastRole Role) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-		// user token exists? "X-Api-Key"
-
 		token := r.Header.Get("X-Api-Key")
-		user, role, err := Validator.TokenValid(token)
+		user, role, err := server.Validator.TokenValid(token)
 		if err != nil {
 			w.WriteHeader(500)
 			fmt.Fprintln(w, err.Error())
@@ -149,7 +171,7 @@ func checkTokenWrapper(handler httprouter.Handle, leastRole Role) httprouter.Han
 				goto out
 			}
 		}
-		// add a new username
+		// add a new username if none found
 		ps = append(ps, httprouter.Param{"username", user})
 	out:
 		handler(w, r, ps)
