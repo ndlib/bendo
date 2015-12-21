@@ -33,7 +33,9 @@ func (ms *Memory) List() <-chan string {
 	go func() {
 		ms.m.RLock()
 		for k := range ms.store {
+			ms.m.RUnlock()
 			c <- k
+			ms.m.RLock()
 		}
 		ms.m.RUnlock()
 		close(c)
