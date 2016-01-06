@@ -12,11 +12,11 @@ import (
 
 var (
 	fileroot = flag.String("root", ".", "root prefix to upload files")
-	server   = flag.String("server", "127.0.0.1:14000", "Bendo Server to Use")
+	server   = flag.String("server", "libvirt9.library.nd.edu:14000", "Bendo Server to Use")
 	creator  = flag.String("creator", "butil", "Creator name to use")
-	verbose  = flag.Bool("v", false, "Display more information")
+	verbose  = flag.Bool("v", true, "Display more information")
 	usage    = `
-butil <command> <file> <command arguments>
+bclient <command> <file> <command arguments>
 
 Possible commands:
     upload  <item id> <blob number>
@@ -47,22 +47,32 @@ func main() {
 
 func doUpload(  item string, files string) {
 
-	bserver.Init()
+	bserver.Init( server)
 	fileutil.InitFileListStep( *fileroot)
 
         go fileutil.CreateUploadList( files) 	
-        go fileutil.ComputeLocalChecksums( item) 	
-	//go bserver.FetchItemInfo( item )
+        go fileutil.ComputeLocalChecksums() 	
+	go bserver.FetchItemInfo( item )
 	fileutil.WaitFileListStep()
 
-	// Item Not Found on server, this is a new item.
-	// If Item Exists on server, need to figure differences
-	// Allow Deletions, or is this a versioning issue?
+	switch {
+	case  bserver.ItemFetchStatus == bserver.ErrNotFound:
+		fmt.Println("1")
+		fileutil.UseRemoteList = false
+		break
+	case bserver.ItemFetchStatus != nil:
+		fmt.Println("2")
+		fmt.Println(bserver.ItemFetchStatus)
+		return
+	default:
+		fmt.Println("3")
+		fileutil.BuildRemoteList( bserver.RemoteJason)
+	        break
+	}
+	 
+	fileutil.PrintLocalList()
+//	fileutil.PrintRemoteList()
         
-	//if bserver.ItemFetchStatus != ItemNotFound {
-	//	fileutil.Compare( fileutil.List[item] , bserver.List[item]) 
-	//}
-
 	// If there's anything left, upload it
 }
 

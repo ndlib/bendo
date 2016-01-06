@@ -1,29 +1,28 @@
 // This package manages a list of files, and their checksums
  
-package filelist
+package fileutil
 
 import (
 	"crypto/md5"
 	"fmt"
 	"io"
         "os"
+	"github.com/antonholmquist/jason"
 )
 
 // Our underlying data structure
 
 type FileList struct {
-	Item string
 	Root string
-	Files map[string][]byte
+	Files map[string]map[int][]byte
 }
 
 // Create an empty FileList
 
-func New( item, root string) *FileList {
+func New( root string) *FileList {
 fl := new(FileList)
-	fl.Item = item
 	fl.Root = root
-	fl.Files = make(map[string][]byte)
+	fl.Files = make(map[string]map[int][]byte)
 
 	return fl
 }
@@ -51,11 +50,25 @@ func (f *FileList) BuildListFromChan( filePipe <- chan string ) {
  
 		md5Sum := md5w.Sum(nil)
 
+     		innerMap, ok := f.Files[fileName]
 
-		f.Files[fileName] = md5Sum
+    		if !ok {
+        		innerMap = make(map[int][]byte)
+        		f.Files[fileName] = innerMap
+    		}
+
+		f.Files[fileName][1] = md5Sum
+
 	}
 } 
 
 // Construct a FileList from a JSON return by the Bendo API
 
+func (f *FileList) BuildListFromJSON( json *jason.Object  ) {
 
+        versionArray, _ := json.GetObjectArray("Versions")
+	for _, version := range versionArray {
+		slotMap, _ := version.GetObject("Slots")
+		fmt.Println(slotMap.String())
+	}
+}

@@ -9,19 +9,38 @@ import (
 	"path"
 	"path/filepath"
 	"sync"
-	
-	"github.com/ndlib/bendo/cmd/bclient/filelist"
+
+       "github.com/antonholmquist/jason"
 )
 
 var (
-	localFileList *filelist.FileList
-	remoteFileList *filelist.FileList
 	UpLoadDone  sync.WaitGroup
+	UseRemoteList bool = true
+	localFileList *FileList
+	remoteFileList *FileList
 	FilesWalked = make(chan string)
 	rootPrefix string
 	verbose bool
         
 )
+
+// Print out remote filer list
+func PrintRemoteList() {
+
+for key, value := range  remoteFileList.Files {
+    fmt.Println("Key:", key, "Value:", value)
+}
+
+}
+
+// Print out local file list
+func PrintLocalList() {
+
+for key, value := range  localFileList.Files {
+    fmt.Println("Key:", key, "Value:", value[1])
+}
+
+}
 
 // Public Synchronization Gate
 
@@ -35,7 +54,7 @@ func InitFileListStep( root string) {
 	// Wait for 
 	rootPrefix = root
 	IfVerbose("InitFileListStep called")
-	UpLoadDone.Add(1)
+	UpLoadDone.Add(3)
 	IfVerbose("InitFileListStep finished")
 }
 func SetVerbose( isVerbose bool ) {
@@ -78,11 +97,15 @@ func addToUploadList(path string, info os.FileInfo, err error) error {
 	return nil
 }
 
-func ComputeLocalChecksums( item string) {
+func ComputeLocalChecksums() {
      		defer UpLoadDone.Done()
 
 		
-		localFileList = filelist.New( item, rootPrefix)
+		localFileList = New( rootPrefix)
 		localFileList.BuildListFromChan(FilesWalked)
-//			file := <-FilesWalked
+}
+
+func BuildRemoteList( json *jason.Object)  {
+		remoteFileList = New( rootPrefix)
+		remoteFileList.BuildListFromJSON( json)
 }
