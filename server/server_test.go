@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ndlib/bendo/blobcache"
 	"github.com/ndlib/bendo/fragment"
 	"github.com/ndlib/bendo/items"
 	"github.com/ndlib/bendo/store"
@@ -241,6 +242,7 @@ func init() {
 		Items:     items.New(store.NewMemory()),
 		TxStore:   transaction.New(store.NewMemory()),
 		FileStore: fragment.New(store.NewMemory()),
+		Cache:     blobcache.EmptyCache{},
 	}
 	server.TxStore.Load()
 	testServer = httptest.NewServer(server.addRoutes())
