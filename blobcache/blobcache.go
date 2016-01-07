@@ -18,7 +18,13 @@ import (
 	"github.com/ndlib/bendo/store"
 )
 
-type T struct {
+type T interface {
+	Contains(id string) bool
+	Get(id string) (store.ReadAtCloser, int64, error)
+	Put(id string) (io.WriteCloser, error)
+}
+
+type StoreLRU struct {
 	// this is the place where cached items are stored
 	s store.Store
 
@@ -42,14 +48,13 @@ type entry struct {
 // New creates and initializes a new cache structure. The given store
 // may already have items in it. Call Scan() either inline or in a goroutine
 // to scan the store and add the items inside it to the LRU list.
-func New(s store.Store, maxSize int64) *T {
-	return &T{s: s, maxSize: maxSize, lru: list.New()}
+func New(s store.Store, maxSize int64) T {
+	return &StoreLRU{s: s, maxSize: maxSize, lru: list.New()}
 }
 
-// Scan enumerates the items in the given store and returns their total
-// size. Blocks until it is completely finished. Mainly used to initialize the
-// size member of the cache structure.
-func (t *T) Scan() {
+// Scan enumerates the items in the given store and enters them into the LRU
+// cache.
+func (t *StoreLRU) Scan() {
 	for key := range t.s.List() {
 		if t.Contains(key) {
 			continue
@@ -72,7 +77,7 @@ func (t *T) Scan() {
 // Contains returns true if the given item is in the cache. It does not
 // update the LRU status, and does not guarantee the item will be in the
 // cache when Get() is called.
-func (t *T) Contains(id string) bool {
+func (t *StoreLRU) Contains(id string) bool {
 	e := t.find(id)
 	return e != nil
 }
@@ -81,7 +86,7 @@ func (t *T) Contains(id string) bool {
 // be read. The LRU list is updated. If the item is not in the cache nil is
 // returned for the ReadAtCloser. (NOTE: it is not an error for an item to not
 // be in the cache. Check the ReadAtCloser to see.)
-func (t *T) Get(id string) (store.ReadAtCloser, int64, error) {
+func (t *StoreLRU) Get(id string) (store.ReadAtCloser, int64, error) {
 	e := t.find(id)
 	if e == nil {
 		return nil, 0, nil
@@ -92,7 +97,7 @@ func (t *T) Get(id string) (store.ReadAtCloser, int64, error) {
 	return t.s.Open(id)
 }
 
-func (t *T) find(id string) *list.Element {
+func (t *StoreLRU) find(id string) *list.Element {
 	t.m.RLock()
 	defer t.m.RUnlock()
 	for e := t.lru.Front(); e != nil; e = e.Next() {
@@ -112,7 +117,7 @@ func (t *T) find(id string) *list.Element {
 // Only one writer to a given id can be active at a time. Subsusquient Puts
 // will return an error. Also, once an item is in the cache, Puts for it will
 // return an error (until the item is evicted.)
-func (t *T) Put(id string) (io.WriteCloser, error) {
+func (t *StoreLRU) Put(id string) (io.WriteCloser, error) {
 	w, err := t.s.Create(id)
 	if err != nil {
 		return nil, err
@@ -121,7 +126,7 @@ func (t *T) Put(id string) (io.WriteCloser, error) {
 }
 
 // linkEntry adds the given entry into our LRU list.
-func (t *T) linkEntry(entry entry) {
+func (t *StoreLRU) linkEntry(entry entry) {
 	t.m.Lock()
 	defer t.m.Unlock()
 
@@ -135,7 +140,7 @@ var (
 // reserve space for the passed in size, evicting items if necessary to stay
 // under maxSize. Size can be negative to cancel a previous reservation.
 // Nothing is reserved if there is an error.
-func (t *T) reserve(size int64) error {
+func (t *StoreLRU) reserve(size int64) error {
 	t.m.Lock()
 	defer t.m.Unlock()
 

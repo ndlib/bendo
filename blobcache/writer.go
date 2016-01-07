@@ -5,7 +5,7 @@ import (
 )
 
 type Writer struct {
-	parent        *T
+	parent        *StoreLRU
 	id            string
 	w             io.WriteCloser
 	size          int64
@@ -37,6 +37,8 @@ func (w *Writer) Write(p []byte) (int, error) {
 		}
 		return 0, err
 	}
-	w.size += int64(n) // w.size will be >= the actual item size
+	// w.size will be >= the actual item size since we don't use the actual
+	// amount written. Perhaps that does need to be tracked.
+	w.size += int64(n)
 	return w.w.Write(p)
 }

@@ -62,8 +62,9 @@ func TestTooLargeItem(t *testing.T) {
 		t.Errorf("Did not receive ErrCacheFull")
 	}
 	w.Close()
-	if cache.size != 0 {
-		t.Errorf("Cache size is %d. Expected %d", cache.size, 0)
+	size := cache.(*StoreLRU).size
+	if size != 0 {
+		t.Errorf("Cache size is %d. Expected %d", size, 0)
 	}
 }
 
@@ -89,7 +90,7 @@ func TestScan(t *testing.T) {
 	}
 
 	// now set up the cache and scan it
-	cache := New(mem, 100)
+	cache := New(mem, 100).(*StoreLRU)
 	cache.Scan()
 
 	for _, elem := range table {
@@ -102,7 +103,7 @@ func TestScan(t *testing.T) {
 	}
 
 	// now set up a small cache and scan that
-	cache = New(mem, 15)
+	cache = New(mem, 15).(*StoreLRU)
 	cache.Scan()
 
 	for _, elem := range table {
