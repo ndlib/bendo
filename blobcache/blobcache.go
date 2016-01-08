@@ -24,6 +24,8 @@ type T interface {
 	Put(id string) (io.WriteCloser, error)
 }
 
+// A StoreLRU implements the T interface using a store as the storage backend
+// and the least recently used evection policy.
 type StoreLRU struct {
 	// this is the place where cached items are stored
 	s store.Store
@@ -94,6 +96,8 @@ func (t *StoreLRU) Get(id string) (store.ReadAtCloser, int64, error) {
 	t.m.Lock()
 	t.lru.MoveToFront(e)
 	t.m.Unlock()
+	// TODO(dbrower): see if not found error is returned, and if so unlink
+	// this item from the lru list and unreserve its space.
 	return t.s.Open(id)
 }
 
