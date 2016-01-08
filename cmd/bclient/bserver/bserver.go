@@ -37,3 +37,26 @@ func FetchItemInfo( item string ) {
 
 	RemoteJason = json
 }
+
+func SendFiles ( fileQueue <- chan string, item string, fileroot string ){
+
+	fmt.Println(item)
+	fmt.Println(fileroot)
+
+	for filename := range fileQueue {
+		fmt.Println(filename)
+	}
+}
+
+func upLoadFile ( filename string, item string, fileroot string ) {
+	// compute absolute filename  path
+	// create /tmp/bendo_upload/item/filename/
+	// chunk that baby
+	// compute md5sums of chunks
+	// POST/UPLOAD, get upload_id
+	// POST/UPLOAD/:upload_id for each chunk
+	// POST/ID/TRANSACTION (JSON w/ item ,reldir info) 
+	// cleanup
+	
+	
+}

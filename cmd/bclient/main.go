@@ -24,6 +24,7 @@ Possible commands:
     get <item id list>
 
 `
+        FilesToSend = make(chan string)
 )
 
 func main() {
@@ -57,23 +58,25 @@ func doUpload(  item string, files string) {
 
 	switch {
 	case  bserver.ItemFetchStatus == bserver.ErrNotFound:
-		fmt.Println("1")
-		fileutil.UseRemoteList = false
 		break
 	case bserver.ItemFetchStatus != nil:
-		fmt.Println("2")
 		fmt.Println(bserver.ItemFetchStatus)
 		return
 	default:
-		fmt.Println("3")
 		fileutil.BuildRemoteList( bserver.RemoteJason)
 	        break
 	}
 	 
-	fileutil.PrintLocalList()
-//	fileutil.PrintRemoteList()
         
-	// If there's anything left, upload it
+	// Compare Local and remote Lists- what reamins in Local List we'll Send
+	fileutil.CullLocalList()
+
+	fileutil.PrintLocalList()
+
+	go bserver.SendFiles( FilesToSend , item, *fileroot )
+	go bserver.SendFiles( FilesToSend , item, *fileroot )
+
+	fileutil.QueueFiles( FilesToSend )
 }
 
 func doGet(item string) {

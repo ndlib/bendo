@@ -4,6 +4,7 @@ package fileutil
 // May need decomposition if too unwieldy
 
 import (
+	"bytes"
         "fmt"
 	"os"
 	"path"
@@ -26,7 +27,6 @@ var (
 
 // Print out remote filer list
 func PrintRemoteList() {
-
 for key, value := range  remoteFileList.Files {
     fmt.Println("Key:", key, "Value:", value)
 }
@@ -109,3 +109,33 @@ func BuildRemoteList( json *jason.Object)  {
 		remoteFileList = New( rootPrefix)
 		remoteFileList.BuildListFromJSON( json)
 }
+
+func CullLocalList() {
+
+	// item does not exist on remote bendo server
+	if remoteFileList == nil {
+		return
+	}
+	
+	for localFile, localMD5 := range localFileList.Files {
+		
+		remoteMD5Map := remoteFileList.Files[localFile]
+
+		if remoteMD5Map == nil {
+			continue
+		}	
+
+		for _, remoteMD5  := range remoteMD5Map {
+			if bytes.Compare(localMD5[1], remoteMD5) == 0 {
+				delete(localFileList.Files, localFile)
+				continue
+			}
+		} 
+		
+	} 
+}
+
+func QueueFiles( fileQueue chan string) {
+
+	localFileList.AddToSendQueue( fileQueue)
+} 
