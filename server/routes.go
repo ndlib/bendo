@@ -186,7 +186,7 @@ func (s *RESTServer) authzWrapper(handler httprouter.Handle, leastRole Role) htt
 			}
 		}
 		// add a new username if none found
-		ps = append(ps, httprouter.Param{"username", user})
+		ps = append(ps, httprouter.Param{Key: "username", Value: user})
 	out:
 		handler(w, r, ps)
 	}

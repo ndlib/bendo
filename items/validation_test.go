@@ -29,7 +29,7 @@ func TestValidate(t *testing.T) {
 	})
 
 	if err != nil {
-		t.Fatal("Received %s, expected nil", err.Error())
+		t.Fatalf("Received %s, expected nil", err.Error())
 	}
 
 	nb, problems, err := s.Validate("gooditem")
