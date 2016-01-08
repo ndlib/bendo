@@ -10,8 +10,8 @@ import (
 	"github.com/ndlib/bendo/util"
 )
 
-// Start a background goroutine to check item fixity at the given rate
-// (in MB/hour). If the rate is 0, no background process is started.
+// FixityCheck starts a background goroutine to check item fixity at the given
+// rate (in MB/hour). If the rate is 0, no background process is started.
 func (s *RESTServer) FixityCheck(rate int64) {
 	if rate > 0 {
 		bytesPerSec := float64(rate) * 1000000 / 3600
@@ -189,6 +189,7 @@ func (r *rateCounter) Wrap(reader io.Reader) io.Reader {
 	return rateReader{reader: reader, rate: r}
 }
 
+// ErrStopped means a read failed because the governing rate counter was stopped.
 var ErrStopped = errors.New("rateCounter stopped")
 
 type rateReader struct {

@@ -172,6 +172,8 @@ var (
 	ErrChecksum    = errors.New("bagit: checksum mismatch")
 )
 
+// BagError is used to hold a validation error and the file in the bag which
+// has the error.
 type BagError struct {
 	Err  error
 	File string

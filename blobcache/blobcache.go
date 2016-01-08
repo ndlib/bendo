@@ -18,6 +18,7 @@ import (
 	"github.com/ndlib/bendo/store"
 )
 
+// T is the basic blob cache interface.
 type T interface {
 	Contains(id string) bool
 	Get(id string) (store.ReadAtCloser, int64, error)
@@ -84,10 +85,10 @@ func (t *StoreLRU) Contains(id string) bool {
 	return e != nil
 }
 
-// Return a reader for the given item. It will block until the data is ready to
-// be read. The LRU list is updated. If the item is not in the cache nil is
-// returned for the ReadAtCloser. (NOTE: it is not an error for an item to not
-// be in the cache. Check the ReadAtCloser to see.)
+// Get returns a reader for the given item. It will block until the data is
+// ready to be read. The LRU list is updated. If the item is not in the cache
+// nil is returned for the ReadAtCloser. (NOTE: it is not an error for an item
+// to not be in the cache. Check the ReadAtCloser to see.)
 func (t *StoreLRU) Get(id string) (store.ReadAtCloser, int64, error) {
 	e := t.find(id)
 	if e == nil {
@@ -126,7 +127,7 @@ func (t *StoreLRU) Put(id string) (io.WriteCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Writer{parent: t, id: id, w: w}, nil
+	return &writer{parent: t, id: id, w: w}, nil
 }
 
 // linkEntry adds the given entry into our LRU list.
@@ -138,6 +139,8 @@ func (t *StoreLRU) linkEntry(entry entry) {
 }
 
 var (
+	// ErrCacheFull means the item being added to the cache is too big
+	// for the cache.
 	ErrCacheFull = errors.New("Cache is full and no more items can be removed")
 )
 

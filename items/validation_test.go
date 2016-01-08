@@ -53,7 +53,7 @@ type itemData struct {
 }
 
 func createBundledItem(t *testing.T, s *Store, name string, data []itemData) error {
-	var prevBundle int = 1
+	var prevBundle = 1
 
 	w, err := s.Open(name, "nobody")
 	if err != nil {

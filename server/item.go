@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	_ "github.com/golang/groupcache/singleflight"
 	"github.com/julienschmidt/httprouter"
 
 	"github.com/ndlib/bendo/items"

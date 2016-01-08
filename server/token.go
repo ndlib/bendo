@@ -16,8 +16,11 @@ type TokenValidator interface {
 	TokenValid(token string) (user string, role Role, err error)
 }
 
+// A Role is an enumeration describing the permission level a given user has.
 type Role int
 
+// The enumerations for a Role. They form a linear order with later entries
+// having more permissions than earlier ones.
 const (
 	RoleUnknown Role = iota
 	RoleMDOnly
@@ -50,7 +53,7 @@ func NewNobodyValidator() TokenValidator { return new(nobodyValidator) }
 
 type nobodyValidator struct{}
 
-func (_ nobodyValidator) TokenValid(token string) (string, Role, error) {
+func (nobodyValidator) TokenValid(token string) (string, Role, error) {
 	return "nobody", RoleAdmin, nil
 }
 
@@ -60,21 +63,20 @@ func NewInvalidValidator() TokenValidator { return new(invalidValidator) }
 
 type invalidValidator struct{}
 
-func (_ invalidValidator) TokenValid(token string) (string, Role, error) {
+func (invalidValidator) TokenValid(token string) (string, Role, error) {
 	return "", RoleUnknown, nil
 }
 
-// A ListValidator is backed by a predefined list of users, which are read from r upon creation.
-// The reader r should consist of a sequence of user entries, separated by newlines.
-// Each entry has the form:
+// NewListValidator returns a validator backed by a predefined list of users,
+// which are read from r upon creation. The reader r should consist of a
+// sequence of user entries, separated by newlines. Each entry has the form:
 //
 //     <user name>  <role>  <token>
 //
-// The fields are delineated by whitespace (spaces or tabs).
-// This decoder does not permit spaces in either the user
-// name or the token. The role is one of "MDOnly", "Read",
-// "Write", "Admin" (case insensitive). Empty lines and lines beginning with a
-// hash '#' are skipped.
+// The fields are delineated by whitespace (spaces or tabs). This decoder does
+// not permit spaces in either the user name or the token. The role is one of
+// "MDOnly", "Read", "Write", "Admin" (case insensitive). Empty lines and lines
+// beginning with a hash '#' are skipped.
 func NewListValidator(r io.Reader) (TokenValidator, error) {
 	users, err := parseListFile(r)
 	if err != nil {
@@ -147,7 +149,6 @@ func (ld listValidator) TokenValid(token string) (string, Role, error) {
 	i := sort.Search(len(users), func(i int) bool { return users[i].token >= token })
 	if i < len(users) && users[i].token == token {
 		return users[i].user, users[i].role, nil
-	} else {
-		return "", RoleUnknown, nil
 	}
+	return "", RoleUnknown, nil
 }

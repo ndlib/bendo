@@ -6,7 +6,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	_ "net/http/pprof"
+	_ "net/http/pprof" // for pprof server
 
 	"github.com/julienschmidt/httprouter"
 

@@ -4,7 +4,8 @@ import (
 	"io"
 )
 
-type Writer struct {
+// writer provides a way to write a new item into the cache.
+type writer struct {
 	parent        *StoreLRU
 	id            string
 	w             io.WriteCloser
@@ -12,7 +13,7 @@ type Writer struct {
 	deleteOnClose bool
 }
 
-func (w *Writer) Close() error {
+func (w *writer) Close() error {
 	err := w.w.Close()
 	if err != nil || w.deleteOnClose {
 		// TODO: handle errors better here?
@@ -27,7 +28,7 @@ func (w *Writer) Close() error {
 	return nil
 }
 
-func (w *Writer) Write(p []byte) (int, error) {
+func (w *writer) Write(p []byte) (int, error) {
 	// do the write after evicting so we never have more than maxSize in cache
 	n := len(p)
 	err := w.parent.reserve(int64(n))
