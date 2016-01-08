@@ -10,6 +10,7 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 
+	"github.com/ndlib/bendo/blobcache"
 	"github.com/ndlib/bendo/fragment"
 	"github.com/ndlib/bendo/items"
 	"github.com/ndlib/bendo/transaction"
@@ -41,6 +42,10 @@ type RESTServer struct {
 	// FileStore keeps the uploaded file waiting to be saved into the
 	// Item store.
 	FileStore *fragment.Store
+
+	// Cache is keeps smallish blobs retreived from tape. Large-ish blobs
+	// are not cached.
+	Cache blobcache.T
 }
 
 // Run initializes and starts all the goroutines used by the server. It then
@@ -51,6 +56,10 @@ func (s *RESTServer) Run() {
 
 	if s.Validator == nil {
 		panic("Validator is nil")
+	}
+
+	if s.Cache == nil {
+		s.Cache = blobcache.EmptyCache{}
 	}
 
 	openDatabase("memory")

@@ -13,6 +13,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 
 	"github.com/ndlib/bendo/items"
+	"github.com/ndlib/bendo/store"
 )
 
 // GET /blob/:id/:bid
@@ -49,11 +50,46 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 }
 
 func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, bid items.BlobID) {
-	src, err := s.Items.Blob(id, bid)
+	key := fmt.Sprintf("%s+%04d", id, bid)
+	cacheContents, _, err := s.Cache.Get(key)
 	if err != nil {
-		w.WriteHeader(404)
+		w.WriteHeader(500)
 		fmt.Fprintln(w, err)
 		return
+	}
+	var src io.Reader
+	if cacheContents != nil {
+		log.Printf("Cache Hit %s", key)
+		defer cacheContents.Close()
+		// need to wrap this since Cache.Get returns a ReadAtCloser
+		src = store.NewReader(cacheContents)
+	} else {
+		// cache miss...load from main store, AND put into cache
+		log.Printf("Cache Miss %s", key)
+		realContents, err := s.Items.Blob(id, bid)
+		if err != nil {
+			w.WriteHeader(404)
+			fmt.Fprintln(w, err)
+			return
+		}
+		defer realContents.Close()
+		src = realContents
+		// copy into the cache
+		go func() {
+			cw, err := s.Cache.Put(key)
+			if err != nil {
+				log.Printf("cache put %s: %s", key, err.Error())
+				return
+			}
+			defer cw.Close()
+			cr, err := s.Items.Blob(id, bid)
+			if err != nil {
+				log.Printf("cache items get %s: %s", key, err.Error())
+				return
+			}
+			defer cr.Close()
+			io.Copy(cw, cr)
+		}()
 	}
 	w.Header().Set("ETag", fmt.Sprintf("%d", bid))
 	n, err := io.Copy(w, src)
