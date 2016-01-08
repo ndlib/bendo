@@ -18,8 +18,8 @@ func main() {
 		storeDir   = flag.String("storage", ".", "location of the storage directory")
 		uploadDir  = flag.String("upload", "upload", "location of the upload directory")
 		tokenfile  = flag.String("user-tokens", "", "file containing allowable user tokens")
-		cacheDir   = flag.String("cache", "", "directory to store the blob cache")
-		cacheSize  = flag.Int64("cacheSize", 10, "the maximum size of the cache in MB")
+		cacheDir   = flag.String("cache-dir", "", "directory to store the blob cache")
+		cacheSize  = flag.Int64("cache-size", 10, "the maximum size of the cache in MB")
 		portNumber = flag.String("port", "14000", "Port Number to Use")
 		pProfPort  = flag.String("pfport", "14001", "PPROF Port Number to Use")
 	)
@@ -49,10 +49,10 @@ func main() {
 		log.Printf("Cache Size %d (MB)", *cacheSize)
 		cache = blobcache.New(store.NewFileSystem(*cacheDir),
 			(*cacheSize)*1000000)
-		os.MkdirAll(*cacheDir, 0664)
+		os.MkdirAll(*cacheDir, 0755)
 		go cache.(*blobcache.StoreLRU).Scan()
 	}
-	os.MkdirAll(*uploadDir, 0664)
+	os.MkdirAll(*uploadDir, 0755)
 	var s = server.RESTServer{
 		Items:      items.New(store.NewFileSystem(*storeDir)),
 		TxStore:    transaction.New(store.NewFileSystem(*uploadDir)),

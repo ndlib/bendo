@@ -59,11 +59,13 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 	}
 	var src io.Reader
 	if cacheContents != nil {
+		log.Printf("Cache Hit %s", key)
 		defer cacheContents.Close()
-		// need to wrap this since Blob returns a ReadCloser
+		// need to wrap this since Cache.Get returns a ReadAtCloser
 		src = store.NewReader(cacheContents)
 	} else {
 		// cache miss...load from main store, AND put into cache
+		log.Printf("Cache Miss %s", key)
 		realContents, err := s.Items.Blob(id, bid)
 		if err != nil {
 			w.WriteHeader(404)
@@ -76,11 +78,13 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 		go func() {
 			cw, err := s.Cache.Put(key)
 			if err != nil {
+				log.Printf("cache put %s: %s", key, err.Error())
 				return
 			}
 			defer cw.Close()
 			cr, err := s.Items.Blob(id, bid)
 			if err != nil {
+				log.Printf("cache items get %s: %s", key, err.Error())
 				return
 			}
 			defer cr.Close()
