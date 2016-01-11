@@ -55,7 +55,7 @@ func NewFileSystem(root string) *FileSystem {
 // List returns a channel listing all the keys in this store.
 func (s *FileSystem) List() <-chan string {
 	c := make(chan string)
-	go walkTree(c, s.root, true)
+	go walkTree(c, s.root, 0)
 	return c
 }
 
@@ -63,9 +63,9 @@ func (s *FileSystem) List() <-chan string {
 // keys on channel out. Be careful to only open directories and stat
 // files. Otherwise we might trigger a blocking request on the tape system.
 //
-// If toplevel is true, the channel is closed when the function exits.
-func walkTree(out chan<- string, root string, toplevel bool) {
-	if toplevel {
+// If level is 0, the channel is closed when the function exits.
+func walkTree(out chan<- string, root string, level int) {
+	if level == 0 {
 		defer close(out)
 	}
 	f, err := os.Open(root)
@@ -84,9 +84,16 @@ func walkTree(out chan<- string, root string, toplevel bool) {
 			return
 		}
 		for _, e := range entries {
+			// only decend at most two directories down, and only
+			// list files in the second level. 0/1/2
 			if e.IsDir() {
-				p := filepath.Join(root, e.Name())
-				walkTree(out, p, false)
+				if level < 2 {
+					p := filepath.Join(root, e.Name())
+					walkTree(out, p, level+1)
+				}
+				continue
+			}
+			if level != 2 {
 				continue
 			}
 			out <- e.Name()

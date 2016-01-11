@@ -115,6 +115,10 @@ func TestWalkTree(t *testing.T) {
 		"a/c/asd-0001-1",
 		"a/c/asd-0002-1",
 		"a/c/asd-0003-2",
+		"a/d/",
+		"a/d/e/",
+		"a/d/e/bad-file-1",
+		"bad-file-2",
 	}
 	var goal = []string{
 		"xyz-0001-1",
@@ -128,7 +132,7 @@ func TestWalkTree(t *testing.T) {
 	dir := makeTmpTree(files)
 	defer os.RemoveAll(dir)
 	c := make(chan string)
-	go walkTree(c, dir, true)
+	go walkTree(c, dir, 0)
 	var result []string
 	for name := range c {
 		result = append(result, name)
@@ -186,24 +190,26 @@ func TestCreate(t *testing.T) {
 }
 
 func TestInvalidKeys(t *testing.T) {
-        var tests = []struct{ input string; result error }{
-                {"\u0010FFFF", ErrKeyContainsControlChar},
-                {"\xbd\xb2\x3d\xbc\x20\xe2\x8c\x98", ErrKeyContainsNonUnicode},
-                {"def abc", ErrKeyContainsWhiteSpace },
-                {"abc/def", ErrKeyContainsSlash},
+	var tests = []struct {
+		input  string
+		result error
+	}{
+		{"\u0010FFFF", ErrKeyContainsControlChar},
+		{"\xbd\xb2\x3d\xbc\x20\xe2\x8c\x98", ErrKeyContainsNonUnicode},
+		{"def abc", ErrKeyContainsWhiteSpace},
+		{"abc/def", ErrKeyContainsSlash},
+	}
 
-        }
+	root, _ := ioutil.TempDir("", "")
+	defer os.RemoveAll(root)
+	s := NewFileSystem(root)
 
- 	root, _ := ioutil.TempDir("", "")
-        defer os.RemoveAll(root)
-        s := NewFileSystem(root)
-
-        for _, test := range tests {
-                _, err := s.Create(test.input)
-                if err != test.result {
-                        t.Errorf("Got %s, expected %s", err, test.result)
-                }
-        }
+	for _, test := range tests {
+		_, err := s.Create(test.input)
+		if err != test.result {
+			t.Errorf("Got %s, expected %s", err, test.result)
+		}
+	}
 }
 
 func TestOpenTwice(t *testing.T) {

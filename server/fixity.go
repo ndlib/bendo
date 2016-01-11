@@ -1,210 +1,109 @@
 package server
 
 import (
-	"errors"
-	"io"
 	"log"
-	"sync"
+	"math/rand"
+	"strings"
 	"time"
-
-	"github.com/ndlib/bendo/util"
 )
 
-// FixityCheck starts a background goroutine to check item fixity at the given
-// rate (in MB/hour). If the rate is 0, no background process is started.
-func (s *RESTServer) FixityCheck(rate int64) {
-	if rate > 0 {
-		bytesPerSec := float64(rate) * 1000000 / 3600
-		fixityratelimiter = newRateCounter(bytesPerSec)
-		go s.fixity(fixityratelimiter)
-	}
+// A FixityCache tracks the information the fixity service needs to know what
+// items have been checked, what needs to be checked, and any fixity errors
+// found. It is presumed to be backed by a database, but that is not assumed.
+// Methods should be safe to be called by multiple goroutines.
+type FixityDB interface {
+	// NextItem returns the item id of the item having the earliest pending
+	// checksum that is before the cutoff time. If no items satisfy this
+	// the empty string is returned. It will also not return anything in an
+	// "error" state.
+	NextFixity(cutoff time.Time) string
+
+	// UpdateItem takes the id of an item and adjusts the earliest pending
+	// fixity check for that item to have the given status and notes.
+	// Notes contains general text providing details on any problems.
+	// If there is no pending fixity check for the item, one is created.
+	UpdateFixity(id string, status string, notes string) error
+
+	// SetCheck takes an item id and schedules another fixity check at the
+	// given time in the future (or past).
+	SetCheck(id string, when time.Time) error
+
+	// LookupCheck takes an item id and returns the time of earliest pending
+	// fixity check for that item. If no fixity check is pending, returns
+	// the zero time.
+	LookupCheck(id string) (time.Time, error)
 }
 
-// StopFixity halts the background fixity checking process. The process is not
-// resumable once stopped.
-func (s *RESTServer) StopFixity() {
-	fixityratelimiter.Stop()
+// StartFixity starts a background goroutine to check item fixity.
+func (s *RESTServer) StartFixity() {
+	go s.fixity()
 }
 
 var (
-	// call Stop on this to quit the fixity process
-	fixityratelimiter *rateCounter
-
-	// do not checksum an item any more often than every 6 months
-	minDurationChecksum = 180 * 24 * time.Hour
+	// by default schedule the next fixity in 273 days (~9 months)
+	// this duration is completely arbitrary.
+	nextFixityDuration = 273 * 24 * time.Hour
 )
 
-// start a goroutine to do fixity checking using the given rateCounter
-func (s *RESTServer) fixity(r *rateCounter) {
-	c := make(chan string)
-	go itemlist(c)
-	for itemid := range c {
-		status, _, err := s.fixityItem(r, itemid)
-		// TODO(dbrower): exit if fixityItem returns a timeout
-		if err == ErrStopped {
-			return
-		}
-		_ = UpdateChecksum(itemid, status)
-	}
-}
-
-// fixityItem checksums all the blobs in a single item. It uses the passed-in
-// rateCounter to limit its reads. When finished it returns a status of "ok",
-// "error", or "mismatch", a (possibly empty) list of messages, and an actual
-// error if there was a transient error (not a validation error).
-func (s *RESTServer) fixityItem(r *rateCounter, itemid string) (status string, msgs []string, err error) {
-	status = "error"
-	item, err := s.Items.Item(itemid)
-	if err != nil {
-		msgs = append(msgs, err.Error())
-		log.Printf("fixity for %s: %s", itemid, err.Error())
-		return
-	}
-	// now checksum each blob listed in this item
-	// TODO(dbrower): sort them by bundle number to optimize bundle loading
-	for _, b := range item.Blobs {
-		// open the blob stream
-		var blobreader io.ReadCloser
-		blobreader, err = s.Items.Blob(itemid, b.ID)
-		if err != nil {
-			msgs = append(msgs, err.Error())
-			log.Printf("fixity for: (%s, %d): %s", itemid, b.ID, err.Error())
-			continue
-		}
-		rr := r.Wrap(blobreader)
-		var ok bool
-		ok, err = util.VerifyStreamHash(rr, b.MD5, b.SHA256)
-		if err == ErrStopped {
-			// we were cancelled
-			return
-		} else if err != nil {
-			msgs = append(msgs, err.Error())
-			continue
-		} else if !ok {
-			// checksum error!
-			status = "mismatch"
-			msgs = append(msgs, "Checksum mismatch")
-			log.Printf("fixity mismatch: (%s, %d)", itemid, b.ID)
-		}
-	}
-	if len(msgs) == 0 {
-		status = "ok"
-	}
-	return
-}
-
-// itemlist generates a list of item ids to checksum, and sends them to the
-// provided channel.
-func itemlist(c chan<- string) {
+// implements an infinite loop doing fixity checking. This function does not
+// return.
+func (s *RESTServer) fixity() {
+	log.Println("Starting fixity loop")
 	for {
-		id := OldestChecksum(time.Now().Add(-minDurationChecksum))
+		id := s.Fixity.NextFixity(time.Now())
 		if id == "" {
-			// sleep if there are no ids available
+			// sleep if there are no ids available.
+			// an hour is arbitrary.
 			time.Sleep(time.Hour)
-		} else {
-			c <- id
+			continue
+		}
+		log.Println("begin fixity check for", id)
+		starttime := time.Now()
+		_, problems, err := s.Items.Validate(id)
+		var status = "ok"
+		var notes string
+		if err != nil {
+			log.Println("fixity validate error", err.Error())
+			status = "error"
+			notes = err.Error()
+		} else if len(problems) > 0 {
+			status = "mismatch"
+			notes = strings.Join(problems, "\n")
+		}
+		log.Println("Fixity for", id, "is", status, "duration = ", time.Now().Sub(starttime))
+		err = s.Fixity.UpdateFixity(id, status, notes)
+		// schedule the next check unless one is already scheduled
+		when, _ := s.Fixity.LookupCheck(id)
+		if when.IsZero() {
+			s.Fixity.SetCheck(id, time.Now().Add(nextFixityDuration))
 		}
 	}
 }
 
-// A rateCounter tracks how many bytes we have checksummed and makes sure we
-// keep under the rate limit given.
-// Every so often we increment our pool. As we checksum we remove credits from
-// the pool. If the pool goes negative, then we wait until it goes positive.
-type rateCounter struct {
-	c       chan struct{} // channel we use to signal credits is positive
-	stop    chan struct{} // close to signal adder goroutine to exit
-	m       sync.Mutex    // protects below
-	credits int64         // current credit balance
-}
-
-// Interval between adding credits to the pool. The shorter it is, the more
-// waking and churning we do. The longer it is, the longer the process waits
-// for credits to be added.
-const rateInterval = 1 * time.Minute
-
-// Make a new rater where credits accumulate at rate credits per second.
-// However, the credits are not accumulated every second. Instead the entire
-// amount due is added every 20 minutes.
-func newRateCounter(rate float64) *rateCounter {
-	amount := int64(rate * rateInterval.Seconds())
-	r := &rateCounter{
-		c:       make(chan struct{}),
-		stop:    make(chan struct{}),
-		credits: amount,
-	}
-	go r.adder(amount)
-	return r
-}
-
-// Use some number of units. It is okay if it takes this counter negative.
-func (r *rateCounter) Use(count int64) {
-	r.m.Lock()
-	r.credits -= count
-	r.m.Unlock()
-}
-
-// Return a channel to wait on. It will receive an empty struct when it is OK
-// to resume reading. The channel will be closed if the rateCounter is Stopped.
-func (r *rateCounter) OK() <-chan struct{} {
-	return r.c
-}
-
-// Stop the background goroutine refilling the rateCounter. Will panic if
-// called twice.
-func (r *rateCounter) Stop() {
-	// the background process will then close r.c, which will cancel any
-	// readers
-	close(r.stop)
-}
-
-// adder is the background goroutine that refills the rate counter based on the
-// rate this rateCounter was created with.
-func (r *rateCounter) adder(amount int64) {
-	tick := time.NewTicker(rateInterval)
-	for {
-		var signal chan struct{}
-		r.m.Lock()
-		if r.credits > 0 {
-			signal = r.c
+// scanfixity will make sure every item in the item store has a fixity
+// scheduled. If not, it will schedule one at some random interval between
+// now and the nextFixityDuration period in the future.
+//
+// This will scan each item in the store and then exit.
+func (s *RESTServer) scanfixity() {
+	log.Println("Starting scanfixity")
+	rand.Seed(time.Now().Unix())
+	var starttime = time.Now()
+	for id := range s.Items.List() {
+		when, err := s.Fixity.LookupCheck(id)
+		if err != nil {
+			// error? skip this id
+			log.Println("scanfixity", id, err.Error())
+			continue
 		}
-		r.m.Unlock()
-		select {
-		case <-tick.C:
-			r.Use(-amount) // add amount to credits!
-		case signal <- struct{}{}:
-		case <-r.stop:
-			close(r.c)
-			return
+		if !when.IsZero() {
+			// something is scheduled
+			continue
 		}
+		// schedule something for some random period into the future
+		log.Println("scanfixity adding", id)
+		jitter := rand.Int63n(int64(nextFixityDuration))
+		s.Fixity.SetCheck(id, time.Now().Add(time.Duration(jitter)))
 	}
-}
-
-// Wrap takes an io.Reader and returns a new one where reads are limited by
-// this rateCounter. Reads will block until the rateCounter says the current
-// usage is ok. It is okay for more than one goroutine to use the same
-// rateCounter. If the rateCounter was stopped, the returned reader will
-// cause an ErrStopped.
-func (r *rateCounter) Wrap(reader io.Reader) io.Reader {
-	return rateReader{reader: reader, rate: r}
-}
-
-// ErrStopped means a read failed because the governing rate counter was stopped.
-var ErrStopped = errors.New("rateCounter stopped")
-
-type rateReader struct {
-	reader io.Reader
-	rate   *rateCounter
-}
-
-func (r rateReader) Read(p []byte) (int, error) {
-	// wait for the rate limiter
-	_, ok := <-r.rate.OK()
-	if !ok {
-		// our rateCounter was stopped.
-		return 0, ErrStopped
-	}
-	n, err := r.reader.Read(p)
-	r.rate.Use(int64(n))
-	return n, err
+	log.Println("Ending scanfixity. duration = ", time.Now().Sub(starttime))
 }

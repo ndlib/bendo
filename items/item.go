@@ -18,13 +18,20 @@ type Store struct {
 
 // New creates a new item store which writes its bundles to the given store.Store.
 func New(s store.Store) *Store {
-	return &Store{S: s, cache: nullcache}
+	return &Store{S: s, cache: Nullcache}
 }
 
 // NewWithCache creates a new item store which caches the item metadata in the
 // given cache. (Should be deprecated??)
 func NewWithCache(s store.Store, cache ItemCache) *Store {
 	return &Store{S: s, cache: cache}
+}
+
+// SetCache will set the metadata cache used. It is intended to be used during
+// initialization. It will cause a race condition if used while others are
+// accessing this item store.
+func (s *Store) SetCache(cache ItemCache) {
+	s.cache = cache
 }
 
 // List returns a channel which will contain all of the item ids in the current
@@ -212,7 +219,7 @@ func (item Item) BlobByExtendedSlot(slot string) BlobID {
 // used to implement a no-op cache
 type cache struct{}
 
-var nullcache cache
+var Nullcache cache
 
 func (c cache) Lookup(id string) *Item    { return nil }
 func (c cache) Set(id string, item *Item) {}
