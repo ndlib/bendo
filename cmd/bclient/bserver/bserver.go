@@ -2,61 +2,59 @@ package bserver
 
 import (
 	"fmt"
-	"github.com/ndlib/bendo/cmd/bclient/fileutil"
 	"github.com/antonholmquist/jason"
+	"github.com/ndlib/bendo/cmd/bclient/fileutil"
+	"path"
 )
 
 var (
-        ItemFetchStatus error
+	ItemFetchStatus error
 
-	bserver *string
+	bendoServer *string
 	RemoteJason *jason.Object
-
 )
 
-func Init(  server *string) {
+func Init(server *string) {
 	fileutil.IfVerbose("github.com/ndlib/bendo/bclient/bserver.Init() called")
-	bserver = server
+	bendoServer = server
 }
 
+func FetchItemInfo(item string) {
+	defer fileutil.UpLoadDone.Done()
+	fileutil.IfVerbose("github.com/ndlib/bendo/bclient/bserver.FetchItemInfo() called")
 
-func FetchItemInfo( item string ) {
-	 defer fileutil.UpLoadDone.Done()
-         fileutil.IfVerbose("github.com/ndlib/bendo/bclient/bserver.FetchItemInfo() called")
-
-	 remoteBendo := New( *bserver)
-
-	 json, err := remoteBendo.GetItemInfo( item)
+	json, err := GetItemInfo(item)
 
 	// Some error occurred retrieving from server, or item not found.
-	 if err != nil {
+	if err != nil {
 		ItemFetchStatus = err
 		fmt.Println(err.Error())
 		return
-	 }
+	}
 
 	RemoteJason = json
 }
 
-func SendFiles ( fileQueue <- chan string, item string, fileroot string ){
-
-	fmt.Println(item)
-	fmt.Println(fileroot)
+func SendFiles(fileQueue <-chan string, item string, fileroot string) {
 
 	for filename := range fileQueue {
-		fmt.Println(filename)
+		uploadFile(filename, fileutil.ShowUploadFileMd5(filename), item, fileroot)
 	}
 }
 
-func upLoadFile ( filename string, item string, fileroot string ) {
+func uploadFile(filename string, uploadMd5 []byte, item string, fileroot string) {
+
 	// compute absolute filename  path
-	// create /tmp/bendo_upload/item/filename/
-	// chunk that baby
-	// compute md5sums of chunks
-	// POST/UPLOAD, get upload_id
-	// POST/UPLOAD/:upload_id for each chunk
-	// POST/ID/TRANSACTION (JSON w/ item ,reldir info) 
+
+	fullFilePath := path.Join(fileroot, filename)
+
+	// chunk that baby initiial size is 1MB
+
+	uploadErr := chunkAndUpload(fullFilePath, uploadMd5, item, 1048576)
+
+	if uploadErr != nil {
+		fmt.Println(uploadErr.Error())
+	}
 	// cleanup
-	
-	
+
 }

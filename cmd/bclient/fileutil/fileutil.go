@@ -5,40 +5,46 @@ package fileutil
 
 import (
 	"bytes"
-        "fmt"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
 	"sync"
 
-       "github.com/antonholmquist/jason"
+	"github.com/antonholmquist/jason"
 )
 
 var (
-	UpLoadDone  sync.WaitGroup
-	UseRemoteList bool = true
-	localFileList *FileList
+	UpLoadDone     sync.WaitGroup
+	UseRemoteList  bool = true
+	localFileList  *FileList
 	remoteFileList *FileList
-	FilesWalked = make(chan string)
-	rootPrefix string
-	verbose bool
-        
+	FilesWalked    = make(chan string)
+	rootPrefix     string
+	verbose        bool
 )
+
+//A public Method to get the Md5 sum of file on the upload list
+
+func ShowUploadFileMd5(fileName string) []byte {
+
+	return localFileList.Files[fileName][1]
+}
 
 // Print out remote filer list
 func PrintRemoteList() {
-for key, value := range  remoteFileList.Files {
-    fmt.Println("Key:", key, "Value:", value)
-}
+	for key, value := range remoteFileList.Files {
+		fmt.Println("Key:", key, "Value:", value)
+	}
 
 }
 
 // Print out local file list
 func PrintLocalList() {
 
-for key, value := range  localFileList.Files {
-    fmt.Println("Key:", key, "Value:", value[1])
-}
+	for key, value := range localFileList.Files {
+		fmt.Println("Key:", key, "Value:", value[1])
+	}
 
 }
 
@@ -50,24 +56,24 @@ func WaitFileListStep() {
 	IfVerbose("UpLoadDone.Wait() satisfied")
 }
 
-func InitFileListStep( root string) {
-	// Wait for 
+func InitFileListStep(root string) {
+	// Wait for
 	rootPrefix = root
 	IfVerbose("InitFileListStep called")
 	UpLoadDone.Add(3)
 	IfVerbose("InitFileListStep finished")
 }
-func SetVerbose( isVerbose bool ) {
+func SetVerbose(isVerbose bool) {
 	verbose = isVerbose
 }
 
-func IfVerbose( output string) {
-    if verbose {
-        fmt.Println(output)
-    }
+func IfVerbose(output string) {
+	if verbose {
+		fmt.Println(output)
+	}
 }
 
-func CreateUploadList( files string) {
+func CreateUploadList(files string) {
 
 	IfVerbose("CreateUploadList called")
 	defer UpLoadDone.Done()
@@ -98,16 +104,15 @@ func addToUploadList(path string, info os.FileInfo, err error) error {
 }
 
 func ComputeLocalChecksums() {
-     		defer UpLoadDone.Done()
+	defer UpLoadDone.Done()
 
-		
-		localFileList = New( rootPrefix)
-		localFileList.BuildListFromChan(FilesWalked)
+	localFileList = New(rootPrefix)
+	localFileList.BuildListFromChan(FilesWalked)
 }
 
-func BuildRemoteList( json *jason.Object)  {
-		remoteFileList = New( rootPrefix)
-		remoteFileList.BuildListFromJSON( json)
+func BuildRemoteList(json *jason.Object) {
+	remoteFileList = New(rootPrefix)
+	remoteFileList.BuildListFromJSON(json)
 }
 
 func CullLocalList() {
@@ -116,26 +121,26 @@ func CullLocalList() {
 	if remoteFileList == nil {
 		return
 	}
-	
+
 	for localFile, localMD5 := range localFileList.Files {
-		
+
 		remoteMD5Map := remoteFileList.Files[localFile]
 
 		if remoteMD5Map == nil {
 			continue
-		}	
+		}
 
-		for _, remoteMD5  := range remoteMD5Map {
+		for _, remoteMD5 := range remoteMD5Map {
 			if bytes.Compare(localMD5[1], remoteMD5) == 0 {
 				delete(localFileList.Files, localFile)
 				continue
 			}
-		} 
-		
-	} 
+		}
+
+	}
 }
 
-func QueueFiles( fileQueue chan string) {
+func QueueFiles(fileQueue chan string) {
 
-	localFileList.AddToSendQueue( fileQueue)
-} 
+	localFileList.AddToSendQueue(fileQueue)
+}
