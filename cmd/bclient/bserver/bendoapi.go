@@ -1,6 +1,8 @@
 package bserver
 
 import (
+	"bytes"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/antonholmquist/jason"
@@ -40,11 +42,37 @@ func GetItemInfo(id string) (*jason.Object, error) {
 
 func PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []byte, fileId string) (fileid string, err error) {
 
-	var path = "http://" + *bendoServer + "/upload/"
+	var path = "http://" + *bendoServer 
 
-	if fileId != BogusFileId {
-		path += "/" + fileId
+	if fileId != BogusFileId { 
+		path += fileId
+	} else {
+		path += "/upload"
+        }
+
+	// yeah, OK , this is dumb. Now that I know that http needs a reader,
+        // I should have the chunking code pass a reader.
+
+	req, _ := http.NewRequest("POST", path, bytes.NewReader(chunk))
+	req.Header.Set("X-Upload-Md5", hex.EncodeToString(chunkmd5sum))
+	resp, err := http.DefaultClient.Do(req)
+
+        defer resp.Body.Close() 
+	if err != nil {
+		return fileId, err
+	}
+	if resp.StatusCode != 200 {
+
+		fmt.Printf("Received HTTP status %d for %s", resp.StatusCode, path)
+		return fileId, nil
 	}
 
-	return fileid, nil
+	route  := resp.Header.Get("Location")
+
+        if route == "" {
+		fmt.Printf("No Location returned on POST: %s", route)
+		return fileId, err
+	}
+
+	return route, nil
 }

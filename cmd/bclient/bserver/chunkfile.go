@@ -32,7 +32,7 @@ func chunkAndUpload(srcFile string, srcFileMd5 []byte, item string, fileChunkSiz
 
 			chMd5 := md5.Sum(chunk)
 
-			fileId, err = PostUpload(chunk, chMd5[:], srcFileMd5, fileId)
+			fileId, err = PostUpload(chunk[:bytesRead], chMd5[:], srcFileMd5, fileId)
 
 			if err != nil {
 				fmt.Println(err.Error())
