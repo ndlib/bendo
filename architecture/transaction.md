@@ -39,7 +39,7 @@ of the following forms
     @blob/nnnn
 
 Where `@vvv` is a version identifier for the current item, and `nnnn` is a blob
-itentifier for the current item. Examples are
+identifier for the current item. Examples are
 
     @5/README.md
     @12/a/deep/path/to/a/file
@@ -100,7 +100,7 @@ item.
 Delete will remove a file entry or a blob completely, and expunge it from the
 underlying storage. The file entry itself is kept in place.
 
-This command is expected to be used seldomly. Between `delete` and `remove`,
+This command is expected to be used rarely. Between `delete` and `remove`,
 prefer `remove`---its semantics are closer to the preservation spirit of Bendo.
 The `delete` command is provided to handle an exceptional use case, that of
 removing data which absolutely never should have been added to the repository
@@ -118,7 +118,7 @@ one note command, only the last one will be used.
 ### sleep
 
 Sleep will pause the ingest process for 1 second. It is intended to be used
-for testing bendo. Example usage:
+for testing Bendo. Example usage:
 
     sleep
 
