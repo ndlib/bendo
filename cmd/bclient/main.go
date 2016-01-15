@@ -5,17 +5,19 @@ package main
 import (
 	"flag"
 	"fmt"
+	"sync"
 
 	"github.com/ndlib/bendo/cmd/bclient/bserver"
 	"github.com/ndlib/bendo/cmd/bclient/fileutil"
 )
 
 var (
-	fileroot = flag.String("root", ".", "root prefix to upload files")
-	server   = flag.String("server", "libvirt9.library.nd.edu:14000", "Bendo Server to Use")
-	creator  = flag.String("creator", "butil", "Creator name to use")
-	verbose  = flag.Bool("v", false, "Display more information")
-	usage    = `
+	fileroot     = flag.String("root", ".", "root prefix to upload files")
+	server       = flag.String("server", "libvirt9.library.nd.edu:14000", "Bendo Server to Use")
+	creator      = flag.String("creator", "butil", "Creator name to use")
+	verbose      = flag.Bool("v", false, "Display more information")
+	numuploaders = flag.Int("ul", 2, "Number Uploaders")
+	usage        = `
 bclient <command> <file> <command arguments>
 
 Possible commands:
@@ -24,7 +26,8 @@ Possible commands:
     get <item id list>
 
 `
-	FilesToSend = make(chan string)
+	FilesToSend  = make(chan string)
+	SendFileDone sync.WaitGroup
 )
 
 func main() {
@@ -67,15 +70,23 @@ func doUpload(item string, files string) {
 		break
 	}
 
-	// Compare Local and remote Lists- what reamins in Local List we'll Send
-	fileutil.CullLocalList()
+	// This compares the local list with the remote list (if the item already exists)
+	// and eliminates any unnneeded duplicates
 
 	//	fileutil.PrintLocalList()
 
-	//	go bserver.SendFiles( FilesToSend , item, *fileroot )
-	go bserver.SendFiles(FilesToSend, item, *fileroot)
+	// set up our barrier, that will wait for all the file chunks to be uploaded
+	SendFileDone.Add(*numuploaders)
+
+	//Spin off desire number of upload workers
+	for cnt := int(0); cnt < *numuploaders; cnt++ {
+		go bserver.SendFiles(FilesToSend, item, *fileroot, &SendFileDone)
+	}
 
 	fileutil.QueueFiles(FilesToSend)
+
+	// wait for all file chunks to be uploaded
+	SendFileDone.Wait()
 }
 
 func doGet(item string) {
