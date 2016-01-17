@@ -91,9 +91,9 @@ func createFileTransAction(cmdlist []byte, item string) error {
 	if err != nil {
 		return err
 	}
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != 202 {
 
-		fmt.Printf("Received HTTP status %d for %s", resp.StatusCode, path)
+		fmt.Printf("Received HTTP status %d for POST %s", resp.StatusCode, path + location)
 		return nil
 	}
 

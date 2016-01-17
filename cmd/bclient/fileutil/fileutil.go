@@ -140,6 +140,14 @@ func CullLocalList() {
 	}
 }
 
+func IsLocalListEmpty() bool {
+
+	if len(localFileList.Files) == 0 {
+		return true
+	}
+	return false
+}
+
 func QueueFiles(fileQueue chan string) {
 
 	localFileList.AddToSendQueue(fileQueue)

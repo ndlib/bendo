@@ -59,6 +59,10 @@ func doUpload(item string, files string) {
 	go bserver.FetchItemInfo(item)
 	fileutil.WaitFileListStep()
 
+	// If FetchItemInfo returns ErrNotFound it's anew item- upload whole local list
+	// If FetchItemInfo retuens other error, bendo unvavailablr for upload- abort!
+	// default: build remote filelist of returned json, diff against local list, upload remainder
+
 	switch {
 	case bserver.ItemFetchStatus == bserver.ErrNotFound:
 		break
@@ -67,13 +71,20 @@ func doUpload(item string, files string) {
 		return
 	default:
 		fileutil.BuildRemoteList(bserver.RemoteJason)
+		// This compares the local list with the remote list (if the item already exists)
+		// and eliminates any unnneeded duplicates
+		fileutil.CullLocalList()
 		break
 	}
 
-	// This compares the local list with the remote list (if the item already exists)
-	// and eliminates any unnneeded duplicates
+	// Culled list is empty, nothing to upload
 
-	//	fileutil.PrintLocalList()
+	if fileutil.IsLocalListEmpty() {
+		fmt.Printf("Nothing to do:\nThe vesions of All Files given for upload in item %s\nare already present on the server\n", item)
+		return
+	}
+
+	fileutil.PrintLocalList()
 
 	// set up our barrier, that will wait for all the file chunks to be uploaded
 	SendFileDone.Add(*numuploaders)
@@ -87,6 +98,16 @@ func doUpload(item string, files string) {
 
 	// wait for all file chunks to be uploaded
 	SendFileDone.Wait()
+
+	// chunks uploaded- submit trnsaction to add FileIDs to item
+	transErr := bserver.SendTransactionRequest(item)
+
+	if transErr != nil {
+		fmt.Println(transErr)
+		return
+	}
+
+	// TODO: cleanup uploads on success
 }
 
 func doGet(item string) {
