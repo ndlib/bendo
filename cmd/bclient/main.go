@@ -64,10 +64,10 @@ func doUpload(item string, files string) {
 	// default: build remote filelist of returned json, diff against local list, upload remainder
 
 	switch {
-	case bserver.ItemFetchStatus == bserver.ErrNotFound:
+	case bserver.ItemFetchStatus() == bserver.ErrNotFound:
 		break
-	case bserver.ItemFetchStatus != nil:
-		fmt.Println(bserver.ItemFetchStatus)
+	case bserver.ItemFetchStatus() != nil:
+		fmt.Println(bserver.ItemFetchStatus())
 		return
 	default:
 		fileutil.BuildRemoteList(bserver.RemoteJason)

@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	ItemFetchStatus error
+	itemFetchStatus error = nil
 
 	fileIDMutex sync.Mutex
 
@@ -19,10 +19,15 @@ var (
 	RemoteJason *jason.Object
 )
 
+
 type fileIDStruct struct {
 	fileid string
 	slot   string
 	item   string
+}
+
+func ItemFetchStatus() error {
+	return itemFetchStatus
 }
 
 func addFileToTransactionList(filename string, fileID string, item string) {
@@ -52,7 +57,7 @@ func FetchItemInfo(item string) {
 
 	// Some error occurred retrieving from server, or item not found.
 	if err != nil {
-		ItemFetchStatus = err
+		itemFetchStatus = err
 		fmt.Println(err.Error())
 		return
 	}
