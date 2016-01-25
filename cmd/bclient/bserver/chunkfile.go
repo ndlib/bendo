@@ -27,7 +27,7 @@ func chunkAndUpload(fileroot string, srcFile string, srcFileMd5 []byte, item str
 
 	// upload the chunk
 
-	for chunkNo := int64(1); chunkNo > 0; chunkNo++ {
+	for {
 		bytesRead, readErr := sourceFile.Read(chunk)
 
 		if bytesRead > 0 {
