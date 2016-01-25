@@ -10,12 +10,8 @@ import (
 
 var (
 	itemFetchStatus error = nil
-
 	fileIDMutex sync.Mutex
-
 	fileIDList []fileIDStruct
-
-	bendoServer *string
 	RemoteJason *jason.Object
 )
 
@@ -24,6 +20,14 @@ type fileIDStruct struct {
 	fileid string
 	slot   string
 	item   string
+}
+
+// common attributes
+
+type itemAttributes struct {
+	fileroot string
+	item string
+	bendoServer string
 }
 
 func ItemFetchStatus() error {
@@ -44,16 +48,22 @@ func addFileToTransactionList(filename string, fileID string, item string) {
 	fileIDMutex.Unlock()
 }
 
-func Init(server *string) {
+func New(server string, item string, fileroot string  ) *itemAttributes {
 	fileutil.IfVerbose("github.com/ndlib/bendo/bclient/bserver.Init() called")
-	bendoServer = server
+
+	thisItem := new(itemAttributes)
+	thisItem.bendoServer = server
+	thisItem.item = item
+	thisItem.fileroot = fileroot
+
+	return thisItem
 }
 
-func FetchItemInfo(item string) {
+func (ia *itemAttributes)  FetchItemInfo() {
 	defer fileutil.UpLoadDone.Done()
 	fileutil.IfVerbose("github.com/ndlib/bendo/bclient/bserver.FetchItemInfo() called")
 
-	json, err := GetItemInfo(item)
+	json, err := ia.GetItemInfo()
 
 	// Some error occurred retrieving from server, or item not found.
 	if err != nil {
@@ -68,10 +78,10 @@ func FetchItemInfo(item string) {
 // serve the file queue. This is called from main as 1 or more goroutines
 // If the file Upload fails, close the channel and exit
 
-func SendFiles(fileQueue chan string, item string, fileroot string, mut *sync.WaitGroup) {
+func (ia *itemAttributes) SendFiles(fileQueue chan string,  mut *sync.WaitGroup) {
 
 	for filename := range fileQueue {
-		err := uploadFile(filename, fileutil.ShowUploadFileMd5(filename), item, fileroot)
+		err := ia.uploadFile(filename, fileutil.ShowUploadFileMd5(filename))
 
 		if err != nil {
 			close(fileQueue)
@@ -81,27 +91,27 @@ func SendFiles(fileQueue chan string, item string, fileroot string, mut *sync.Wa
 	mut.Done()
 }
 
-func uploadFile(filename string, uploadMd5 []byte, item string, fileroot string) error {
+func (ia *itemAttributes) uploadFile(filename string, uploadMd5 []byte ) error {
 
 	// upload chunks initial buffer size is 1MB
 
-	fileID, uploadErr := chunkAndUpload(fileroot, filename, uploadMd5, item, 1048576)
+	fileID, uploadErr := ia.chunkAndUpload( filename, uploadMd5, 1048576)
 
 	// If an error occurred, report it, and return
 
 	if uploadErr != nil {
 		// add api call to delete fileid uploads
-		fmt.Printf("Error: unable to upload file %s for item %s, %s\n", filename, item, uploadErr.Error())
+		fmt.Printf("Error: unable to upload file %s for item %s, %s\n", filename, ia.item, uploadErr.Error())
 		return uploadErr
 	}
 
-	addFileToTransactionList(filename, fileID, item)
+	addFileToTransactionList(filename, fileID, ia.item)
 
 	return nil
 
 }
 
-func SendTransactionRequest(item string) error {
+func (ia *itemAttributes)  SendTransactionRequest() error {
 
 	cmdlist := [][]string{}
 
@@ -112,11 +122,11 @@ func SendTransactionRequest(item string) error {
 
 	buf, _ := json.Marshal(cmdlist)
 
-	transErr := createFileTransAction(buf, item)
+	transErr := ia.createFileTransAction(buf)
 
 	//if transErr != nil {
 	//       fmt.Println( transErr.Error())
-	//      fmt.Printf( "Error: unable to upload file %s for item %s, %s\n", filename, item, transErr.Error())
+	//      fmt.Printf( "Error: unable to upload file %s for item %s, %s\n", filename, ia.item, transErr.Error())
 	//}
 
 	return transErr

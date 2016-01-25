@@ -51,12 +51,12 @@ func main() {
 
 func doUpload(item string, files string) {
 
-	bserver.Init(server)
+	thisItem := bserver.New(*server, item, *fileroot)
 	fileutil.InitFileListStep(*fileroot)
 
 	go fileutil.CreateUploadList(files)
 	go fileutil.ComputeLocalChecksums()
-	go bserver.FetchItemInfo(item)
+	go thisItem.FetchItemInfo()
 	fileutil.WaitFileListStep()
 
 	// If FetchItemInfo returns ErrNotFound it's anew item- upload whole local list
@@ -91,7 +91,7 @@ func doUpload(item string, files string) {
 
 	//Spin off desire number of upload workers
 	for cnt := int(0); cnt < *numuploaders; cnt++ {
-		go bserver.SendFiles(FilesToSend, item, *fileroot, &SendFileDone)
+		go thisItem.SendFiles(FilesToSend, &SendFileDone)
 	}
 
 	fileutil.QueueFiles(FilesToSend)
@@ -100,7 +100,7 @@ func doUpload(item string, files string) {
 	SendFileDone.Wait()
 
 	// chunks uploaded- submit trnsaction to add FileIDs to item
-	transErr := bserver.SendTransactionRequest(item)
+	transErr := thisItem.SendTransactionRequest()
 
 	if transErr != nil {
 		fmt.Println(transErr)
