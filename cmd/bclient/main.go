@@ -26,8 +26,6 @@ Possible commands:
     get <item id list>
 
 `
-	FilesToSend  = make(chan string)
-	SendFileDone sync.WaitGroup
 )
 
 func main() {
@@ -51,13 +49,36 @@ func main() {
 
 func doUpload(item string, files string) {
 
+	filesToSend  := make(chan string)
+	var upLoadDone     sync.WaitGroup
+        var sendFileDone  sync.WaitGroup
+
 	thisItem := bserver.New(*server, item, *fileroot)
 	fileutil.InitFileListStep(*fileroot)
 
-	go fileutil.CreateUploadList(files)
-	go fileutil.ComputeLocalChecksums()
-	go thisItem.FetchItemInfo()
-	fileutil.WaitFileListStep()
+	// Set up Barrier for 3 goroutines below
+	upLoadDone.Add(3)
+
+	// Fire 1!
+	go func() {
+		fileutil.CreateUploadList(files)
+		upLoadDone.Done()
+	}()
+		
+	// Fire 2!
+	go func() {
+		fileutil.ComputeLocalChecksums()
+		upLoadDone.Done()
+	}()
+
+	// Fire 3!
+	go func() {
+		thisItem.FetchItemInfo()
+		upLoadDone.Done()
+	}()
+
+	// Wait for everyone to finish
+	upLoadDone.Wait()
 
 	// If FetchItemInfo returns ErrNotFound it's anew item- upload whole local list
 	// If FetchItemInfo retuens other error, bendo unvavailablr for upload- abort!
@@ -87,20 +108,20 @@ func doUpload(item string, files string) {
 	fileutil.PrintLocalList()
 
 	// set up our barrier, that will wait for all the file chunks to be uploaded
-	SendFileDone.Add(*numuploaders)
+	sendFileDone.Add(*numuploaders)
 
 	//Spin off desire number of upload workers
 	for cnt := int(0); cnt < *numuploaders; cnt++ {
 		go func(){
-			thisItem.SendFiles(FilesToSend)
-    			SendFileDone.Done()
+			thisItem.SendFiles(filesToSend)
+    			sendFileDone.Done()
 		}()
 	}
 
-	fileutil.QueueFiles(FilesToSend)
+	fileutil.QueueFiles(filesToSend)
 
 	// wait for all file chunks to be uploaded
-	SendFileDone.Wait()
+	sendFileDone.Wait()
 
 	// chunks uploaded- submit trnsaction to add FileIDs to item
 	transErr := thisItem.SendTransactionRequest()

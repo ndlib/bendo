@@ -9,13 +9,11 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"sync"
 
 	"github.com/antonholmquist/jason"
 )
 
 var (
-	UpLoadDone     sync.WaitGroup
 	UseRemoteList  bool = true
 	localFileList  *FileList
 	remoteFileList *FileList
@@ -48,19 +46,9 @@ func PrintLocalList() {
 
 }
 
-// Public Synchronization Gate
-
-func WaitFileListStep() {
-	IfVerbose("At UpLoadDone.Wait()")
-	UpLoadDone.Wait()
-	IfVerbose("UpLoadDone.Wait() satisfied")
-}
-
 func InitFileListStep(root string) {
 	// Wait for
 	rootPrefix = root
-	IfVerbose("InitFileListStep called")
-	UpLoadDone.Add(3)
 	IfVerbose("InitFileListStep finished")
 }
 func SetVerbose(isVerbose bool) {
@@ -76,7 +64,6 @@ func IfVerbose(output string) {
 func CreateUploadList(files string) {
 
 	IfVerbose("CreateUploadList called")
-	defer UpLoadDone.Done()
 
 	filepath.Walk(path.Join(rootPrefix, files), addToUploadList)
 
@@ -104,7 +91,6 @@ func addToUploadList(path string, info os.FileInfo, err error) error {
 }
 
 func ComputeLocalChecksums() {
-	defer UpLoadDone.Done()
 
 	localFileList = New(rootPrefix)
 	localFileList.BuildListFromChan(FilesWalked)

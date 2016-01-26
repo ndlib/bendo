@@ -60,7 +60,6 @@ func New(server string, item string, fileroot string  ) *itemAttributes {
 }
 
 func (ia *itemAttributes)  FetchItemInfo() {
-	defer fileutil.UpLoadDone.Done()
 	fileutil.IfVerbose("github.com/ndlib/bendo/bclient/bserver.FetchItemInfo() called")
 
 	json, err := ia.GetItemInfo()
