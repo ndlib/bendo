@@ -91,7 +91,10 @@ func doUpload(item string, files string) {
 
 	//Spin off desire number of upload workers
 	for cnt := int(0); cnt < *numuploaders; cnt++ {
-		go thisItem.SendFiles(FilesToSend, &SendFileDone)
+		go func(){
+			thisItem.SendFiles(FilesToSend)
+    			SendFileDone.Done()
+		}()
 	}
 
 	fileutil.QueueFiles(FilesToSend)
