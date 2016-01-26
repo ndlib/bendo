@@ -13,6 +13,7 @@ import (
 var (
 	ErrNotFound      = errors.New("Item Not Found in Bendo")
 	ErrNotAuthorized = errors.New("Access Denied")
+	ErrUnexpectedResp = errors.New("Unexpected Response Code")
 	ErrReadFailed    = errors.New("Read Failed")
 )
 
@@ -94,7 +95,7 @@ func (ia *itemAttributes) createFileTransAction(cmdlist []byte ) error {
 	if resp.StatusCode != 202 {
 
 		fmt.Printf("Received HTTP status %d for POST %s", resp.StatusCode, path + location)
-		return nil
+		return ErrUnexpectedResp
 	}
 
 	//transaction  := resp.Header.Get("Location")
