@@ -8,7 +8,7 @@ import (
 	"path"
 )
 
-const BogusFileId string = "Uninitialized"
+const BogusFileId string = ""
 
 func (ia * itemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, fileChunkSize int) (string, error) {
 
