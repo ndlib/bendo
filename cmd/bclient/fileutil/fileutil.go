@@ -9,60 +9,52 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"sync"
 
 	"github.com/antonholmquist/jason"
 )
 
 var (
-	UpLoadDone     sync.WaitGroup
-	UseRemoteList  bool = true
+	verbose bool
+)
+
+type ListData struct {
 	localFileList  *FileList
 	remoteFileList *FileList
-	FilesWalked    = make(chan string)
+	FilesWalked    chan string
 	rootPrefix     string
-	verbose        bool
-)
+}
 
 //A public Method to get the Md5 sum of file on the upload list
 
-func ShowUploadFileMd5(fileName string) []byte {
+func (ld *ListData) ShowUploadFileMd5(fileName string) []byte {
 
-	return localFileList.Files[fileName][1]
+	return ld.localFileList.Files[fileName][1]
 }
 
 // Print out remote filer list
-func PrintRemoteList() {
-	for key, value := range remoteFileList.Files {
+func (ld *ListData) PrintRemoteList() {
+	for key, value := range ld.remoteFileList.Files {
 		fmt.Println("Key:", key, "Value:", value)
 	}
-
 }
 
 // Print out local file list
-func PrintLocalList() {
+func (ld *ListData) PrintLocalList() {
 
-	for key, value := range localFileList.Files {
+	for key, value := range ld.localFileList.Files {
 		fmt.Println("Key:", key, "Value:", value[1])
 	}
 
 }
 
-// Public Synchronization Gate
+func NewLists(root string) *ListData {
+	this := new(ListData)
+	this.rootPrefix = root
+	this.FilesWalked = make(chan string)
 
-func WaitFileListStep() {
-	IfVerbose("At UpLoadDone.Wait()")
-	UpLoadDone.Wait()
-	IfVerbose("UpLoadDone.Wait() satisfied")
+	return this
 }
 
-func InitFileListStep(root string) {
-	// Wait for
-	rootPrefix = root
-	IfVerbose("InitFileListStep called")
-	UpLoadDone.Add(3)
-	IfVerbose("InitFileListStep finished")
-}
 func SetVerbose(isVerbose bool) {
 	verbose = isVerbose
 }
@@ -73,20 +65,19 @@ func IfVerbose(output string) {
 	}
 }
 
-func CreateUploadList(files string) {
+func (ld *ListData) CreateUploadList(files string) {
 
 	IfVerbose("CreateUploadList called")
-	defer UpLoadDone.Done()
 
-	filepath.Walk(path.Join(rootPrefix, files), addToUploadList)
+	filepath.Walk(path.Join(ld.rootPrefix, files), ld.addToUploadList)
 
-	close(FilesWalked)
+	close(ld.FilesWalked)
 	IfVerbose("CreateUploadList exit")
 }
 
 // addToUploadList is called by fileUtil.CreatUploadList  once for each file under filepath.walk()
 
-func addToUploadList(path string, info os.FileInfo, err error) error {
+func (ld *ListData) addToUploadList(path string, info os.FileInfo, err error) error {
 
 	if err != nil {
 		return err
@@ -98,33 +89,32 @@ func addToUploadList(path string, info os.FileInfo, err error) error {
 		return nil
 	}
 
-	FilesWalked <- path
+	ld.FilesWalked <- path
 
 	return nil
 }
 
-func ComputeLocalChecksums() {
-	defer UpLoadDone.Done()
+func (ld *ListData) ComputeLocalChecksums() {
 
-	localFileList = New(rootPrefix)
-	localFileList.BuildListFromChan(FilesWalked)
+	ld.localFileList = New(ld.rootPrefix)
+	ld.localFileList.BuildListFromChan(ld.FilesWalked)
 }
 
-func BuildRemoteList(json *jason.Object) {
-	remoteFileList = New(rootPrefix)
-	remoteFileList.BuildListFromJSON(json)
+func (ld *ListData) BuildRemoteList(json *jason.Object) {
+	ld.remoteFileList = New(ld.rootPrefix)
+	ld.remoteFileList.BuildListFromJSON(json)
 }
 
-func CullLocalList() {
+func (ld *ListData) CullLocalList() {
 
 	// item does not exist on remote bendo server
-	if remoteFileList == nil {
+	if ld.remoteFileList == nil {
 		return
 	}
 
-	for localFile, localMD5 := range localFileList.Files {
+	for localFile, localMD5 := range ld.localFileList.Files {
 
-		remoteMD5Map := remoteFileList.Files[localFile]
+		remoteMD5Map := ld.remoteFileList.Files[localFile]
 
 		if remoteMD5Map == nil {
 			continue
@@ -132,7 +122,7 @@ func CullLocalList() {
 
 		for _, remoteMD5 := range remoteMD5Map {
 			if bytes.Compare(localMD5[1], remoteMD5) == 0 {
-				delete(localFileList.Files, localFile)
+				delete(ld.localFileList.Files, localFile)
 				continue
 			}
 		}
@@ -140,15 +130,15 @@ func CullLocalList() {
 	}
 }
 
-func IsLocalListEmpty() bool {
+func (ld *ListData) IsLocalListEmpty() bool {
 
-	if len(localFileList.Files) == 0 {
+	if len(ld.localFileList.Files) == 0 {
 		return true
 	}
 	return false
 }
 
-func QueueFiles(fileQueue chan string) {
+func (ld *ListData) QueueFiles(fileQueue chan string) {
 
-	localFileList.AddToSendQueue(fileQueue)
+	ld.localFileList.AddToSendQueue(fileQueue)
 }

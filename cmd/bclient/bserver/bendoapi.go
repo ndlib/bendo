@@ -11,13 +11,14 @@ import (
 
 // Exported errors
 var (
-	ErrNotFound      = errors.New("Item Not Found in Bendo")
-	ErrNotAuthorized = errors.New("Access Denied")
-	ErrReadFailed    = errors.New("Read Failed")
+	ErrNotFound       = errors.New("Item Not Found in Bendo")
+	ErrNotAuthorized  = errors.New("Access Denied")
+	ErrUnexpectedResp = errors.New("Unexpected Response Code")
+	ErrReadFailed     = errors.New("Read Failed")
 )
 
-func GetItemInfo(id string) (*jason.Object, error) {
-	var path = "http://" + *bendoServer + "/item/" + id
+func (ia *itemAttributes) GetItemInfo() (*jason.Object, error) {
+	var path = "http://" + ia.bendoServer + "/item/" + ia.item
 
 	r, err := http.Get(path)
 	if err != nil {
@@ -40,9 +41,9 @@ func GetItemInfo(id string) (*jason.Object, error) {
 	return v, err
 }
 
-func PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []byte, fileId string) (fileid string, err error) {
+func (ia *itemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []byte, fileId string) (fileid string, err error) {
 
-	var path = "http://" + *bendoServer
+	var path = "http://" + ia.bendoServer
 
 	if fileId != BogusFileId {
 		path += fileId
@@ -77,10 +78,10 @@ func PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []byte, fileId stri
 	return route, nil
 }
 
-func createFileTransAction(cmdlist []byte, item string) error {
+func (ia *itemAttributes) createFileTransAction(cmdlist []byte) error {
 
 	var (
-		path     = "http://" + *bendoServer + "/item/" + item
+		path     = "http://" + ia.bendoServer + "/item/" + ia.item
 		location = "/transaction"
 	)
 
@@ -93,8 +94,8 @@ func createFileTransAction(cmdlist []byte, item string) error {
 	}
 	if resp.StatusCode != 202 {
 
-		fmt.Printf("Received HTTP status %d for POST %s", resp.StatusCode, path + location)
-		return nil
+		fmt.Printf("Received HTTP status %d for POST %s", resp.StatusCode, path+location)
+		return ErrUnexpectedResp
 	}
 
 	//transaction  := resp.Header.Get("Location")

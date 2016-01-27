@@ -8,11 +8,11 @@ import (
 	"path"
 )
 
-const BogusFileId string = "Uninitialized"
+const BogusFileId string = ""
 
-func chunkAndUpload(fileroot string, srcFile string, srcFileMd5 []byte, item string, fileChunkSize int) (string, error) {
+func (ia *itemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, fileChunkSize int) (string, error) {
 
-	sourceFile, err := os.Open(path.Join(fileroot, srcFile))
+	sourceFile, err := os.Open(path.Join(ia.fileroot, srcFile))
 
 	if err != nil {
 		fmt.Println(err)
@@ -27,7 +27,7 @@ func chunkAndUpload(fileroot string, srcFile string, srcFileMd5 []byte, item str
 
 	// upload the chunk
 
-	for chunkNo := int64(1); chunkNo > 0; chunkNo++ {
+	for {
 		bytesRead, readErr := sourceFile.Read(chunk)
 
 		if bytesRead > 0 {
@@ -36,7 +36,7 @@ func chunkAndUpload(fileroot string, srcFile string, srcFileMd5 []byte, item str
 
 			chMd5 := md5.Sum(chunk[:bytesRead])
 
-			fileId, err = PostUpload(chunk[:bytesRead], chMd5[:], srcFileMd5, fileId)
+			fileId, err = ia.PostUpload(chunk[:bytesRead], chMd5[:], srcFileMd5, fileId)
 
 			if err != nil {
 				fmt.Println(err.Error())
