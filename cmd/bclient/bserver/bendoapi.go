@@ -11,10 +11,10 @@ import (
 
 // Exported errors
 var (
-	ErrNotFound      = errors.New("Item Not Found in Bendo")
-	ErrNotAuthorized = errors.New("Access Denied")
+	ErrNotFound       = errors.New("Item Not Found in Bendo")
+	ErrNotAuthorized  = errors.New("Access Denied")
 	ErrUnexpectedResp = errors.New("Unexpected Response Code")
-	ErrReadFailed    = errors.New("Read Failed")
+	ErrReadFailed     = errors.New("Read Failed")
 )
 
 func (ia *itemAttributes) GetItemInfo() (*jason.Object, error) {
@@ -41,7 +41,7 @@ func (ia *itemAttributes) GetItemInfo() (*jason.Object, error) {
 	return v, err
 }
 
-func (ia * itemAttributes ) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []byte, fileId string) (fileid string, err error) {
+func (ia *itemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []byte, fileId string) (fileid string, err error) {
 
 	var path = "http://" + ia.bendoServer
 
@@ -78,7 +78,7 @@ func (ia * itemAttributes ) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5
 	return route, nil
 }
 
-func (ia *itemAttributes) createFileTransAction(cmdlist []byte ) error {
+func (ia *itemAttributes) createFileTransAction(cmdlist []byte) error {
 
 	var (
 		path     = "http://" + ia.bendoServer + "/item/" + ia.item
@@ -94,7 +94,7 @@ func (ia *itemAttributes) createFileTransAction(cmdlist []byte ) error {
 	}
 	if resp.StatusCode != 202 {
 
-		fmt.Printf("Received HTTP status %d for POST %s", resp.StatusCode, path + location)
+		fmt.Printf("Received HTTP status %d for POST %s", resp.StatusCode, path+location)
 		return ErrUnexpectedResp
 	}
 

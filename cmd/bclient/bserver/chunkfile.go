@@ -10,7 +10,7 @@ import (
 
 const BogusFileId string = ""
 
-func (ia * itemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, fileChunkSize int) (string, error) {
+func (ia *itemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, fileChunkSize int) (string, error) {
 
 	sourceFile, err := os.Open(path.Join(ia.fileroot, srcFile))
 

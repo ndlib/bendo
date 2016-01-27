@@ -10,11 +10,10 @@ import (
 
 var (
 	itemFetchStatus error = nil
-	fileIDMutex sync.Mutex
-	fileIDList []fileIDStruct
-	RemoteJason *jason.Object
+	fileIDMutex     sync.Mutex
+	fileIDList      []fileIDStruct
+	RemoteJason     *jason.Object
 )
-
 
 type fileIDStruct struct {
 	fileid string
@@ -25,8 +24,8 @@ type fileIDStruct struct {
 // common attributes
 
 type itemAttributes struct {
-	fileroot string
-	item string
+	fileroot    string
+	item        string
 	bendoServer string
 }
 
@@ -48,7 +47,7 @@ func addFileToTransactionList(filename string, fileID string, item string) {
 	fileIDMutex.Unlock()
 }
 
-func New(server string, item string, fileroot string  ) *itemAttributes {
+func New(server string, item string, fileroot string) *itemAttributes {
 	fileutil.IfVerbose("github.com/ndlib/bendo/bclient/bserver.Init() called")
 
 	thisItem := new(itemAttributes)
@@ -59,7 +58,7 @@ func New(server string, item string, fileroot string  ) *itemAttributes {
 	return thisItem
 }
 
-func (ia *itemAttributes)  FetchItemInfo() {
+func (ia *itemAttributes) FetchItemInfo() {
 	fileutil.IfVerbose("github.com/ndlib/bendo/bclient/bserver.FetchItemInfo() called")
 
 	json, err := ia.GetItemInfo()
@@ -88,11 +87,11 @@ func (ia *itemAttributes) SendFiles(fileQueue chan string, ld *fileutil.ListData
 	}
 }
 
-func (ia *itemAttributes) uploadFile(filename string, uploadMd5 []byte ) error {
+func (ia *itemAttributes) uploadFile(filename string, uploadMd5 []byte) error {
 
 	// upload chunks initial buffer size is 1MB
 
-	fileID, uploadErr := ia.chunkAndUpload( filename, uploadMd5, 1048576)
+	fileID, uploadErr := ia.chunkAndUpload(filename, uploadMd5, 1048576)
 
 	// If an error occurred, report it, and return
 
@@ -108,7 +107,7 @@ func (ia *itemAttributes) uploadFile(filename string, uploadMd5 []byte ) error {
 
 }
 
-func (ia *itemAttributes)  SendTransactionRequest() error {
+func (ia *itemAttributes) SendTransactionRequest() error {
 
 	cmdlist := [][]string{}
 

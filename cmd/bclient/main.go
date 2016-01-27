@@ -49,9 +49,9 @@ func main() {
 
 func doUpload(item string, files string) {
 
-	filesToSend  := make(chan string)
-	var upLoadDone     sync.WaitGroup
-        var sendFileDone  sync.WaitGroup
+	filesToSend := make(chan string)
+	var upLoadDone sync.WaitGroup
+	var sendFileDone sync.WaitGroup
 
 	thisItem := bserver.New(*server, item, *fileroot)
 	fileLists := fileutil.NewLists(*fileroot)
@@ -64,7 +64,7 @@ func doUpload(item string, files string) {
 		fileLists.CreateUploadList(files)
 		upLoadDone.Done()
 	}()
-		
+
 	// Fire 2!
 	go func() {
 		fileLists.ComputeLocalChecksums()
@@ -112,9 +112,9 @@ func doUpload(item string, files string) {
 
 	//Spin off desire number of upload workers
 	for cnt := int(0); cnt < *numuploaders; cnt++ {
-		go func(){
+		go func() {
 			thisItem.SendFiles(filesToSend, fileLists)
-    			sendFileDone.Done()
+			sendFileDone.Done()
 		}()
 	}
 

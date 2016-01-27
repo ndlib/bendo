@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	verbose        bool
+	verbose bool
 )
 
 type ListData struct {
@@ -26,11 +26,10 @@ type ListData struct {
 
 //A public Method to get the Md5 sum of file on the upload list
 
-func (ld *ListData)  ShowUploadFileMd5(fileName string) []byte {
+func (ld *ListData) ShowUploadFileMd5(fileName string) []byte {
 
 	return ld.localFileList.Files[fileName][1]
 }
-
 
 // Print out remote filer list
 func (ld *ListData) PrintRemoteList() {
@@ -48,11 +47,11 @@ func (ld *ListData) PrintLocalList() {
 
 }
 
-func NewLists(root string)( *ListData) {
+func NewLists(root string) *ListData {
 	this := new(ListData)
 	this.rootPrefix = root
 	this.FilesWalked = make(chan string)
-	
+
 	return this
 }
 
@@ -78,7 +77,7 @@ func (ld *ListData) CreateUploadList(files string) {
 
 // addToUploadList is called by fileUtil.CreatUploadList  once for each file under filepath.walk()
 
-func (ld *ListData)  addToUploadList(path string, info os.FileInfo, err error) error {
+func (ld *ListData) addToUploadList(path string, info os.FileInfo, err error) error {
 
 	if err != nil {
 		return err
@@ -95,7 +94,7 @@ func (ld *ListData)  addToUploadList(path string, info os.FileInfo, err error) e
 	return nil
 }
 
-func (ld *ListData)  ComputeLocalChecksums() {
+func (ld *ListData) ComputeLocalChecksums() {
 
 	ld.localFileList = New(ld.rootPrefix)
 	ld.localFileList.BuildListFromChan(ld.FilesWalked)
