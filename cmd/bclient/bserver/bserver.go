@@ -77,10 +77,10 @@ func (ia *itemAttributes)  FetchItemInfo() {
 // serve the file queue. This is called from main as 1 or more goroutines
 // If the file Upload fails, close the channel and exit
 
-func (ia *itemAttributes) SendFiles(fileQueue chan string) {
+func (ia *itemAttributes) SendFiles(fileQueue chan string, ld *fileutil.ListData) {
 
 	for filename := range fileQueue {
-		err := ia.uploadFile(filename, fileutil.ShowUploadFileMd5(filename))
+		err := ia.uploadFile(filename, ld.ShowUploadFileMd5(filename))
 
 		if err != nil {
 			close(fileQueue)

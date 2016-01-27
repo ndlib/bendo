@@ -54,20 +54,20 @@ func doUpload(item string, files string) {
         var sendFileDone  sync.WaitGroup
 
 	thisItem := bserver.New(*server, item, *fileroot)
-	fileutil.InitFileListStep(*fileroot)
+	fileLists := fileutil.NewLists(*fileroot)
 
 	// Set up Barrier for 3 goroutines below
 	upLoadDone.Add(3)
 
 	// Fire 1!
 	go func() {
-		fileutil.CreateUploadList(files)
+		fileLists.CreateUploadList(files)
 		upLoadDone.Done()
 	}()
 		
 	// Fire 2!
 	go func() {
-		fileutil.ComputeLocalChecksums()
+		fileLists.ComputeLocalChecksums()
 		upLoadDone.Done()
 	}()
 
@@ -81,7 +81,7 @@ func doUpload(item string, files string) {
 	upLoadDone.Wait()
 
 	// If FetchItemInfo returns ErrNotFound it's anew item- upload whole local list
-	// If FetchItemInfo retuens other error, bendo unvavailablr for upload- abort!
+	// If FetchItemInfo returns other error, bendo unvavailable for upload- abort!
 	// default: build remote filelist of returned json, diff against local list, upload remainder
 
 	switch {
@@ -91,21 +91,21 @@ func doUpload(item string, files string) {
 		fmt.Println(bserver.ItemFetchStatus())
 		return
 	default:
-		fileutil.BuildRemoteList(bserver.RemoteJason)
+		fileLists.BuildRemoteList(bserver.RemoteJason)
 		// This compares the local list with the remote list (if the item already exists)
 		// and eliminates any unnneeded duplicates
-		fileutil.CullLocalList()
+		fileLists.CullLocalList()
 		break
 	}
 
 	// Culled list is empty, nothing to upload
 
-	if fileutil.IsLocalListEmpty() {
+	if fileLists.IsLocalListEmpty() {
 		fmt.Printf("Nothing to do:\nThe vesions of All Files given for upload in item %s\nare already present on the server\n", item)
 		return
 	}
 
-	fileutil.PrintLocalList()
+	fileLists.PrintLocalList()
 
 	// set up our barrier, that will wait for all the file chunks to be uploaded
 	sendFileDone.Add(*numuploaders)
@@ -113,12 +113,12 @@ func doUpload(item string, files string) {
 	//Spin off desire number of upload workers
 	for cnt := int(0); cnt < *numuploaders; cnt++ {
 		go func(){
-			thisItem.SendFiles(filesToSend)
+			thisItem.SendFiles(filesToSend, fileLists)
     			sendFileDone.Done()
 		}()
 	}
 
-	fileutil.QueueFiles(filesToSend)
+	fileLists.QueueFiles(filesToSend)
 
 	// wait for all file chunks to be uploaded
 	sendFileDone.Wait()
