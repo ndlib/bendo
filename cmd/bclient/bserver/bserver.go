@@ -3,16 +3,13 @@ package bserver
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/antonholmquist/jason"
 	"github.com/ndlib/bendo/cmd/bclient/fileutil"
 	"sync"
 )
 
 var (
-	itemFetchStatus error = nil
 	fileIDMutex     sync.Mutex
 	fileIDList      []fileIDStruct
-	RemoteJason     *jason.Object
 )
 
 type fileIDStruct struct {
@@ -27,10 +24,6 @@ type itemAttributes struct {
 	fileroot    string
 	item        string
 	bendoServer string
-}
-
-func ItemFetchStatus() error {
-	return itemFetchStatus
 }
 
 func addFileToTransactionList(filename string, fileID string, item string) {
@@ -58,20 +51,6 @@ func New(server string, item string, fileroot string) *itemAttributes {
 	return thisItem
 }
 
-func (ia *itemAttributes) FetchItemInfo() {
-	fileutil.IfVerbose("github.com/ndlib/bendo/bclient/bserver.FetchItemInfo() called")
-
-	json, err := ia.GetItemInfo()
-
-	// Some error occurred retrieving from server, or item not found.
-	if err != nil {
-		itemFetchStatus = err
-		fmt.Println(err.Error())
-		return
-	}
-
-	RemoteJason = json
-}
 
 // serve the file queue. This is called from main as 1 or more goroutines
 // If the file Upload fails, close the channel and exit

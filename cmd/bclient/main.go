@@ -9,6 +9,7 @@ import (
 
 	"github.com/ndlib/bendo/cmd/bclient/bserver"
 	"github.com/ndlib/bendo/cmd/bclient/fileutil"
+        "github.com/antonholmquist/jason"
 )
 
 var (
@@ -21,9 +22,11 @@ var (
 bclient <command> <file> <command arguments>
 
 Possible commands:
-    upload  <item id> <blob number>
 
-    get <item id list>
+    get <item> <files>
+    list <item id>
+    upload  <item id> <files>
+    version <item id> 
 
 `
 )
@@ -41,8 +44,12 @@ func main() {
 	switch args[0] {
 	case "upload":
 		doUpload(args[1], args[2])
+	case "list":
+		doList(args[1])
 	case "get":
-		doGet(args[1])
+		doGet(args[1], args[2])
+	case "history":
+		doHistory(args[1])
 	}
 
 }
@@ -52,6 +59,8 @@ func doUpload(item string, files string) {
 	filesToSend := make(chan string)
 	var upLoadDone sync.WaitGroup
 	var sendFileDone sync.WaitGroup
+	var json *jason.Object	
+	var jsonFetchErr error
 
 	thisItem := bserver.New(*server, item, *fileroot)
 	fileLists := fileutil.NewLists(*fileroot)
@@ -73,25 +82,25 @@ func doUpload(item string, files string) {
 
 	// Fire 3!
 	go func() {
-		thisItem.FetchItemInfo()
+		json, jsonFetchErr = thisItem.GetItemInfo()
 		upLoadDone.Done()
 	}()
 
 	// Wait for everyone to finish
 	upLoadDone.Wait()
 
-	// If FetchItemInfo returns ErrNotFound it's anew item- upload whole local list
-	// If FetchItemInfo returns other error, bendo unvavailable for upload- abort!
+	// If GetItemInfo returns ErrNotFound it's anew item- upload whole local list
+	// If GetItemInfo returns other error, bendo unvavailable for upload- abort!
 	// default: build remote filelist of returned json, diff against local list, upload remainder
 
 	switch {
-	case bserver.ItemFetchStatus() == bserver.ErrNotFound:
+	case jsonFetchErr  == bserver.ErrNotFound:
 		break
-	case bserver.ItemFetchStatus() != nil:
-		fmt.Println(bserver.ItemFetchStatus())
+	case jsonFetchErr != nil:
+		fmt.Println(jsonFetchErr)
 		return
 	default:
-		fileLists.BuildRemoteList(bserver.RemoteJason)
+		fileLists.BuildRemoteList(json)
 		// This compares the local list with the remote list (if the item already exists)
 		// and eliminates any unnneeded duplicates
 		fileLists.CullLocalList()
@@ -134,6 +143,32 @@ func doUpload(item string, files string) {
 	// TODO: cleanup uploads on success
 }
 
-func doGet(item string) {
+func doGet(item string, files string) {
+	fmt.Printf("Item = %s\n", item)
+}
+
+func doHistory(item string) {
+
+	var json *jason.Object
+        var jsonFetchErr error
+
+        thisItem := bserver.New(*server, item, *fileroot)
+
+	// Fetch Item Info from bserver
+	//thisItem.FetchItemInfo()
+	json, jsonFetchErr = thisItem.GetItemInfo()
+
+	switch {
+        	case jsonFetchErr  == bserver.ErrNotFound:
+			fmt.Printf("\n Item %s was not found on server %\n", item, *server)
+        	case jsonFetchErr != nil:
+                	fmt.Println(jsonFetchErr)
+        	default:
+			fmt.Println(json.String())
+        }
+
+}
+
+func doList(item string) {
 	fmt.Printf("Item = %s\n", item)
 }
