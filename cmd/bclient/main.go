@@ -164,7 +164,7 @@ func doHistory(item string) {
         	case jsonFetchErr != nil:
                 	fmt.Println(jsonFetchErr)
         	default:
-			fmt.Println(json.String())
+			fileutil.PrintListFromJSON(json)
         }
 
 }

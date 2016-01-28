@@ -9,6 +9,7 @@ import (
 	"github.com/antonholmquist/jason"
 	"io"
 	"os"
+	"strings"
 )
 
 // Our underlying data structure
@@ -97,5 +98,24 @@ func (f *FileList) BuildListFromJSON(json *jason.Object) {
 
 			f.Files[key][versionID] = DecodedMD5
 		}
+	}
+}
+
+func PrintListFromJSON(json *jason.Object) {
+
+	versionArray, _ := json.GetObjectArray("Versions")
+	
+	for _, version := range versionArray {
+		versionID, _ := version.GetInt64("ID")
+		saveDate, _ := version.GetString("SaveDate")
+		creator, _ := version.GetString("Creator")
+		note, _ := version.GetString("Note")
+
+		if note == "" {
+			note = "\"\""
+		}
+
+		//slotMap, _ := version.GetObject("Slots")
+		fmt.Printf("@%02d %s %s %s\n",versionID,strings.Split(strings.Replace(saveDate,"T"," ", 1),".")[0], creator, note)
 	}
 }
