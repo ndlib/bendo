@@ -84,7 +84,7 @@ func (s *RESTServer) Run() {
 	log.Println("==========")
 	log.Printf("Starting Bendo Server version %s", Version)
 	log.Printf("CacheDir = %s", s.CacheDir)
-	log.Printf("CacheSize = %s", s.CacheSize)
+	log.Printf("CacheSize = %d", s.CacheSize)
 
 	if s.Items == nil {
 		panic("No base storage given. Items is nil.")
@@ -122,6 +122,7 @@ func (s *RESTServer) Run() {
 	}
 	s.StartFixity()
 	// should scanfixity run periodically? or only at startup?
+	// this will keep running it in a loop with 24 hour rest in between.
 	go func() {
 		for {
 			s.scanfixity()
