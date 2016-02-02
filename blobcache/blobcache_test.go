@@ -8,7 +8,7 @@ import (
 )
 
 func TestEviction(t *testing.T) {
-	cache := New(store.NewMemory(), 100)
+	cache := NewLRU(store.NewMemory(), 100)
 	// "hello world" is 11 bytes. so 10 should cause a cache eviction
 	for i := 0; i < 10; i++ {
 		key := fmt.Sprintf("hello-%d", i)
@@ -44,7 +44,7 @@ func TestEviction(t *testing.T) {
 }
 
 func TestTooLargeItem(t *testing.T) {
-	cache := New(store.NewMemory(), 100)
+	cache := NewLRU(store.NewMemory(), 100)
 	key := "qwerty"
 	w, err := cache.Put(key)
 	if err != nil {
@@ -62,7 +62,7 @@ func TestTooLargeItem(t *testing.T) {
 		t.Errorf("Did not receive ErrCacheFull")
 	}
 	w.Close()
-	size := cache.(*StoreLRU).size
+	size := cache.size
 	if size != 0 {
 		t.Errorf("Cache size is %d. Expected %d", size, 0)
 	}
@@ -90,7 +90,7 @@ func TestScan(t *testing.T) {
 	}
 
 	// now set up the cache and scan it
-	cache := New(mem, 100).(*StoreLRU)
+	cache := NewLRU(mem, 100)
 	cache.Scan()
 
 	for _, elem := range table {
@@ -103,7 +103,7 @@ func TestScan(t *testing.T) {
 	}
 
 	// now set up a small cache and scan that
-	cache = New(mem, 15).(*StoreLRU)
+	cache = NewLRU(mem, 15)
 	cache.Scan()
 
 	for _, elem := range table {
@@ -114,5 +114,4 @@ func TestScan(t *testing.T) {
 		}
 		r.Close()
 	}
-
 }

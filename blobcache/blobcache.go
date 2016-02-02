@@ -51,7 +51,7 @@ type entry struct {
 // New creates and initializes a new cache structure. The given store
 // may already have items in it. Call Scan() either inline or in a goroutine
 // to scan the store and add the items inside it to the LRU list.
-func New(s store.Store, maxSize int64) T {
+func NewLRU(s store.Store, maxSize int64) *StoreLRU {
 	return &StoreLRU{s: s, maxSize: maxSize, lru: list.New()}
 }
 

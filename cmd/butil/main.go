@@ -123,8 +123,6 @@ func printitem(item *items.Item) {
 		fmt.Fprintf(w, "Bundle:\t%d\n", blob.Bundle)
 		fmt.Fprintf(w, "MD5:\t%s\n", hex.EncodeToString(blob.MD5))
 		fmt.Fprintf(w, "SHA256:\t%s\n", hex.EncodeToString(blob.SHA256))
-		fmt.Fprintf(w, "ChecksumDate:\t%v\n", blob.ChecksumDate)
-		fmt.Fprintf(w, "ChecksumStatus:\t%v\n", blob.ChecksumStatus)
 		fmt.Fprintf(w, "DeleteDate:\t%v\n", blob.DeleteDate)
 		fmt.Fprintf(w, "Deleter:\t%v\n", blob.Deleter)
 		fmt.Fprintf(w, "DeleteNote:\t%v\n", blob.DeleteNote)

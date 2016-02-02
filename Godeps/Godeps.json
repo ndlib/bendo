@@ -2,7 +2,10 @@
 	"ImportPath": "github.com/ndlib/bendo",
 	"GoVersion": "go1.5.3",
 	"Packages": [
-		"./..."
+		"./cmd/bclient",
+		"./cmd/bendo",
+		"./cmd/bstress",
+		"./cmd/butil"
 	],
 	"Deps": [
 		{
@@ -49,6 +52,11 @@
 		{
 			"ImportPath": "github.com/cznic/zappy",
 			"Rev": "47331054e4f96186e3ff772877c0443909368a45"
+		},
+		{
+			"ImportPath": "github.com/go-sql-driver/mysql",
+			"Comment": "go1",
+			"Rev": "9a7aa3606b82e2081a13a008ada88dfdb96c20fd"
 		},
 		{
 			"ImportPath": "github.com/julienschmidt/httprouter",

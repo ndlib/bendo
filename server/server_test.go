@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"path"
@@ -233,10 +232,10 @@ func checkRoute(t *testing.T, verb, route string, expstatus int) *http.Response 
 var testServer *httptest.Server
 
 func init() {
-	err := openDatabase("memory")
-	if err != nil {
-		log.Println(err.Error())
-	}
+	//err := openDatabase("memory")
+	//if err != nil {
+	//	log.Println(err.Error())
+	//}
 	server := &RESTServer{
 		Validator: NewNobodyValidator(),
 		Items:     items.New(store.NewMemory()),

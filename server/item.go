@@ -73,7 +73,8 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 		}
 		defer realContents.Close()
 		src = realContents
-		// copy into the cache
+		// copy into the cache in the background
+		// TODO(dbrower): don't cache if blob is too large, say >= 50 GB?
 		go func() {
 			cw, err := s.Cache.Put(key)
 			if err != nil {
@@ -97,6 +98,7 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 	}
 }
 
+// GET /item/:id
 func (s *RESTServer) ItemHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
 	item, err := s.Items.Item(id)

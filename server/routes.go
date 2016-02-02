@@ -7,67 +7,174 @@ import (
 	"log"
 	"net/http"
 	_ "net/http/pprof" // for pprof server
+	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 
 	"github.com/ndlib/bendo/blobcache"
 	"github.com/ndlib/bendo/fragment"
 	"github.com/ndlib/bendo/items"
+	"github.com/ndlib/bendo/store"
 	"github.com/ndlib/bendo/transaction"
 )
 
-// RESTServer is the base type containing the configuration for a Bendo REST
-// API server.
+// RESTServer holds the configuration for a Bendo REST API server.
 //
 // Set all the public fields and then call Run. Run will listen on the given
-// port and handle requests. (At the moment there is no maximum simultaneous
-// request limit). Do not change any fields after calling Run.
+// port and handle requests. At the moment there is no maximum simultaneous
+// request limit. Do not change any fields after calling Run.
 //
-// Run will start a goroutine to handle serializing new file uploads
+// Run will also start a goroutine to handle serializing new file uploads
 // into storage bags, and a goroutine to do fixity checking.
+//
+// There are two levels of configuration. It should be enough to only set
+// CacheDir and Items. The other fields are exposed to allow more customization.
 type RESTServer struct {
+	// Port number to run bendo on. defaults to 14000
 	PortNumber string
 	PProfPort  string
 
-	// Validator does authentication by validating any user tokens
-	// presented to the API.
-	Validator TokenValidator
-
-	// Items is the base item store.
+	// Items is the base item store. Run will panic if Items is nil.
 	Items *items.Store
 
-	// TxStore keeps information on transactions in progress.
+	// CacheDir is the path to put the cache in the filesystem.
+	// Used if Cache, FileStore, or TxStore are nil.
+	// If CacheDir is empty then no caching is done, and any transactions
+	// and uploads are kept entirely in memory.
+	CacheDir  string
+	CacheSize int64 // in bytes
+
+	// Pass in a dial command to use a MySQL server as a database.
+	// Otherwise a lightweight internal database is used, and placed inside
+	// the CacheDir directory. The special value "memory" will run
+	// the database entirely inside the server's memory. (useful for testing).
+	// e.g. "user:password@tcp(localhost:5555)/dbname" or just "/dbname"
+	// if everything else can be the default. Can also use domain sockets:
+	// "user@unix(/path/to/socket)/dbname"
+	MySQL string
+
+	// --- The following fields are more advanced and only need to be
+	// set in special situations. ---
+
+	// Validator does authentication by validating any user tokens
+	// presented to the API. If this is nil then no authentication will be
+	// done.
+	Validator TokenValidator
+
+	// TxStore keeps information on transactions in progress. If this is
+	// nil, transactions will be kept inside the cache directory.
 	TxStore *transaction.Store
 
-	// FileStore keeps the uploaded file waiting to be saved into the
-	// Item store.
+	// FileStore keeps the uploaded file waiting to be saved into the Item
+	// store. If nil, the files will be stored inside the cache directory.
 	FileStore *fragment.Store
 
-	// Cache is keeps smallish blobs retreived from tape. Large-ish blobs
-	// are not cached.
+	// Cache keeps smallish blobs retreived from tape.
 	Cache blobcache.T
+
+	// Fixity stores the records tracking past and future fixity checks.
+	Fixity FixityDB
 }
 
 // Run initializes and starts all the goroutines used by the server. It then
 // blocks listening for and handling http requests.
 func (s *RESTServer) Run() {
 	log.Println("==========")
-	log.Println("Starting Bendo Server version", Version)
+	log.Printf("Starting Bendo Server version %s", Version)
+	log.Printf("CacheDir = %s", s.CacheDir)
+	log.Printf("CacheSize = %d", s.CacheSize)
+
+	if s.Items == nil {
+		panic("No base storage given. Items is nil.")
+	}
 
 	if s.Validator == nil {
-		panic("Validator is nil")
+		log.Println("No Validator given")
+		s.Validator = NewNobodyValidator()
 	}
 
+	// init database
+	var db interface {
+		FixityDB
+		items.ItemCache
+	}
+	if s.MySQL != "" {
+		db = NewMysqlCache(s.MySQL)
+	} else {
+		var path string
+		if s.CacheDir != "" {
+			path = filepath.Join(s.CacheDir, "bendo.ql")
+		} else {
+			path = "memory"
+		}
+		db = NewQlCache(path)
+	}
+	if db == nil {
+		panic("problem setting up database")
+	}
+	s.Items.SetCache(db)
+
+	// init fixity
+	if s.Fixity == nil {
+		s.Fixity = db
+	}
+	s.StartFixity()
+	// should scanfixity run periodically? or only at startup?
+	// this will keep running it in a loop with 24 hour rest in between.
+	go func() {
+		for {
+			s.scanfixity()
+			time.Sleep(24 * time.Hour)
+		}
+	}()
+
+	// init blobcache
 	if s.Cache == nil {
-		s.Cache = blobcache.EmptyCache{}
+		if s.CacheDir == "" || s.CacheSize == 0 {
+			log.Println("Not using blob cache")
+			s.Cache = blobcache.EmptyCache{}
+		} else {
+			path := filepath.Join(s.CacheDir, "blobcache")
+			os.MkdirAll(path, 0755)
+			fs := store.NewFileSystem(path)
+			c := blobcache.NewLRU(fs, s.CacheSize)
+			go c.Scan()
+			s.Cache = c
+		}
 	}
 
-	openDatabase("memory")
-
-	log.Println("Loading Transactions")
+	// init TxStore
+	if s.TxStore == nil {
+		var fs store.Store
+		if s.CacheDir == "" {
+			fs = store.NewMemory()
+		} else {
+			path := filepath.Join(s.CacheDir, "transaction")
+			os.MkdirAll(path, 0755)
+			fs = store.NewFileSystem(path)
+		}
+		s.TxStore = transaction.New(fs)
+	}
+	log.Println("Scanning Transactions")
 	s.TxStore.Load()
-	log.Println("Loading Upload Queue")
+
+	// init upload store
+	if s.FileStore == nil {
+		var fs store.Store
+		if s.CacheDir == "" {
+			fs = store.NewMemory()
+		} else {
+			path := filepath.Join(s.CacheDir, "upload")
+			os.MkdirAll(path, 0755)
+			fs = store.NewFileSystem(path)
+		}
+		s.FileStore = fragment.New(fs)
+	}
+	log.Println("Scanning Upload Queue")
 	s.FileStore.Load()
+
 	log.Println("Starting pending transactions")
 	go s.initCommitQueue()
 
@@ -122,6 +229,12 @@ func (s *RESTServer) addRoutes() http.Handler {
 		{"GET", "/upload/:fileid/metadata", RoleMDOnly, s.GetFileInfoHandler},
 		{"PUT", "/upload/:fileid/metadata", RoleWrite, s.SetFileInfoHandler},
 
+		// fixity reporting
+		{"GET", "/fixity", RoleRead, nil},
+		{"GET", "/fixity/errors", RoleRead, nil},
+		{"GET", "/fixity/item/:itemid", RoleRead, nil},
+		{"POST", "/fixity/:itemid", RoleWrite, nil},
+
 		// the read only bundle stuff
 		{"GET", "/bundle/list/:prefix", RoleRead, s.BundleListPrefixHandler},
 		{"GET", "/bundle/list/", RoleRead, s.BundleListHandler},
@@ -136,16 +249,20 @@ func (s *RESTServer) addRoutes() http.Handler {
 	for _, route := range routes {
 		r.Handle(route.method,
 			route.route,
-			s.authzWrapper(route.handler, route.role))
+			logWrapper(s.authzWrapper(route.handler, route.role)))
 	}
 	return r
 }
+
+// General route handlers and convinence functions
 
 func NotImplementedHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	w.WriteHeader(http.StatusNotImplemented)
 	fmt.Fprintf(w, "Not Implemented\n")
 }
 
+// writeHTMLorJSON will either return val as JSON or as rendered using the
+// given template, depending on the request header "Accept-Encoding".
 func writeHTMLorJSON(w http.ResponseWriter,
 	r *http.Request,
 	tmpl *template.Template,
@@ -188,6 +305,15 @@ func (s *RESTServer) authzWrapper(handler httprouter.Handle, leastRole Role) htt
 		// add a new username if none found
 		ps = append(ps, httprouter.Param{Key: "username", Value: user})
 	out:
+		handler(w, r, ps)
+	}
+}
+
+// logWrapper takes a handler and returns a handler which does the same thing,
+// after first logging the request URL.
+func logWrapper(handler httprouter.Handle) httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+		log.Println(r.Method, r.URL)
 		handler(w, r, ps)
 	}
 }

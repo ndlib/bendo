@@ -18,11 +18,9 @@ type Blob struct {
 	Size     int64 // logical size of associated content (i.e. before compression), 0 if deleted
 
 	// following valid if blob is NOT deleted
-	Bundle         int       // which bundle file this blob is stored in
-	MD5            []byte    // unused if Size == 0
-	SHA256         []byte    // unused if Size == 0
-	ChecksumDate   time.Time // unused if Size == 0
-	ChecksumStatus bool      // true == pass, false == error. Only valid if ChecksumDate > 0
+	Bundle int    // which bundle file this blob is stored in
+	MD5    []byte // unused if Size == 0
+	SHA256 []byte // unused if Size == 0
 
 	// following valid if blob is deleted
 	DeleteDate time.Time // zero iff not deleted
@@ -44,7 +42,7 @@ type Item struct {
 	ID        string
 	MaxBundle int        // largest bundle id used by this item
 	Blobs     []*Blob    // list of blobs, sorted by id
-	Versions  []*Version // list of versions, sorted by it
+	Versions  []*Version // list of versions, sorted by id
 }
 
 // An ItemCache defines the methods a Store will use to interact with a cache.
