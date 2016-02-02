@@ -1,3 +1,3 @@
 package server
 
-var Version = "0.0.1 alpha"
+var Version = "2016.1"
