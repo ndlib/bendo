@@ -9,6 +9,8 @@ import (
 	"github.com/antonholmquist/jason"
 	"io"
 	"os"
+	"sort"
+	"strings"
 )
 
 // Our underlying data structure
@@ -63,6 +65,8 @@ func (f *FileList) BuildListFromChan(filePipe <-chan string) {
 	}
 }
 
+// add file to the send queue
+
 func (f *FileList) AddToSendQueue(sendQueue chan string) {
 
 	defer close(sendQueue)
@@ -97,5 +101,85 @@ func (f *FileList) BuildListFromJSON(json *jason.Object) {
 
 			f.Files[key][versionID] = DecodedMD5
 		}
+	}
+}
+
+// Parse item JSON returned from bendo get item  for ls action
+
+func PrintLsFromJSON(json *jason.Object, version int, long bool, blobs bool, item string) {
+
+	var thisVersion int
+
+	blobArray, _ := json.GetObjectArray("Blobs")
+	versionArray, _ := json.GetObjectArray("Versions")
+
+	// if version set to zero, use lastest, else use the one given
+
+	if version == 0 {
+		thisVersion = len(versionArray)
+	} else {
+		thisVersion = version
+	}
+
+	// Find the version in the JSON, and its subtending slot map
+
+	versionElement := versionArray[thisVersion-1]
+	slotMap, _ := versionElement.GetObject("Slots")
+
+	// sort the Slot Keys (filenames) in an array
+
+	keyMap := []string{}
+
+	for key, _ := range slotMap.Map() {
+		keyMap = append(keyMap, key)
+
+	}
+
+	sort.Strings(keyMap)
+
+	// Print the slots in the sorted order
+
+	if long {
+		fmt.Println("Blob       Size Date                 Creator File")
+		fmt.Println("-------------------------------------------------------------------------------------")
+	}
+
+	for i := range keyMap {
+
+		if long {
+			blobID, _ := slotMap.GetInt64(keyMap[i])
+			itemSize, _ := blobArray[blobID-1].GetInt64("Size")
+			saveDate, _ := blobArray[blobID-1].GetString("SaveDate")
+			creator, _ := blobArray[blobID-1].GetString("Creator")
+
+			fmt.Printf("%03d %12d %s %-8s ", blobID, itemSize, strings.Split(strings.Replace(saveDate, "T", " ", 1), ".")[0], creator)
+		}
+
+		fmt.Printf("%s/", item)
+
+		if version != 0 {
+			fmt.Printf("@%d/", thisVersion)
+		}
+
+		fmt.Printf("%s ", keyMap[i])
+		fmt.Printf("\n")
+	}
+}
+
+func PrintListFromJSON(json *jason.Object) {
+
+	versionArray, _ := json.GetObjectArray("Versions")
+
+	for _, version := range versionArray {
+		versionID, _ := version.GetInt64("ID")
+		saveDate, _ := version.GetString("SaveDate")
+		creator, _ := version.GetString("Creator")
+		note, _ := version.GetString("Note")
+
+		if note == "" {
+			note = "\"\""
+		}
+
+		fmt.Printf("@%02d %s %s %s\n", versionID, strings.Split(strings.Replace(saveDate, "T", " ", 1), ".")[0], creator, note)
 	}
 }
