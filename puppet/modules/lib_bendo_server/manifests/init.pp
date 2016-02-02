@@ -82,17 +82,17 @@ $bendo_storage_dir = hiera("bendo_storage_dir")
 
 # Enable the Service ( leave this out until app can run /sbin/sv ) 
 
-#	service { 'bendo':
-#		provider => 'base',
-#		ensure => running,
-#		enable => true,
-#		hasstatus => false,
-#		hasrestart => false,
-#		restart => '/sbin/sv restart bendo',
-#		start => '/sbin/sv start bendo',
-#		stop => '/sbin/sv stop bendo',
-#		status => '/sbin/sv status bendo',
-#		require => File['bendorunitlog'],
-#	}
+	service { 'bendo':
+		provider => 'base',
+		ensure => running,
+		enable => true,
+		hasstatus => false,
+		hasrestart => false,
+		restart => '/sbin/sv restart bendo',
+		start => '/sbin/sv start bendo',
+		stop => '/sbin/sv stop bendo',
+		status => '/sbin/sv status bendo',
+		require => File['bendorunitlog'],
+	}
 
 }
