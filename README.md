@@ -11,6 +11,18 @@ It saves data into the filesystem, which is an NFS mounted partition of our stor
 * To read about configuration...link.
 * To get started hacking...link.
 
+# Elevator Pitch
+
+Bendo is a content agnostic storage service.
+It provides the abstraction of a versioned directory, similar to the Moab storage system or Git.
+Every version of every file stored in it has a unique URI.
+It serves the same purpose as Moab, except instead of keeping each file in the filesystem, it collects them into Bags.
+Each version of an item has its own bag (more or less).
+It uses bags since our tape system dislikes many small files, which is what we have with all the metadata files we have.
+It will run fixity checks on the content in the background.
+It also provides some caching of content.
+It was designed to fit into a larger digital architecture.
+
 # Description of this repository
 
 This repository contains the code for the Bendo server, along with related command-line tools, tests, and documentation.
