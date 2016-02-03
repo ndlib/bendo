@@ -64,6 +64,16 @@ Structure imports like:
 Before committing, run `go fmt` on the repository.
 We also use `go vet` and `golint` occasionally, but for now they are not required on each check-in.
 
+# Releasing New Versions
+
+1. Add the new version to the CHANGELOG.md along with a summary of the changes
+   since the previous release. (A high level summary with attention paid to any
+   gotchas when upgrading).
+2. Commit the edits
+3. Tag the git repo with the new version using `git tag -a v2016.1 -m 'Tag
+   v2016.1'` where each occurrence of "v2016.1" is replaced with the version
+   number. I've been prefixing the git tags for versions with a lower case "v".
+
 # TODO
 
  * Update README to have
