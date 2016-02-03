@@ -6,11 +6,11 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 
 	"github.com/ndlib/bendo/transaction"
-	"github.com/ndlib/bendo/util"
 )
 
 //r.Handle("GET", "/transaction", ListTx)
@@ -98,7 +98,9 @@ func (s *RESTServer) NewTxHandler(w http.ResponseWriter, r *http.Request, ps htt
 // or nothing will happen to the transaction.
 func (s *RESTServer) processCommit(tx *transaction.T) {
 	// probably should hold lock on tx to access these fields directly
-	log.Printf("Starting transaction %s on %s (%s)", tx.ID, tx.ItemID,
+	log.Printf("Queued transaction %s on %s (%s)",
+		tx.ID,
+		tx.ItemID,
 		tx.Status.String())
 	if tx.Status == transaction.StatusOpen ||
 		tx.Status == transaction.StatusFinished ||
@@ -106,9 +108,18 @@ func (s *RESTServer) processCommit(tx *transaction.T) {
 		return
 	}
 
-	gate.Enter()
-	defer gate.Leave()
+	ok := s.txgate.Enter()
+	if !ok {
+		// Gate was stopped
+		return
+	}
+	defer s.txgate.Leave()
 
+	log.Printf("Starting transaction %s on %s (%s)",
+		tx.ID,
+		tx.ItemID,
+		tx.Status.String())
+	start := time.Now()
 	switch tx.Status {
 	default:
 		log.Printf("Unknown status %s", tx.Status.String())
@@ -123,12 +134,9 @@ func (s *RESTServer) processCommit(tx *transaction.T) {
 	case transaction.StatusIngest:
 		tx.Commit(*s.Items, s.FileStore)
 	}
+	duration := time.Now().Sub(start)
+	log.Printf("Finish transaction %s on %s (%s)", tx.ID, tx.ItemID, duration.String())
 }
-
-// the number of active commits onto tape we allow at a given time
-const MaxConcurrentCommits = 10
-
-var gate = util.NewGate(MaxConcurrentCommits)
 
 //r.Handle("POST", "/transaction/:tid/cancel", CancelTx)
 func (s *RESTServer) CancelTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {

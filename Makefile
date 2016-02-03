@@ -22,3 +22,4 @@ $(TARGETS): ./bin
 	$(GOCMD) build -ldflags "-X github.com/ndlib/bendo/server.Version=$(VERSION)" \
 		-o ./bin/$(notdir $@) ./$@
 
+.PHONY: $(TARGETS)
