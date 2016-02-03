@@ -100,8 +100,9 @@ func (s *RESTServer) Run() {
 		FixityDB
 		items.ItemCache
 	}
+	var err error
 	if s.MySQL != "" {
-		db = NewMysqlCache(s.MySQL)
+		db, err = NewMysqlCache(s.MySQL)
 	} else {
 		var path string
 		if s.CacheDir != "" {
@@ -109,9 +110,9 @@ func (s *RESTServer) Run() {
 		} else {
 			path = "memory"
 		}
-		db = NewQlCache(path)
+		db, err = NewQlCache(path)
 	}
-	if db == nil {
+	if db == nil || err != nil {
 		panic("problem setting up database")
 	}
 	s.Items.SetCache(db)

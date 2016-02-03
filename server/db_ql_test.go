@@ -8,9 +8,9 @@ import (
 )
 
 func TestQlItemCache(t *testing.T) {
-	qc := NewQlCache("memory")
-	if qc == nil {
-		t.Errorf("Received nil, expected non-nil")
+	qc, err := NewQlCache("memory")
+	if err != nil {
+		t.Fatalf("Received %s", err.Error())
 	}
 
 	testItem := new(items.Item)
@@ -23,9 +23,9 @@ func TestQlItemCache(t *testing.T) {
 }
 
 func TestQlFixity(t *testing.T) {
-	qc := NewQlCache("memory")
-	if qc == nil {
-		t.Errorf("Received nil, expected non-nil")
+	qc, err := NewQlCache("memory")
+	if err != nil {
+		t.Fatalf("Received %s", err.Error())
 	}
 	now := time.Now()
 	nowPlusHour := now.Add(time.Hour)

@@ -44,7 +44,7 @@ const mysqlFixityInit = `
 	);
 `
 
-func NewMysqlCache(dial string) *msqlCache {
+func NewMysqlCache(dial string) (*msqlCache, error) {
 	db, err := sql.Open("mysql", dial)
 	if err == nil {
 		_, err = db.Exec(mysqlItemInit)
@@ -54,9 +54,9 @@ func NewMysqlCache(dial string) *msqlCache {
 	}
 	if err != nil {
 		log.Printf("Open Mysql: %s", err.Error())
-		return nil
+		return nil, err
 	}
-	return &msqlCache{db: db}
+	return &msqlCache{db: db}, nil
 }
 
 func (ms *msqlCache) Lookup(id string) *items.Item {

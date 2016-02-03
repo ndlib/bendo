@@ -49,7 +49,7 @@ const qlFixityInit = `
 
 // NewQlDatabase makes a QL database cache. filename is
 // the name of the file to save the database to. The filname "memory" means to keep everything in memory.
-func NewQlCache(filename string) *qlCache {
+func NewQlCache(filename string) (*qlCache, error) {
 	var db *sql.DB
 	var err error
 	if filename == "memory" {
@@ -65,9 +65,9 @@ func NewQlCache(filename string) *qlCache {
 	}
 	if err != nil {
 		log.Printf("Open QL: %s", err.Error())
-		return nil
+		return nil, err
 	}
-	return &qlCache{db: db}
+	return &qlCache{db: db}, nil
 }
 
 func (qc *qlCache) Lookup(id string) *items.Item {
