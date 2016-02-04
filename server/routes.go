@@ -188,7 +188,6 @@ func (s *RESTServer) Run() error {
 	}
 	log.Println("Listening on", s.PortNumber)
 
-	var err error
 	h := httpdown.HTTP{}
 	s.server, err = h.ListenAndServe(&http.Server{
 		Addr:    ":" + s.PortNumber,
