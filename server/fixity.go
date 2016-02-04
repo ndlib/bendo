@@ -34,12 +34,22 @@ type FixityDB interface {
 	LookupCheck(id string) (time.Time, error)
 }
 
-// StartFixity starts a background goroutine to check item fixity.
+// StartFixity starts the background goroutines to check item fixity. It
+// returns immediately and does not block.
 func (s *RESTServer) StartFixity() {
 	go s.fixity()
+
+	// should scanfixity run periodically? or only at startup?
+	// this will keep running it in a loop with 24 hour rest in between.
+	go func() {
+		for {
+			s.scanfixity()
+			time.Sleep(24 * time.Hour)
+		}
+	}()
 }
 
-var (
+const (
 	// by default schedule the next fixity in 273 days (~9 months)
 	// this duration is completely arbitrary.
 	nextFixityDuration = 273 * 24 * time.Hour

@@ -4,6 +4,8 @@ import (
 	"flag"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/ndlib/bendo/items"
 	"github.com/ndlib/bendo/server"
@@ -49,5 +51,22 @@ func main() {
 		PortNumber: *portNumber,
 		PProfPort:  *pProfPort,
 	}
+
+	// set up signal handlers
+	sig := make(chan os.Signal, 5)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	go signalHandler(sig, &s)
+
 	s.Run()
+}
+
+func signalHandler(sig <-chan os.Signal, svr *server.RESTServer) {
+	for s := range sig {
+		log.Println("---Received signal", s)
+		switch s {
+		case syscall.SIGINT, syscall.SIGTERM:
+			log.Println("Exiting")
+			svr.Stop() // this will cause Run to exit
+		}
+	}
 }

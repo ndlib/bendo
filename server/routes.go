@@ -9,8 +9,8 @@ import (
 	_ "net/http/pprof" // for pprof server
 	"os"
 	"path/filepath"
-	"time"
 
+	"github.com/facebookgo/httpdown"
 	"github.com/julienschmidt/httprouter"
 
 	"github.com/ndlib/bendo/blobcache"
@@ -18,6 +18,7 @@ import (
 	"github.com/ndlib/bendo/items"
 	"github.com/ndlib/bendo/store"
 	"github.com/ndlib/bendo/transaction"
+	"github.com/ndlib/bendo/util"
 )
 
 // RESTServer holds the configuration for a Bendo REST API server.
@@ -76,11 +77,17 @@ type RESTServer struct {
 
 	// Fixity stores the records tracking past and future fixity checks.
 	Fixity FixityDB
+
+	server httpdown.Server // used to close our listening socket
+	txgate *util.Gate      // limits number of concurrent transactions
 }
+
+// the number of active commits onto tape we allow at a given time
+const MaxConcurrentCommits = 2
 
 // Run initializes and starts all the goroutines used by the server. It then
 // blocks listening for and handling http requests.
-func (s *RESTServer) Run() {
+func (s *RESTServer) Run() error {
 	log.Println("==========")
 	log.Printf("Starting Bendo Server version %s", Version)
 	log.Printf("CacheDir = %s", s.CacheDir)
@@ -122,14 +129,6 @@ func (s *RESTServer) Run() {
 		s.Fixity = db
 	}
 	s.StartFixity()
-	// should scanfixity run periodically? or only at startup?
-	// this will keep running it in a loop with 24 hour rest in between.
-	go func() {
-		for {
-			s.scanfixity()
-			time.Sleep(24 * time.Hour)
-		}
-	}()
 
 	// init blobcache
 	if s.Cache == nil {
@@ -177,6 +176,7 @@ func (s *RESTServer) Run() {
 	s.FileStore.Load()
 
 	log.Println("Starting pending transactions")
+	s.txgate = util.NewGate(MaxConcurrentCommits)
 	go s.initCommitQueue()
 
 	// for pprof
@@ -187,14 +187,38 @@ func (s *RESTServer) Run() {
 		}()
 	}
 	log.Println("Listening on", s.PortNumber)
-	http.ListenAndServe(":"+s.PortNumber, s.addRoutes())
+
+	h := httpdown.HTTP{}
+	s.server, err = h.ListenAndServe(&http.Server{
+		Addr:    ":" + s.PortNumber,
+		Handler: s.addRoutes(),
+	})
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	return s.server.Wait()
+}
+
+// Stop will stop the server and return when all the server goroutines have
+// exited and the socked closed.
+func (s *RESTServer) Stop() error {
+	// first shutdown the transaction writing.
+	// We don't stop the fixity process. Should we?
+	s.txgate.Stop() // release and wait for any in progress transactions
+
+	// then shutdown all the HTTP connections
+	return s.server.Stop()
 }
 
 func (s *RESTServer) initCommitQueue() {
 	// for each commit, pass to processCommit, and let it sort things out
 	for _, tid := range s.TxStore.List() {
 		tx := s.TxStore.Lookup(tid)
-		if tx.Status == transaction.StatusWaiting || tx.Status == transaction.StatusIngest {
+		if tx.Status == transaction.StatusWaiting ||
+			tx.Status == transaction.StatusChecking ||
+			tx.Status == transaction.StatusIngest {
+
 			tx.SetStatus(transaction.StatusWaiting)
 			go s.processCommit(tx)
 		}

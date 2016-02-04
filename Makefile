@@ -3,11 +3,12 @@ TARGETS:=$(wildcard ./cmd/*)
 GOCMD:=$(if $(shell which godep),godep go,go)
 VERSION:=$(shell git describe --always)
 PACKAGES:=$(shell go list ./... | grep -v /vendor/)
+GOPATH:=$(realpath ./Godeps/_workspace/):$(GOPATH)
 
 all: $(TARGETS)
 
 test:
-	$(GOCMD) test $(PACKAGES)
+	$(GOCMD) test -v $(PACKAGES)
 
 clean:
 	rm -rf ./bin
@@ -22,3 +23,4 @@ $(TARGETS): ./bin
 	$(GOCMD) build -ldflags "-X github.com/ndlib/bendo/server.Version=$(VERSION)" \
 		-o ./bin/$(notdir $@) ./$@
 
+.PHONY: $(TARGETS)

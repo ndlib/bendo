@@ -17,6 +17,7 @@ import (
 	"github.com/ndlib/bendo/items"
 	"github.com/ndlib/bendo/store"
 	"github.com/ndlib/bendo/transaction"
+	"github.com/ndlib/bendo/util"
 )
 
 func TestTransaction1(t *testing.T) {
@@ -232,10 +233,6 @@ func checkRoute(t *testing.T, verb, route string, expstatus int) *http.Response 
 var testServer *httptest.Server
 
 func init() {
-	//err := openDatabase("memory")
-	//if err != nil {
-	//	log.Println(err.Error())
-	//}
 	server := &RESTServer{
 		Validator: NewNobodyValidator(),
 		Items:     items.New(store.NewMemory()),
@@ -243,6 +240,7 @@ func init() {
 		FileStore: fragment.New(store.NewMemory()),
 		Cache:     blobcache.EmptyCache{},
 	}
+	server.txgate = util.NewGate(MaxConcurrentCommits)
 	server.TxStore.Load()
 	testServer = httptest.NewServer(server.addRoutes())
 }
