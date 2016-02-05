@@ -1,4 +1,4 @@
-package bserver
+package bclientapi
 
 import (
 	"bytes"
@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/antonholmquist/jason"
+	"io"
 	"net/http"
+	"os"
+	"path"
 )
 
 // Exported errors
@@ -39,6 +42,53 @@ func (ia *itemAttributes) GetItemInfo() (*jason.Object, error) {
 	v, err := jason.NewObjectFromReader(r.Body)
 
 	return v, err
+}
+
+func (ia *itemAttributes) downLoad(fileName string, pathPrefix string) error {
+	var httpPath = "http://" + ia.bendoServer + "/item/" + ia.item + "/" + fileName
+
+	r, err := http.Get(httpPath)
+	if err != nil {
+		return err
+	}
+	if r.StatusCode != 200 {
+		r.Body.Close()
+		switch r.StatusCode {
+		case 404:
+			return ErrNotFound
+		case 401:
+			return ErrNotAuthorized
+		default:
+			return fmt.Errorf("Received status %d from Bendo", r.StatusCode)
+		}
+	}
+
+	// How do we handle large downloads?
+
+	targetFile := path.Join(pathPrefix, fileName)
+
+	targetDir, _ := path.Split(targetFile)
+
+	err = os.MkdirAll(targetDir, 0755)
+
+	if err != nil {
+		fmt.Printf("Error: could not create directory %s\n%s\n", err.Error())
+		return err
+	}
+
+	filePtr, err := os.Create(targetFile)
+
+	if err != nil {
+		fmt.Printf("Error: could not create file %s\n%s\n", err.Error())
+		return err
+	}
+
+	defer r.Body.Close()
+	defer filePtr.Close()
+
+	_, err = io.Copy(filePtr, r.Body)
+
+	return err
 }
 
 func (ia *itemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []byte, fileId string) (fileid string, err error) {
