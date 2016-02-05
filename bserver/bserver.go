@@ -3,7 +3,7 @@ package bserver
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/ndlib/bendo/cmd/bclient/fileutil"
+	"github.com/ndlib/bendo/fileutil"
 	"sync"
 )
 
