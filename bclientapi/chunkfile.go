@@ -1,4 +1,4 @@
-package bserver
+package bclientapi
 
 import (
 	"crypto/md5"

@@ -6,7 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/antonholmquist/jason"
-	"github.com/ndlib/bendo/bserver"
+	"github.com/ndlib/bendo/bclientapi"
 	"github.com/ndlib/bendo/fileutil"
 	"os"
 	"path"
@@ -91,7 +91,7 @@ func doUpload(item string, files string) {
 	var json *jason.Object
 	var jsonFetchErr error
 
-	thisItem := bserver.New(*server, item, *fileroot)
+	thisItem := bclientapi.New(*server, item, *fileroot)
 	fileLists := fileutil.NewLists(*fileroot)
 
 	// Set up Barrier for 3 goroutines below
@@ -123,7 +123,7 @@ func doUpload(item string, files string) {
 	// default: build remote filelist of returned json, diff against local list, upload remainder
 
 	switch {
-	case jsonFetchErr == bserver.ErrNotFound:
+	case jsonFetchErr == bclientapi.ErrNotFound:
 		break
 	case jsonFetchErr != nil:
 		fmt.Println(jsonFetchErr)
@@ -194,16 +194,16 @@ func doGet(item string, files []string) {
 
 	// set up communication to the bendo server, and init local and remote filelists
 
-	thisItem := bserver.New(*server, item, *fileroot)
+	thisItem := bclientapi.New(*server, item, *fileroot)
 	fileLists := fileutil.NewLists(*fileroot)
 
-	// Fetch Item Info from bserver
+	// Fetch Item Info from bclientapi
 	json, jsonFetchErr = thisItem.GetItemInfo()
 
 	// If not found or error, we're done
 
 	switch {
-	case jsonFetchErr == bserver.ErrNotFound:
+	case jsonFetchErr == bclientapi.ErrNotFound:
 		fmt.Printf("\n Item %s was not found on server %\n", item, *server)
 		return
 	case jsonFetchErr != nil:
@@ -258,15 +258,15 @@ func doGetStub(item string) {
 
 	// fetch info about this item from the bendo server
 
-	thisItem := bserver.New(*server, item, *fileroot)
+	thisItem := bclientapi.New(*server, item, *fileroot)
 
-	// Fetch Item Info from bserver
+	// Fetch Item Info from bclientapi
 	json, jsonFetchErr = thisItem.GetItemInfo()
 
 	// If not found or error, we're done; otherwise, create Item Stub
 
 	switch {
-	case jsonFetchErr == bserver.ErrNotFound:
+	case jsonFetchErr == bclientapi.ErrNotFound:
 		fmt.Printf("\n Item %s was not found on server %\n", item, *server)
 	case jsonFetchErr != nil:
 		fmt.Println(jsonFetchErr)
@@ -280,13 +280,13 @@ func doHistory(item string) {
 	var json *jason.Object
 	var jsonFetchErr error
 
-	thisItem := bserver.New(*server, item, *fileroot)
+	thisItem := bclientapi.New(*server, item, *fileroot)
 
-	// Fetch Item Info from bserver
+	// Fetch Item Info from bclientapi
 	json, jsonFetchErr = thisItem.GetItemInfo()
 
 	switch {
-	case jsonFetchErr == bserver.ErrNotFound:
+	case jsonFetchErr == bclientapi.ErrNotFound:
 		fmt.Printf("\n Item %s was not found on server %\n", item, *server)
 	case jsonFetchErr != nil:
 		fmt.Println(jsonFetchErr)
@@ -301,13 +301,13 @@ func doLs(item string) {
 	var json *jason.Object
 	var jsonFetchErr error
 
-	thisItem := bserver.New(*server, item, *fileroot)
+	thisItem := bclientapi.New(*server, item, *fileroot)
 
-	// Fetch Item Info from bserver
+	// Fetch Item Info from bclientapi
 	json, jsonFetchErr = thisItem.GetItemInfo()
 
 	switch {
-	case jsonFetchErr == bserver.ErrNotFound:
+	case jsonFetchErr == bclientapi.ErrNotFound:
 		fmt.Printf("\n Item %s was not found on server %\n", item, *server)
 	case jsonFetchErr != nil:
 		fmt.Println(jsonFetchErr)

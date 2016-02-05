@@ -1,4 +1,4 @@
-package bserver
+package bclientapi
 
 import (
 	"encoding/json"
@@ -41,7 +41,7 @@ func addFileToTransactionList(filename string, fileID string, item string) {
 }
 
 func New(server string, item string, fileroot string) *itemAttributes {
-	fileutil.IfVerbose("github.com/ndlib/bendo/bclient/bserver.Init() called")
+	fileutil.IfVerbose("github.com/ndlib/bendo/bclient/bclientapi.Init() called")
 
 	thisItem := new(itemAttributes)
 	thisItem.bendoServer = server
