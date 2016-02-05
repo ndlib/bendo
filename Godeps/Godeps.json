@@ -6,6 +6,10 @@
 	],
 	"Deps": [
 		{
+			"ImportPath": "github.com/BurntSushi/migration",
+			"Rev": "c45b897f13350786ccaf2b7403b92b1c7ad85844"
+		},
+		{
 			"ImportPath": "github.com/antonholmquist/jason",
 			"Comment": "v1.0.0-12-g45d2bc8",
 			"Rev": "45d2bc81fe7570f04969728f3a941216fc565b61"

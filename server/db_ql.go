@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/BurntSushi/migration"
 	_ "github.com/cznic/ql/driver"
 
 	"github.com/ndlib/bendo/items"
@@ -22,47 +23,34 @@ type qlCache struct {
 var _ items.ItemCache = &qlCache{}
 var _ FixityDB = &qlCache{}
 
-// Only keep enough information as needed by the fixity checking routine.
-const qlItemInit = `
-	CREATE TABLE IF NOT EXISTS items (
-		id string,
-		created time,
-		modified time,
-		size int,
-		value blob
-	);
-	CREATE INDEX IF NOT EXISTS itemid ON items (id);
-	CREATE INDEX IF NOT EXISTS itemmodified ON items (modified);
-`
+// List of migrations to perform. Add new ones to the end.
+// DO NOT change the order of items already in this list.
+var qlMigrations = []migration.Migrator{
+	qlschema1,
+}
 
-const qlFixityInit = `
-	CREATE TABLE IF NOT EXISTS fixity (
-		id string,
-		scheduled_time time,
-		status string,
-		notes string
-	);
-	CREATE INDEX IF NOT EXISTS fixityid ON fixity (id);
-	CREATE INDEX IF NOT EXISTS fixitytime ON fixity (scheduled_time);
-	CREATE INDEX IF NOT EXISTS fixitystatus ON fixity (status);
-`
+// adapt schema versioning for QL
+
+var qlVersioning = dbVersion{
+	GetSQL:    `SELECT max(version) FROM migration_version`,
+	SetSQL:    `INSERT INTO migration_version VALUES (?1, now())`,
+	CreateSQL: `CREATE TABLE migration_version (version int, applied time)`,
+}
 
 // NewQlDatabase makes a QL database cache. filename is
 // the name of the file to save the database to. The filname "memory" means to keep everything in memory.
 func NewQlCache(filename string) (*qlCache, error) {
-	var db *sql.DB
-	var err error
+	var driver = "ql"
 	if filename == "memory" {
-		db, err = sql.Open("ql-mem", "mem.db")
-	} else {
-		db, err = sql.Open("ql", filename)
+		driver = "ql-mem"
+		filename = "mem.db"
 	}
-	if err == nil {
-		_, err = performExec(db, qlItemInit)
-	}
-	if err == nil {
-		_, err = performExec(db, qlFixityInit)
-	}
+	db, err := migration.OpenWith(
+		driver,
+		filename,
+		qlMigrations,
+		qlVersioning.Get,
+		qlVersioning.Set)
 	if err != nil {
 		log.Printf("Open QL: %s", err.Error())
 		return nil, err
@@ -131,7 +119,7 @@ func (qc *qlCache) NextFixity(cutoff time.Time) string {
 		FROM fixity
 		WHERE status == "scheduled" AND scheduled_time <= ?1
 		ORDER BY scheduled_time
-		LIMIT 1;`
+		LIMIT 1`
 
 	var id string
 	var when time.Time
@@ -211,4 +199,32 @@ func performExec(db *sql.DB, query string, args ...interface{}) (sql.Result, err
 	}
 	err = tx.Commit()
 	return result, err
+}
+
+// QL Migrations. Each migration gets its own go function.
+// Add function to list qlmigrations at top of file.
+
+func qlschema1(tx migration.LimitedTx) error {
+	const s = `
+	CREATE TABLE IF NOT EXISTS items (
+		id string,
+		created time,
+		modified time,
+		size int,
+		value blob
+	);
+	CREATE INDEX IF NOT EXISTS itemid ON items (id);
+	CREATE INDEX IF NOT EXISTS itemmodified ON items (modified);
+	CREATE TABLE IF NOT EXISTS fixity (
+		id string,
+		scheduled_time time,
+		status string,
+		notes string
+	);
+	CREATE INDEX IF NOT EXISTS fixityid ON fixity (id);
+	CREATE INDEX IF NOT EXISTS fixitytime ON fixity (scheduled_time);
+	CREATE INDEX IF NOT EXISTS fixitystatus ON fixity (status);`
+
+	_, err := tx.Exec(s)
+	return err
 }

@@ -6,6 +6,8 @@ import (
 	"log"
 	"time"
 
+	// no _ in import mysql since we need mysql.NullTime
+	"github.com/BurntSushi/migration"
 	"github.com/go-sql-driver/mysql"
 
 	"github.com/ndlib/bendo/items"
@@ -23,35 +25,27 @@ type msqlCache struct {
 var _ items.ItemCache = &msqlCache{}
 var _ FixityDB = &msqlCache{}
 
-// We cache items in the database! value is JSON encoded string holding all
-// the information needed to recreate the items.Item structure.
-const mysqlItemInit = `
-	CREATE TABLE IF NOT EXISTS items (
-		id varchar(255),
-		created datetime,
-		modified datetime,
-		size int,
-		value text
-	);
-`
+// List of migrations to perform. Add new ones to the end.
+// DO NOT change the order of items already in this list.
+var mysqlMigrations = []migration.Migrator{
+	mysqlschema1,
+}
 
-const mysqlFixityInit = `
-	CREATE TABLE IF NOT EXISTS fixity (
-		id varchar(255),
-		scheduled_time datetime,
-		status varchar(32),
-		notes text
-	);
-`
+// Adapt the schema versioning for MySQL
+
+var mysqlVersioning = dbVersion{
+	GetSQL:    `SELECT max(version) FROM migration_version`,
+	SetSQL:    `INSERT INTO migration_version (version, applied) VALUES (?, now())`,
+	CreateSQL: `CREATE TABLE migration_version (version INTEGER, applied datetime)`,
+}
 
 func NewMysqlCache(dial string) (*msqlCache, error) {
-	db, err := sql.Open("mysql", dial)
-	if err == nil {
-		_, err = db.Exec(mysqlItemInit)
-	}
-	if err == nil {
-		_, err = db.Exec(mysqlFixityInit)
-	}
+	db, err := migration.OpenWith(
+		"mysql",
+		dial,
+		mysqlMigrations,
+		mysqlVersioning.Get,
+		mysqlVersioning.Set)
 	if err != nil {
 		log.Printf("Open Mysql: %s", err.Error())
 		return nil, err
@@ -60,7 +54,7 @@ func NewMysqlCache(dial string) (*msqlCache, error) {
 }
 
 func (ms *msqlCache) Lookup(id string) *items.Item {
-	const dbLookup = `SELECT value FROM items WHERE id = ? LIMIT 1;`
+	const dbLookup = `SELECT value FROM items WHERE id = ? LIMIT 1`
 
 	var value string
 	err := ms.db.QueryRow(dbLookup, id).Scan(&value)
@@ -117,7 +111,7 @@ func (ms *msqlCache) NextFixity(cutoff time.Time) string {
 		FROM fixity
 		WHERE status = "scheduled" AND scheduled_time <= ?
 		ORDER BY scheduled_time
-		LIMIT 1;`
+		LIMIT 1`
 
 	var id string
 	err := ms.db.QueryRow(query, cutoff).Scan(&id)
@@ -137,7 +131,7 @@ func (ms *msqlCache) UpdateFixity(id string, status string, notes string) error 
 		SET status = ?, notes = ?
 		WHERE id = ? and status = "scheduled"
 		ORDER BY scheduled_time
-		LIMIT 1;`
+		LIMIT 1`
 	result, err := ms.db.Exec(query, status, notes, id)
 	if err != nil {
 		return err
@@ -179,4 +173,38 @@ func (ms *msqlCache) LookupCheck(id string) (time.Time, error) {
 		return when.Time, err
 	}
 	return time.Time{}, err
+}
+
+// database migrations. each one is a go function. Add them to the
+// list mysqlMigrations at top of this file for them to be run.
+
+func mysqlschema1(tx migration.LimitedTx) error {
+	var s = []string{
+		`CREATE TABLE IF NOT EXISTS items (
+		id varchar(255),
+		created datetime,
+		modified datetime,
+		size int,
+		value text)`,
+
+		`CREATE TABLE IF NOT EXISTS fixity (
+		id varchar(255),
+		scheduled_time datetime,
+		status varchar(32),
+		notes text)`,
+	}
+	return execlist(tx, s)
+}
+
+// execlist exec's each item in the list, return if there is an error.
+// Used to work around mysql driver not handling compound exec statements.
+func execlist(tx migration.LimitedTx, stms []string) error {
+	var err error
+	for _, s := range stms {
+		_, err = tx.Exec(s)
+		if err != nil {
+			break
+		}
+	}
+	return err
 }
