@@ -5,11 +5,12 @@ package main
 import (
 	"flag"
 	"fmt"
-	"sync"
-
 	"github.com/antonholmquist/jason"
 	"github.com/ndlib/bendo/cmd/bclient/bserver"
 	"github.com/ndlib/bendo/cmd/bclient/fileutil"
+	"os"
+	"path"
+	"sync"
 )
 
 // various command line flags, with default values
@@ -22,6 +23,7 @@ var (
 	blobs        = flag.Bool("blobs", false, "Show Blobs Instead of Files")
 	verbose      = flag.Bool("v", false, "Display more information")
 	version      = flag.Int("version", 0, "version number")
+	stub         = flag.Bool("stub", false, "Get Item Information, construct stub number")
 	numuploaders = flag.Int("ul", 2, "Number Uploaders")
 	usage        = `
 bclient <command> <file> <command arguments>
@@ -66,7 +68,11 @@ func main() {
 		}
 		doLs(args[1])
 	case "get":
-		doGet(args[1], args[2])
+		if *stub {
+			doGetStub(args[1])
+			return
+		}
+		doGet(args[1], args[2:])
 	case "history":
 		if len(args) != 2 {
 			fmt.Println("Usage: bclient <flags> history <item> ")
@@ -94,7 +100,7 @@ func doUpload(item string, files string) {
 	// Fire 1!
 	go func() {
 		fileLists.CreateUploadList(files)
-		upLoadDone.Done()
+
 	}()
 
 	// Fire 2!
@@ -166,8 +172,107 @@ func doUpload(item string, files string) {
 	// TODO: cleanup uploads on success
 }
 
-func doGet(item string, files string) {
-	fmt.Printf("Item = %s\n", item)
+//  doGet , given only an item, returns all the files in that item.
+//  Given one or more files in the item, it returns only them
+
+func doGet(item string, files []string) {
+	var json *jason.Object
+	var jsonFetchErr error
+	filesToGet := make(chan string)
+	var getFileDone sync.WaitGroup
+
+	// if file or dir exists in target path named after the item, give error mesg and exit
+	pathPrefix := path.Join(*fileroot, item)
+
+	_, err := os.Stat(pathPrefix)
+
+	if err == nil {
+		// file already exists
+		fmt.Printf("Error: target %s already exists", pathPrefix)
+		return
+	}
+
+	// set up communication to the bendo server, and init local and remote filelists
+
+	thisItem := bserver.New(*server, item, *fileroot)
+	fileLists := fileutil.NewLists(*fileroot)
+
+	// Fetch Item Info from bserver
+	json, jsonFetchErr = thisItem.GetItemInfo()
+
+	// If not found or error, we're done
+
+	switch {
+	case jsonFetchErr == bserver.ErrNotFound:
+		fmt.Printf("\n Item %s was not found on server %\n", item, *server)
+		return
+	case jsonFetchErr != nil:
+		fmt.Println(jsonFetchErr)
+		return
+	}
+
+	// if item only, get all of the files; otherwise, only those asked for
+
+	if len(files) == 0 {
+		fileLists.BuildLocalList(json)
+	} else {
+		fileLists.BuildRemoteList(json)
+		fileLists.BuildLocalFromFiles(files)
+	}
+
+	// At this point, the local list contains files, verified to exist on server
+
+	// set up our barrier, that will wait for all the file chunks to be uploaded
+	getFileDone.Add(*numuploaders)
+
+	//Spin off desire number of upload workers
+	for cnt := int(0); cnt < *numuploaders; cnt++ {
+		go func() {
+			thisItem.GetFiles(filesToGet, pathPrefix)
+			getFileDone.Done()
+		}()
+	}
+
+	fileLists.QueueFiles(filesToGet)
+
+	// wait for all file chunks to be uploaded
+	getFileDone.Wait()
+}
+
+// doGetStub builds an empty skeleton of an item, with zero length files
+
+func doGetStub(item string) {
+	var json *jason.Object
+	var jsonFetchErr error
+
+	// if file or dir exists in target path named after the item, give error mesg and exit
+	pathPrefix := path.Join(*fileroot, item)
+
+	_, err := os.Stat(pathPrefix)
+
+	if err == nil {
+		// file already exists
+		fmt.Printf("Error: target %s already exists", pathPrefix)
+		return
+	}
+
+	// fetch info about this item from the bendo server
+
+	thisItem := bserver.New(*server, item, *fileroot)
+
+	// Fetch Item Info from bserver
+	json, jsonFetchErr = thisItem.GetItemInfo()
+
+	// If not found or error, we're done; otherwise, create Item Stub
+
+	switch {
+	case jsonFetchErr == bserver.ErrNotFound:
+		fmt.Printf("\n Item %s was not found on server %\n", item, *server)
+	case jsonFetchErr != nil:
+		fmt.Println(jsonFetchErr)
+	default:
+		fileutil.MakeStubFromJSON(json, item, pathPrefix)
+	}
 }
 
 func doHistory(item string) {
@@ -199,7 +304,6 @@ func doLs(item string) {
 	thisItem := bserver.New(*server, item, *fileroot)
 
 	// Fetch Item Info from bserver
-	//thisItem.FetchItemInfo()
 	json, jsonFetchErr = thisItem.GetItemInfo()
 
 	switch {

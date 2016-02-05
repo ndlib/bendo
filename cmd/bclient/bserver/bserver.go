@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	fileIDMutex     sync.Mutex
-	fileIDList      []fileIDStruct
+	fileIDMutex sync.Mutex
+	fileIDList  []fileIDStruct
 )
 
 type fileIDStruct struct {
@@ -51,7 +51,6 @@ func New(server string, item string, fileroot string) *itemAttributes {
 	return thisItem
 }
 
-
 // serve the file queue. This is called from main as 1 or more goroutines
 // If the file Upload fails, close the channel and exit
 
@@ -59,6 +58,20 @@ func (ia *itemAttributes) SendFiles(fileQueue chan string, ld *fileutil.ListData
 
 	for filename := range fileQueue {
 		err := ia.uploadFile(filename, ld.ShowUploadFileMd5(filename))
+
+		if err != nil {
+			close(fileQueue)
+		}
+	}
+}
+
+// serve file requests from the server for  a get
+// If the file Get fails, close the channel and exit
+
+func (ia *itemAttributes) GetFiles(fileQueue chan string, pathPrefix string) {
+
+	for filename := range fileQueue {
+		err := ia.downLoad(filename, pathPrefix)
 
 		if err != nil {
 			close(fileQueue)

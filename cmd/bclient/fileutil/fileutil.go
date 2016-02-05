@@ -105,6 +105,11 @@ func (ld *ListData) BuildRemoteList(json *jason.Object) {
 	ld.remoteFileList.BuildListFromJSON(json)
 }
 
+func (ld *ListData) BuildLocalList(json *jason.Object) {
+	ld.localFileList = New(ld.rootPrefix)
+	ld.localFileList.BuildListFromJSON(json)
+}
+
 func (ld *ListData) CullLocalList() {
 
 	// item does not exist on remote bendo server
@@ -127,6 +132,28 @@ func (ld *ListData) CullLocalList() {
 			}
 		}
 
+	}
+}
+
+func (ld *ListData) BuildLocalFromFiles(files []string) {
+
+	// item does not exist on remote bendo server
+	if ld.remoteFileList == nil {
+		return
+	}
+
+	// create empty local list
+	ld.localFileList = New(ld.rootPrefix)
+
+	for localFile := range files {
+
+		remoteMD5Map := ld.remoteFileList.Files[files[localFile]]
+
+		if remoteMD5Map == nil {
+			continue
+		}
+
+		ld.localFileList.Files[files[localFile]] = remoteMD5Map
 	}
 }
 
