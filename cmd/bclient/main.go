@@ -100,7 +100,7 @@ func doUpload(item string, files string) {
 	// Fire 1!
 	go func() {
 		fileLists.CreateUploadList(files)
-
+		upLoadDone.Done()
 	}()
 
 	// Fire 2!

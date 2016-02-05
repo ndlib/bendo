@@ -9,7 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-
+	"strings"
 	"github.com/antonholmquist/jason"
 )
 
@@ -89,7 +89,10 @@ func (ld *ListData) addToUploadList(path string, info os.FileInfo, err error) er
 		return nil
 	}
 
-	ld.FilesWalked <- path
+
+	fmt.Printf("ld.FilesWalked <- %s\n", strings.TrimPrefix(path, ld.rootPrefix + "/"))
+	fmt.Printf("path %s\n", path)
+	ld.FilesWalked <- strings.TrimPrefix(path, ld.rootPrefix + "/")
 
 	return nil
 }

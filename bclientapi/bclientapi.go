@@ -74,7 +74,8 @@ func (ia *itemAttributes) GetFiles(fileQueue chan string, pathPrefix string) {
 		err := ia.downLoad(filename, pathPrefix)
 
 		if err != nil {
-			close(fileQueue)
+			fmt.Printf("Error: GetFile return %s\n",err.Error())
+			break
 		}
 	}
 }

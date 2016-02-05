@@ -37,7 +37,7 @@ func (f *FileList) BuildListFromChan(filePipe <-chan string) {
 
 	for fileName := range filePipe {
 		// Open the local file
-		fReader, ferr := os.Open(f.Root + "/" + fileName)
+		fReader, ferr := os.Open(path.Join( f.Root,fileName))
 
 		if ferr != nil {
 			fmt.Println(ferr)

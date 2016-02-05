@@ -55,6 +55,7 @@ func (ia *itemAttributes) downLoad(fileName string, pathPrefix string) error {
 		r.Body.Close()
 		switch r.StatusCode {
 		case 404:
+			fmt.Printf("%s returned 404\n",httpPath)
 			return ErrNotFound
 		case 401:
 			return ErrNotAuthorized
