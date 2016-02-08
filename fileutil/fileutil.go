@@ -90,8 +90,6 @@ func (ld *ListData) addToUploadList(path string, info os.FileInfo, err error) er
 	}
 
 
-	fmt.Printf("ld.FilesWalked <- %s\n", strings.TrimPrefix(path, ld.rootPrefix + "/"))
-	fmt.Printf("path %s\n", path)
 	ld.FilesWalked <- strings.TrimPrefix(path, ld.rootPrefix + "/")
 
 	return nil
