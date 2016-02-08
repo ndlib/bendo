@@ -77,20 +77,28 @@ func (ld *ListData) CreateUploadList(files string) {
 
 // addToUploadList is called by fileUtil.CreatUploadList  once for each file under filepath.walk()
 
-func (ld *ListData) addToUploadList(path string, info os.FileInfo, err error) error {
+func (ld *ListData) addToUploadList(filePath string, info os.FileInfo, err error) error {
 
 	if err != nil {
 		return err
 	}
 
 	// We only want files in the list- leave directories out
+	// If the directory name starts with '.', don't walk it.
 
 	if info.IsDir() {
-		return nil
+
+		dirName := path.Base(filePath)
+
+		if strings.HasPrefix( dirName, ".") {
+			return filepath.SkipDir
+		} else {
+			return nil
+		}
 	}
 
 
-	ld.FilesWalked <- strings.TrimPrefix(path, ld.rootPrefix + "/")
+	ld.FilesWalked <- strings.TrimPrefix(filePath, ld.rootPrefix + "/")
 
 	return nil
 }
