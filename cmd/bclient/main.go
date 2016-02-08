@@ -23,6 +23,7 @@ var (
 	blobs        = flag.Bool("blobs", false, "Show Blobs Instead of Files")
 	verbose      = flag.Bool("v", false, "Display more information")
 	version      = flag.Int("version", 0, "version number")
+	chunksize      = flag.Int("chunksize", 10, "chunk size of uploads (in meagabytes)")
 	stub         = flag.Bool("stub", false, "Get Item Information, construct stub number")
 	numuploaders = flag.Int("ul", 2, "Number Uploaders")
 	usage        = `
@@ -91,7 +92,7 @@ func doUpload(item string, files string) {
 	var json *jason.Object
 	var jsonFetchErr error
 
-	thisItem := bclientapi.New(*server, item, *fileroot)
+	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize)
 	fileLists := fileutil.NewLists(*fileroot)
 
 	// Set up Barrier for 3 goroutines below
@@ -194,7 +195,7 @@ func doGet(item string, files []string) {
 
 	// set up communication to the bendo server, and init local and remote filelists
 
-	thisItem := bclientapi.New(*server, item, *fileroot)
+	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize)
 	fileLists := fileutil.NewLists(*fileroot)
 
 	// Fetch Item Info from bclientapi
@@ -258,7 +259,7 @@ func doGetStub(item string) {
 
 	// fetch info about this item from the bendo server
 
-	thisItem := bclientapi.New(*server, item, *fileroot)
+	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize)
 
 	// Fetch Item Info from bclientapi
 	json, jsonFetchErr = thisItem.GetItemInfo()
@@ -280,7 +281,7 @@ func doHistory(item string) {
 	var json *jason.Object
 	var jsonFetchErr error
 
-	thisItem := bclientapi.New(*server, item, *fileroot)
+	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize)
 
 	// Fetch Item Info from bclientapi
 	json, jsonFetchErr = thisItem.GetItemInfo()
@@ -301,7 +302,7 @@ func doLs(item string) {
 	var json *jason.Object
 	var jsonFetchErr error
 
-	thisItem := bclientapi.New(*server, item, *fileroot)
+	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize)
 
 	// Fetch Item Info from bclientapi
 	json, jsonFetchErr = thisItem.GetItemInfo()

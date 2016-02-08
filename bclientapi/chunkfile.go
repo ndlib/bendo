@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"time"
 )
 
 const BogusFileId string = ""
@@ -21,9 +22,24 @@ func (ia *itemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, file
 
 	defer sourceFile.Close()
 
+	// Get the file size from the file status
+
+	fileInfo, infoErr := sourceFile.Stat()
+
+	if infoErr != nil {
+		fmt.Println(infoErr)
+		os.Exit(1)
+	}
+
+	fileSize := fileInfo.Size()
+
 	chunk := make([]byte, fileChunkSize)
 
 	var fileId string = BogusFileId
+
+	start := time.Now()
+
+	fmt.Printf("Start Upload of %s/%s, size %d, chunkSize %d at %s\n", ia.item, srcFile, fileSize, fileChunkSize,  start.String()) 
 
 	// upload the chunk
 
@@ -53,6 +69,9 @@ func (ia *itemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, file
 		// byteRead =0 && err is nill or EOF
 		break
 	}
+
+	end := time.Since(start)
+	fmt.Printf("Finished Upload of %s/%s in %v seconds\n", ia.item, srcFile, end.Seconds()) 
 
 	return path.Base(fileId), nil
 }

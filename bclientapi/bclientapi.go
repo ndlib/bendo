@@ -24,6 +24,7 @@ type itemAttributes struct {
 	fileroot    string
 	item        string
 	bendoServer string
+	chunkSize int
 }
 
 func addFileToTransactionList(filename string, fileID string, item string) {
@@ -40,12 +41,13 @@ func addFileToTransactionList(filename string, fileID string, item string) {
 	fileIDMutex.Unlock()
 }
 
-func New(server string, item string, fileroot string) *itemAttributes {
+func New(server string, item string, fileroot string , chunkSize int) *itemAttributes {
 	fileutil.IfVerbose("github.com/ndlib/bendo/bclient/bclientapi.Init() called")
 
 	thisItem := new(itemAttributes)
 	thisItem.bendoServer = server
 	thisItem.item = item
+	thisItem.chunkSize = chunkSize
 	thisItem.fileroot = fileroot
 
 	return thisItem
@@ -82,9 +84,9 @@ func (ia *itemAttributes) GetFiles(fileQueue chan string, pathPrefix string) {
 
 func (ia *itemAttributes) uploadFile(filename string, uploadMd5 []byte) error {
 
-	// upload chunks initial buffer size is 1MB
+	// upload chunks buffer size is 1MB * cmd line flag chunksize
 
-	fileID, uploadErr := ia.chunkAndUpload(filename, uploadMd5, 1048576)
+	fileID, uploadErr := ia.chunkAndUpload(filename, uploadMd5,  ia.chunkSize * 1048576)
 
 	// If an error occurred, report it, and return
 

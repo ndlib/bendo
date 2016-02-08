@@ -102,9 +102,6 @@ func (ia *itemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5su
 		path += "/upload"
 	}
 
-	// yeah, OK , this is dumb. Now that I know that http needs a reader,
-	// I should have the chunking code pass a reader.
-
 	req, _ := http.NewRequest("POST", path, bytes.NewReader(chunk))
 	req.Header.Set("X-Upload-Md5", hex.EncodeToString(chunkmd5sum))
 	resp, err := http.DefaultClient.Do(req)
