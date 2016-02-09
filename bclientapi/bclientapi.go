@@ -16,6 +16,7 @@ type fileIDStruct struct {
 	fileid string
 	slot   string
 	item   string
+	blob	int
 }
 
 // common attributes
@@ -42,7 +43,6 @@ func addFileToTransactionList(filename string, fileID string, item string) {
 }
 
 func New(server string, item string, fileroot string , chunkSize int) *itemAttributes {
-	fileutil.IfVerbose("github.com/ndlib/bendo/bclient/bclientapi.Init() called")
 
 	thisItem := new(itemAttributes)
 	thisItem.bendoServer = server
@@ -102,7 +102,7 @@ func (ia *itemAttributes) uploadFile(filename string, uploadMd5 []byte) error {
 
 }
 
-func (ia *itemAttributes) SendTransactionRequest() error {
+func (ia *itemAttributes) SendNewTransactionRequest() error {
 
 	cmdlist := [][]string{}
 

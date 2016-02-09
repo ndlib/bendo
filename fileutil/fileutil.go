@@ -5,6 +5,7 @@ package fileutil
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path"
@@ -20,6 +21,7 @@ var (
 type ListData struct {
 	localFileList  *FileList
 	remoteFileList *FileList
+	latestBlob     map[string]int 
 	FilesWalked    chan string
 	rootPrefix     string
 }
@@ -33,8 +35,10 @@ func (ld *ListData) ShowUploadFileMd5(fileName string) []byte {
 
 // Print out remote filer list
 func (ld *ListData) PrintRemoteList() {
-	for key, value := range ld.remoteFileList.Files {
-		fmt.Println("Key:", key, "Value:", value)
+	for fileName, map1 := range ld.remoteFileList.Files {
+		for versionID, md5 := range map1 {
+			fmt.Printf("File: %s blob %d md5 %s\n", fileName, versionID, hex.EncodeToString(md5))
+		}
 	}
 }
 
@@ -42,7 +46,9 @@ func (ld *ListData) PrintRemoteList() {
 func (ld *ListData) PrintLocalList() {
 
 	for key, value := range ld.localFileList.Files {
-		fmt.Println("Key:", key, "Value:", value[1])
+		for _, md5 := range value {
+			fmt.Printf("File: %s md5 %s\n", key,  hex.EncodeToString(md5))
+		}
 	}
 
 }
@@ -51,6 +57,7 @@ func NewLists(root string) *ListData {
 	this := new(ListData)
 	this.rootPrefix = root
 	this.FilesWalked = make(chan string)
+        this.latestBlob = make(map[string]int)
 
 	return this
 }
@@ -59,20 +66,12 @@ func SetVerbose(isVerbose bool) {
 	verbose = isVerbose
 }
 
-func IfVerbose(output string) {
-	if verbose {
-		fmt.Println(output)
-	}
-}
-
 func (ld *ListData) CreateUploadList(files string) {
 
-	IfVerbose("CreateUploadList called")
 
 	filepath.Walk(path.Join(ld.rootPrefix, files), ld.addToUploadList)
 
 	close(ld.FilesWalked)
-	IfVerbose("CreateUploadList exit")
 }
 
 // addToUploadList is called by fileUtil.CreatUploadList  once for each file under filepath.walk()
@@ -118,6 +117,8 @@ func (ld *ListData) BuildLocalList(json *jason.Object) {
 	ld.localFileList = New(ld.rootPrefix)
 	ld.localFileList.BuildListFromJSON(json)
 }
+
+// If latest version of local file already exists on server don't upload it
 
 func (ld *ListData) CullLocalList() {
 

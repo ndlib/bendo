@@ -84,7 +84,7 @@ func (f *FileList) BuildListFromJSON(json *jason.Object) {
 	blobArray, _ := json.GetObjectArray("Blobs")
 	versionArray, _ := json.GetObjectArray("Versions")
 	for _, version := range versionArray {
-		versionID, _ := version.GetInt64("ID")
+		//versionID, _ := version.GetInt64("ID")
 		slotMap, _ := version.GetObject("Slots")
 
 		for key, _ := range slotMap.Map() {
@@ -100,7 +100,7 @@ func (f *FileList) BuildListFromJSON(json *jason.Object) {
 				f.Files[key] = innerMap
 			}
 
-			f.Files[key][versionID] = DecodedMD5
+			f.Files[key][blobID] = DecodedMD5
 		}
 	}
 }
