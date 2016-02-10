@@ -59,6 +59,10 @@ func (bw *BundleWriter) Next() error {
 	if err != nil {
 		return err
 	}
+	bw.zw.SetTag("Bendo-Identifier", bw.item.ID)
+	bw.zw.SetTag("Bendo-Bundle-Sequence", fmt.Sprintf("%d", bw.n))
+	bw.zw.SetTag("External-Identifier",
+		strings.TrimSuffix(sugar(bw.item.ID, bw.n), ".zip"))
 	bw.n++
 	bw.size = 0
 	return nil
