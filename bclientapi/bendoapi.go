@@ -55,7 +55,7 @@ func (ia *itemAttributes) downLoad(fileName string, pathPrefix string) error {
 		r.Body.Close()
 		switch r.StatusCode {
 		case 404:
-			fmt.Printf("%s returned 404\n",httpPath)
+			fmt.Printf("%s returned 404\n", httpPath)
 			return ErrNotFound
 		case 401:
 			return ErrNotAuthorized
@@ -86,7 +86,6 @@ func (ia *itemAttributes) downLoad(fileName string, pathPrefix string) error {
 		fmt.Printf("Error: could not create file %s\n%s\n", err.Error())
 		return err
 	}
-
 
 	_, err = io.Copy(filePtr, r.Body)
 

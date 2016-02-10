@@ -7,11 +7,11 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"github.com/antonholmquist/jason"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
-	"github.com/antonholmquist/jason"
 )
 
 var (
@@ -21,7 +21,6 @@ var (
 type ListData struct {
 	localFileList  *FileList
 	remoteFileList *FileList
-	latestBlob     map[string]int 
 	FilesWalked    chan string
 	rootPrefix     string
 }
@@ -47,7 +46,7 @@ func (ld *ListData) PrintLocalList() {
 
 	for key, value := range ld.localFileList.Files {
 		for _, md5 := range value {
-			fmt.Printf("File: %s md5 %s\n", key,  hex.EncodeToString(md5))
+			fmt.Printf("File: %s md5 %s\n", key, hex.EncodeToString(md5))
 		}
 	}
 
@@ -57,7 +56,6 @@ func NewLists(root string) *ListData {
 	this := new(ListData)
 	this.rootPrefix = root
 	this.FilesWalked = make(chan string)
-        this.latestBlob = make(map[string]int)
 
 	return this
 }
@@ -67,7 +65,6 @@ func SetVerbose(isVerbose bool) {
 }
 
 func (ld *ListData) CreateUploadList(files string) {
-
 
 	filepath.Walk(path.Join(ld.rootPrefix, files), ld.addToUploadList)
 
@@ -89,15 +86,14 @@ func (ld *ListData) addToUploadList(filePath string, info os.FileInfo, err error
 
 		dirName := path.Base(filePath)
 
-		if strings.HasPrefix( dirName, ".") {
+		if strings.HasPrefix(dirName, ".") {
 			return filepath.SkipDir
 		} else {
 			return nil
 		}
 	}
 
-
-	ld.FilesWalked <- strings.TrimPrefix(filePath, ld.rootPrefix + "/")
+	ld.FilesWalked <- strings.TrimPrefix(filePath, ld.rootPrefix+"/")
 
 	return nil
 }
@@ -135,14 +131,40 @@ func (ld *ListData) CullLocalList() {
 			continue
 		}
 
-		for _, remoteMD5 := range remoteMD5Map {
-			if bytes.Compare(localMD5[1], remoteMD5) == 0 {
+		for blobID, remoteMD5 := range remoteMD5Map {
+			if bytes.Compare(localMD5[1], remoteMD5) == 0 && ld.remoteFileList.latestBlob[localFile] == blobID {
 				delete(ld.localFileList.Files, localFile)
 				continue
 			}
 		}
 
 	}
+}
+
+// Compare the MD5Sum of the local file with any that exist on the bendo server
+// if one is found, return its blobID + false; otherwise, return true
+
+func (ld *ListData) IsUploadNeeded(fileName string) (int64, bool) {
+
+	localMD5 := ld.localFileList.Files[fileName][1]
+
+	if ld.remoteFileList == nil {
+		return 0, true
+	}
+
+	remoteMD5Map := ld.remoteFileList.Files[fileName]
+
+	if remoteMD5Map == nil {
+		return 0, true
+	}
+
+	for blobID, remoteMD5 := range remoteMD5Map {
+		if bytes.Compare(localMD5, remoteMD5) == 0 {
+			return blobID, false
+		}
+	}
+
+	return 0, true
 }
 
 func (ld *ListData) BuildLocalFromFiles(files []string) {
