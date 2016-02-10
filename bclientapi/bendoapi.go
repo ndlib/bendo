@@ -55,7 +55,7 @@ func (ia *itemAttributes) downLoad(fileName string, pathPrefix string) error {
 		r.Body.Close()
 		switch r.StatusCode {
 		case 404:
-			fmt.Printf("%s returned 404\n",httpPath)
+			fmt.Printf("%s returned 404\n", httpPath)
 			return ErrNotFound
 		case 401:
 			return ErrNotAuthorized
@@ -72,20 +72,20 @@ func (ia *itemAttributes) downLoad(fileName string, pathPrefix string) error {
 
 	err = os.MkdirAll(targetDir, 0755)
 
+	defer r.Body.Close()
+
 	if err != nil {
 		fmt.Printf("Error: could not create directory %s\n%s\n", err.Error())
 		return err
 	}
 
 	filePtr, err := os.Create(targetFile)
+	defer filePtr.Close()
 
 	if err != nil {
 		fmt.Printf("Error: could not create file %s\n%s\n", err.Error())
 		return err
 	}
-
-	defer r.Body.Close()
-	defer filePtr.Close()
 
 	_, err = io.Copy(filePtr, r.Body)
 

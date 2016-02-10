@@ -17,8 +17,9 @@ import (
 // Our underlying data structure
 
 type FileList struct {
-	Root  string
-	Files map[string]map[int64][]byte
+	Root       string
+	Files      map[string]map[int64][]byte
+	latestBlob map[string]int64
 }
 
 // Create an empty FileList
@@ -27,6 +28,7 @@ func New(root string) *FileList {
 	fl := new(FileList)
 	fl.Root = root
 	fl.Files = make(map[string]map[int64][]byte)
+	fl.latestBlob = make(map[string]int64)
 
 	return fl
 }
@@ -37,7 +39,7 @@ func (f *FileList) BuildListFromChan(filePipe <-chan string) {
 
 	for fileName := range filePipe {
 		// Open the local file
-		fReader, ferr := os.Open(path.Join( f.Root,fileName))
+		fReader, ferr := os.Open(path.Join(f.Root, fileName))
 
 		if ferr != nil {
 			fmt.Println(ferr)
@@ -100,7 +102,11 @@ func (f *FileList) BuildListFromJSON(json *jason.Object) {
 				f.Files[key] = innerMap
 			}
 
-			f.Files[key][versionID] = DecodedMD5
+			f.Files[key][blobID] = DecodedMD5
+
+			if versionID == int64(len(versionArray)) {
+				f.latestBlob[key] = blobID
+			}
 		}
 	}
 }

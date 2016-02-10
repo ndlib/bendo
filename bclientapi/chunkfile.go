@@ -39,7 +39,7 @@ func (ia *itemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, file
 
 	start := time.Now()
 
-	fmt.Printf("Start Upload of %s/%s, size %d, chunkSize %d at %s\n", ia.item, srcFile, fileSize, fileChunkSize,  start.String()) 
+	fmt.Printf("Start Upload of %s/%s, size %d, chunkSize %d at %s\n", ia.item, srcFile, fileSize, fileChunkSize, start.String())
 
 	// upload the chunk
 
@@ -71,7 +71,7 @@ func (ia *itemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, file
 	}
 
 	end := time.Since(start)
-	fmt.Printf("Finished Upload of %s/%s in %v seconds\n", ia.item, srcFile, end.Seconds()) 
+	fmt.Printf("Finished Upload of %s/%s in %v seconds\n", ia.item, srcFile, end.Seconds())
 
 	return path.Base(fileId), nil
 }
