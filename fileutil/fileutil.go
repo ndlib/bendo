@@ -32,13 +32,21 @@ func (ld *ListData) ShowUploadFileMd5(fileName string) []byte {
 	return ld.localFileList.Files[fileName][1]
 }
 
-// Print out remote filer list
+// Print out remote file list
 func (ld *ListData) PrintRemoteList() {
 	for fileName, map1 := range ld.remoteFileList.Files {
 		for versionID, md5 := range map1 {
 			fmt.Printf("File: %s blob %d md5 %s\n", fileName, versionID, hex.EncodeToString(md5))
 		}
 	}
+}
+
+// Print out remote blob list
+func (ld *ListData) PrintBlobList() {
+	for md5, blob := range ld.remoteFileList.Blobs {
+		fmt.Printf("BlobId[ %s ] = %d\n", md5, blob)
+	}
+	fmt.Printf("\n")
 }
 
 // Print out local file list
@@ -132,7 +140,7 @@ func (ld *ListData) CullLocalList() {
 		}
 
 		for blobID, remoteMD5 := range remoteMD5Map {
-			if bytes.Compare(localMD5[1], remoteMD5) == 0 && ld.remoteFileList.latestBlob[localFile] == blobID {
+			if bytes.Compare(localMD5[1], remoteMD5) == 0 && ld.remoteFileList.Blobs[localFile] == blobID {
 				delete(ld.localFileList.Files, localFile)
 				continue
 			}
@@ -141,7 +149,7 @@ func (ld *ListData) CullLocalList() {
 	}
 }
 
-// Compare the MD5Sum of the local file with any that exist on the bendo server
+// Compare the MD5Sum of the local file with all blobs that exist on the bendo server
 // if one is found, return its blobID + false; otherwise, return true
 
 func (ld *ListData) IsUploadNeeded(fileName string) (int64, bool) {
@@ -152,19 +160,13 @@ func (ld *ListData) IsUploadNeeded(fileName string) (int64, bool) {
 		return 0, true
 	}
 
-	remoteMD5Map := ld.remoteFileList.Files[fileName]
+	blobID := ld.remoteFileList.Blobs[hex.EncodeToString(localMD5)]
 
-	if remoteMD5Map == nil {
+	if blobID == 0 {
 		return 0, true
 	}
 
-	for blobID, remoteMD5 := range remoteMD5Map {
-		if bytes.Compare(localMD5, remoteMD5) == 0 {
-			return blobID, false
-		}
-	}
-
-	return 0, true
+	return blobID, false
 }
 
 func (ld *ListData) BuildLocalFromFiles(files []string) {

@@ -23,7 +23,7 @@ var (
 	blobs        = flag.Bool("blobs", false, "Show Blobs Instead of Files")
 	verbose      = flag.Bool("v", false, "Display more information")
 	version      = flag.Int("version", 0, "version number")
-	chunksize      = flag.Int("chunksize", 10, "chunk size of uploads (in meagabytes)")
+	chunksize    = flag.Int("chunksize", 10, "chunk size of uploads (in meagabytes)")
 	stub         = flag.Bool("stub", false, "Get Item Information, construct stub number")
 	numuploaders = flag.Int("ul", 2, "Number Uploaders")
 	usage        = `
@@ -140,6 +140,9 @@ func doUpload(item string, files string) {
 		if *verbose {
 			fmt.Printf("\nRemote Files:\n")
 			fileLists.PrintRemoteList()
+			fmt.Printf("\nBlobs:\n")
+			fileLists.PrintBlobList()
+			fmt.Printf("\n")
 		}
 
 		// This compares the local list with the remote list (if the item already exists)
@@ -154,7 +157,6 @@ func doUpload(item string, files string) {
 		fmt.Printf("Nothing to do:\nThe vesions of All Files given for upload in item %s\nare already present on the server\n", item)
 		return
 	}
-
 
 	if *verbose {
 		fmt.Printf("\nFiles to Upload:\n")
