@@ -18,7 +18,7 @@ import (
 var (
 	fileroot     = flag.String("root", ".", "root prefix to upload files")
 	server       = flag.String("server", "libvirt9.library.nd.edu:14000", "Bendo Server to Use")
-	creator      = flag.String("creator", "butil", "Creator name to use")
+	creator      = flag.String("bclient", "butil", "Creator name to use")
 	longV        = flag.Bool("longV", false, "Print  Long Version")
 	blobs        = flag.Bool("blobs", false, "Show Blobs Instead of Files")
 	verbose      = flag.Bool("v", false, "Display more information")
@@ -26,32 +26,58 @@ var (
 	chunksize    = flag.Int("chunksize", 10, "chunk size of uploads (in meagabytes)")
 	stub         = flag.Bool("stub", false, "Get Item Information, construct stub number")
 	numuploaders = flag.Int("ul", 2, "Number Uploaders")
-	usage        = `
-bclient <command> <file> <command arguments>
 
-Possible commands:
+        Usage  = `
+Usage:
 
-    get <item> <files>
-    ls <item id>
-    upload  <item id> <files>
-    version <item id> 
+bclient [<flags>] <action> <bendo item number> [file]
 
-`
-)
+Available actions:
+
+    bclient [<flags>] get <item> [file]               get item's files. If none are specified, get them all
+    bclient [<flags>] ls <item id> [file]             show details about item's files.
+    bclient [<flags>] upload  <item id> <files>       upload a file or directory into an exiting item, or create a new one.
+    bclient [<flags>] version <item id>               display item versioning information
+
+    General Flags:
+
+    -fileroot (defaults to current directory)  location to get or put files
+    -server   (defaults to bendo-staging.library.nd.edu:14000) server_name:port of bendo server
+    -numuploaders (defaults to 2) number of concurrent upload/download threads
+    -version ( defaults to latest version: ls & get actions) desired version number
+
+    upload Flags:
+
+    -chunksize    ( defaults to 10) Size (in MB) of chunks bclient will use for upload  
+    -creator      ( defaults to bclient) owner of upload in bendo
+    -numuploaders ( defaults to 2) number of upload threads
+    -v            ( defaults to false) Provide verbose upload information for troubleshooting
+
+    ls Flags:	  
+
+    -longV        ( defaults to false) show blob id, size, date created, and creator of each file in item 
+
+    get Flags:
+    -stub         (defaults to false)  retreive file tree of item, create zero-length stub for each file
+
+    
+	`
+
+    )
 
 // main program
 
 func main() {
 
 	// parse command line
-
+	flag.Usage = func() { fmt.Println(Usage) }	
 	flag.Parse()
 	fileutil.SetVerbose(*verbose)
 
 	args := flag.Args()
 
 	if len(args) == 0 {
-		fmt.Println("Error: no arguments were provided")
+		fmt.Println(Usage)
 		return
 	}
 
@@ -80,6 +106,8 @@ func main() {
 			return
 		}
 		doHistory(args[1])
+	default:
+		fmt.Println(Usage)
 	}
 
 }
