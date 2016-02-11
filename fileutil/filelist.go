@@ -5,6 +5,7 @@ package fileutil
 import (
 	"crypto/md5"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"github.com/antonholmquist/jason"
 	"io"
@@ -15,10 +16,12 @@ import (
 )
 
 // Our underlying data structure
+// Blobs id used only for lists built from server data
 
 type FileList struct {
 	Root  string
 	Files map[string]map[int64][]byte
+	Blobs map[string]int64
 }
 
 // Create an empty FileList
@@ -27,6 +30,7 @@ func New(root string) *FileList {
 	fl := new(FileList)
 	fl.Root = root
 	fl.Files = make(map[string]map[int64][]byte)
+	fl.Blobs = make(map[string]int64)
 
 	return fl
 }
@@ -37,7 +41,7 @@ func (f *FileList) BuildListFromChan(filePipe <-chan string) {
 
 	for fileName := range filePipe {
 		// Open the local file
-		fReader, ferr := os.Open(path.Join( f.Root,fileName))
+		fReader, ferr := os.Open(path.Join(f.Root, fileName))
 
 		if ferr != nil {
 			fmt.Println(ferr)
@@ -83,6 +87,15 @@ func (f *FileList) BuildListFromJSON(json *jason.Object) {
 
 	blobArray, _ := json.GetObjectArray("Blobs")
 	versionArray, _ := json.GetObjectArray("Versions")
+
+	// build lovely mapping of md5 to blobs
+	for _, blob := range blobArray {
+		md5Sum, _ := blob.GetString("MD5")
+		DecodedMD5, _ := base64.StdEncoding.DecodeString(md5Sum)
+		blobID, _ := blob.GetInt64("ID")
+		f.Blobs[hex.EncodeToString(DecodedMD5)] = blobID
+	}
+
 	for _, version := range versionArray {
 		versionID, _ := version.GetInt64("ID")
 		slotMap, _ := version.GetObject("Slots")
@@ -100,7 +113,12 @@ func (f *FileList) BuildListFromJSON(json *jason.Object) {
 				f.Files[key] = innerMap
 			}
 
-			f.Files[key][versionID] = DecodedMD5
+			f.Files[key][blobID] = DecodedMD5
+
+			// maps files in latest version to their blobs
+			if versionID == int64(len(versionArray)) {
+				f.Blobs[key] = blobID
+			}
 		}
 	}
 }

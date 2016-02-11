@@ -23,7 +23,7 @@ var (
 	blobs        = flag.Bool("blobs", false, "Show Blobs Instead of Files")
 	verbose      = flag.Bool("v", false, "Display more information")
 	version      = flag.Int("version", 0, "version number")
-	chunksize      = flag.Int("chunksize", 10, "chunk size of uploads (in meagabytes)")
+	chunksize    = flag.Int("chunksize", 10, "chunk size of uploads (in meagabytes)")
 	stub         = flag.Bool("stub", false, "Get Item Information, construct stub number")
 	numuploaders = flag.Int("ul", 2, "Number Uploaders")
 	usage        = `
@@ -119,6 +119,11 @@ func doUpload(item string, files string) {
 	// Wait for everyone to finish
 	upLoadDone.Wait()
 
+	if *verbose {
+		fmt.Printf("\nLocal Files:\n")
+		fileLists.PrintLocalList()
+	}
+
 	// If GetItemInfo returns ErrNotFound it's anew item- upload whole local list
 	// If GetItemInfo returns other error, bendo unvavailable for upload- abort!
 	// default: build remote filelist of returned json, diff against local list, upload remainder
@@ -131,6 +136,15 @@ func doUpload(item string, files string) {
 		return
 	default:
 		fileLists.BuildRemoteList(json)
+
+		if *verbose {
+			fmt.Printf("\nRemote Files:\n")
+			fileLists.PrintRemoteList()
+			fmt.Printf("\nBlobs:\n")
+			fileLists.PrintBlobList()
+			fmt.Printf("\n")
+		}
+
 		// This compares the local list with the remote list (if the item already exists)
 		// and eliminates any unnneeded duplicates
 		fileLists.CullLocalList()
@@ -144,7 +158,10 @@ func doUpload(item string, files string) {
 		return
 	}
 
-	fileLists.PrintLocalList()
+	if *verbose {
+		fmt.Printf("\nFiles to Upload:\n")
+		fileLists.PrintLocalList()
+	}
 
 	// set up our barrier, that will wait for all the file chunks to be uploaded
 	sendFileDone.Add(*numuploaders)
@@ -163,7 +180,7 @@ func doUpload(item string, files string) {
 	sendFileDone.Wait()
 
 	// chunks uploaded- submit trnsaction to add FileIDs to item
-	transErr := thisItem.SendTransactionRequest()
+	transErr := thisItem.SendNewTransactionRequest()
 
 	if transErr != nil {
 		fmt.Println(transErr)
@@ -205,7 +222,7 @@ func doGet(item string, files []string) {
 
 	switch {
 	case jsonFetchErr == bclientapi.ErrNotFound:
-		fmt.Printf("\n Item %s was not found on server %\n", item, *server)
+		fmt.Printf("\n Item %s was not found on server %s\n", item, *server)
 		return
 	case jsonFetchErr != nil:
 		fmt.Println(jsonFetchErr)
@@ -268,7 +285,7 @@ func doGetStub(item string) {
 
 	switch {
 	case jsonFetchErr == bclientapi.ErrNotFound:
-		fmt.Printf("\n Item %s was not found on server %\n", item, *server)
+		fmt.Printf("\n Item %s was not found on server %s\n", item, *server)
 	case jsonFetchErr != nil:
 		fmt.Println(jsonFetchErr)
 	default:
@@ -288,7 +305,7 @@ func doHistory(item string) {
 
 	switch {
 	case jsonFetchErr == bclientapi.ErrNotFound:
-		fmt.Printf("\n Item %s was not found on server %\n", item, *server)
+		fmt.Printf("\n Item %s was not found on server %s\n", item, *server)
 	case jsonFetchErr != nil:
 		fmt.Println(jsonFetchErr)
 	default:
@@ -309,7 +326,7 @@ func doLs(item string) {
 
 	switch {
 	case jsonFetchErr == bclientapi.ErrNotFound:
-		fmt.Printf("\n Item %s was not found on server %\n", item, *server)
+		fmt.Printf("\n Item %s was not found on server %s\n", item, *server)
 	case jsonFetchErr != nil:
 		fmt.Println(jsonFetchErr)
 	default:
