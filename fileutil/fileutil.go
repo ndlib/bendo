@@ -156,15 +156,11 @@ func (ld *ListData) IsUploadNeeded(fileName string) (int64, bool) {
 
 	localMD5 := ld.localFileList.Files[fileName][1]
 
-	fmt.Printf("IsUploadNeeded localMD5 = %s\n", hex.EncodeToString(localMD5))
-
 	if ld.remoteFileList == nil {
 		return 0, true
 	}
 
 	blobID := ld.remoteFileList.Blobs[hex.EncodeToString(localMD5)]
-
-	fmt.Printf("BlobID %d\n", blobID)
 
 	if blobID == 0 {
 		return 0, true
