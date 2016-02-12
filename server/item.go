@@ -44,7 +44,7 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 		fmt.Fprintf(w, "Invalid Version")
 		return
 	}
-	w.Header().Set("Location", fmt.Sprintf("/blob/%s/%d", id, bid))
+	w.Header().Set("Location", fmt.Sprintf("/items/%s/@blob/%d", id, bid))
 	s.getblob(w, r, id, items.BlobID(bid))
 }
 
