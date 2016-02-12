@@ -13,7 +13,7 @@ import (
 	"github.com/ndlib/bendo/transaction"
 )
 
-//r.Handle("GET", "/transaction", ListTx)
+// ListTxHandler handles requests to GET /transaction
 func (s *RESTServer) ListTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	writeHTMLorJSON(w, r, listTxTemplate, s.TxStore.List())
 }
@@ -31,7 +31,7 @@ var (
 </html>`))
 )
 
-//r.Handle("GET", "/transaction/:tid", ListTxInfo)
+// TxInfoHandler handles requests to GET /transaction/:tid
 func (s *RESTServer) TxInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("tid")
 	tx := s.TxStore.Lookup(id)
@@ -60,7 +60,7 @@ var (
 	</html>`))
 )
 
-//r.Handle("POST", "/item/:id", NewTxHandler)
+// NewTxHandler handles requests to POST /item/:id
 func (s *RESTServer) NewTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
 	tx, err := s.TxStore.Create(id)
@@ -138,7 +138,7 @@ func (s *RESTServer) processCommit(tx *transaction.T) {
 	log.Printf("Finish transaction %s on %s (%s)", tx.ID, tx.ItemID, duration.String())
 }
 
-//r.Handle("POST", "/transaction/:tid/cancel", CancelTx)
+// CancelTxHandler handles requests to POST /transaction/:tid/cancel
 func (s *RESTServer) CancelTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	tid := ps.ByName("tid")
 	// TODO(dbrower): only delete tx if it is modifiable

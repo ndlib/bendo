@@ -5,8 +5,8 @@
 // information is kept only in memory. On startup the items in the store are
 // enumerated and taken to populate the cache list in an undetermined order.
 //
-// The cache uses an LRU item replacement policy. It would be nice for it to
-// use an ARC or 2Q policy instead.
+// The only cache implemented in here uses an LRU item replacement policy. It
+// would be nice for it to use an ARC or 2Q policy instead.
 package blobcache
 
 import (
@@ -25,22 +25,23 @@ type T interface {
 	Put(id string) (io.WriteCloser, error)
 }
 
-// A StoreLRU implements the T interface using a store as the storage backend
-// and the least recently used evection policy.
+// A StoreLRU implements a cache using the least recently used (LRU) eviction
+// policy and using a store as the storage backend.
 type StoreLRU struct {
 	// this is the place where cached items are stored
 	s store.Store
 
 	m sync.RWMutex // protects everything below
 
-	// total size used to store items in cache. If 0 then
+	// total size in bytes used by the cache. If 0 then
 	// we have not calculated the total size of the cache yet.
 	size int64
 
 	maxSize int64 // The maximum amount of space we may use
 
+	// list of cache contents
 	// front of list is MRU, tail is LRU.
-	lru *list.List // list of cache contents
+	lru *list.List
 }
 
 type entry struct {
@@ -48,15 +49,16 @@ type entry struct {
 	size int64
 }
 
-// New creates and initializes a new cache structure. The given store
-// may already have items in it. Call Scan() either inline or in a goroutine
-// to scan the store and add the items inside it to the LRU list.
+// NewLRU creates and initializes a new cache structure using the least
+// recently used eviction policy. The given store may already have items in it.
+// You must call Scan() (either inline or in another goroutine) to add the
+// preexisting items in the store to the LRU list.
 func NewLRU(s store.Store, maxSize int64) *StoreLRU {
 	return &StoreLRU{s: s, maxSize: maxSize, lru: list.New()}
 }
 
 // Scan enumerates the items in the given store and enters them into the LRU
-// cache.
+// cache (if they aren't in it already).
 func (t *StoreLRU) Scan() {
 	for key := range t.s.List() {
 		if t.Contains(key) {

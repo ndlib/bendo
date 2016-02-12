@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/migration"
-	_ "github.com/cznic/ql/driver"
+	_ "github.com/cznic/ql/driver" // load the ql sql driver
 
 	"github.com/ndlib/bendo/items"
 )
@@ -37,7 +37,7 @@ var qlVersioning = dbVersion{
 	CreateSQL: `CREATE TABLE migration_version (version int, applied time)`,
 }
 
-// NewQlDatabase makes a QL database cache. filename is
+// NewQlCache makes a QL database cache. filename is
 // the name of the file to save the database to. The filname "memory" means to keep everything in memory.
 func NewQlCache(filename string) (*qlCache, error) {
 	var driver = "ql"

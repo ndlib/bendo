@@ -15,7 +15,7 @@ import (
 	"github.com/ndlib/bendo/store"
 )
 
-// GET /blob/:id/:bid
+// BlobHandler handles requests to GET /blob/:id/:bid
 func (s *RESTServer) BlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
 	bid, err := strconv.ParseInt(ps.ByName("bid"), 10, 0)
@@ -27,7 +27,7 @@ func (s *RESTServer) BlobHandler(w http.ResponseWriter, r *http.Request, ps http
 	s.getblob(w, r, id, items.BlobID(bid))
 }
 
-// GET /item/:id/*slot
+// SlotHandler handles requests to GET /item/:id/*slot
 func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
 	item, err := s.Items.Item(id)
@@ -98,7 +98,7 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 	}
 }
 
-// GET /item/:id
+// ItemHandler handles requests to GET /item/:id
 func (s *RESTServer) ItemHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
 	item, err := s.Items.Item(id)

@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// A FixityCache tracks the information the fixity service needs to know what
+// A FixityDB tracks the information the fixity service needs to know what
 // items have been checked, what needs to be checked, and any fixity errors
 // found. It is presumed to be backed by a database, but that is not assumed.
 // Methods should be safe to be called by multiple goroutines.

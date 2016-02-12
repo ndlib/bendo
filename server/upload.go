@@ -16,7 +16,7 @@ import (
 	"github.com/ndlib/bendo/util"
 )
 
-//{"GET", "/upload", ListFileHandler},
+// ListFileHandler handles requests to GET /upload
 func (s *RESTServer) ListFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	q := r.URL.Query()
 	if len(q["label"]) > 0 {
@@ -39,7 +39,7 @@ var (
 </html>`))
 )
 
-//{"GET", "/upload/:fileid/metadata", GetFileInfoHandler},
+// GetFileInfoHandler handles requests to GET /upload/:fileid/metadata
 func (s *RESTServer) GetFileInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("fileid")
 	f := s.FileStore.Lookup(id)
@@ -70,8 +70,7 @@ var (
 </html>`))
 )
 
-//{"POST", "/upload", AppendFileHandler},
-//{"POST", "/upload/:fileid", AppendFileHandler},
+// AppendFileHandler handles requests to both POST /upload and POST /upload/:fileid
 func (s *RESTServer) AppendFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	md5hash64 := r.Header.Get("X-Upload-Md5")
 	sha256hash64 := r.Header.Get("X-Upload-Sha256")
@@ -154,7 +153,7 @@ func randomid() string {
 	return strconv.FormatInt(int64(n), 36)
 }
 
-//{"DELETE", "/upload/:fileid", DeleteFileHandler},
+// DeleteFileHandler handles requests to DELETE /upload/:fileid
 // This deletes a file which has been uploaded and is in the temporary
 // holding area.
 func (s *RESTServer) DeleteFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
@@ -166,7 +165,7 @@ func (s *RESTServer) DeleteFileHandler(w http.ResponseWriter, r *http.Request, p
 	}
 }
 
-//{"PUT", "/upload/:fileid/metadata", SetFileInfoHandler},
+// SetFileInfoHandler handles requests to PUT /upload/:fileid/metadata
 func (s *RESTServer) SetFileInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	fileid := ps.ByName("fileid")
 	f := s.FileStore.Lookup(fileid)
@@ -191,7 +190,7 @@ func (s *RESTServer) SetFileInfoHandler(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
-//{"GET", "/upload/:fileid", GetFileHandler},
+// GetFileHandler handles requests to GET /upload/:fileid
 func (s *RESTServer) GetFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	fileid := ps.ByName("fileid")
 	f := s.FileStore.Lookup(fileid)

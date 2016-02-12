@@ -39,6 +39,8 @@ var mysqlVersioning = dbVersion{
 	CreateSQL: `CREATE TABLE migration_version (version INTEGER, applied datetime)`,
 }
 
+// NewMysqlCache connects to a MySQL database and returns an item satisifying
+// both the ItemCache and FixityDB interfaces.
 func NewMysqlCache(dial string) (*msqlCache, error) {
 	db, err := migration.OpenWith(
 		"mysql",

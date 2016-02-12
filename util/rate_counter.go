@@ -23,9 +23,10 @@ type RateCounter struct {
 // for credits to be added.
 const rateInterval = 1 * time.Minute
 
-// Make a new rater where credits accumulate at rate credits per second.
-// However, the credits are not accumulated every second. Instead the entire
-// amount due is added every 20 minutes.
+// NewRateCounter returns a counter where credits accumulate
+// at the given credits per second. However, the credits are
+// not accumulated every second. Instead the entire amount
+// due is added every 20 minutes.
 func NewRateCounter(rate float64) *RateCounter {
 	amount := int64(rate * rateInterval.Seconds())
 	r := &RateCounter{
@@ -44,7 +45,7 @@ func (r *RateCounter) Use(count int64) {
 	r.m.Unlock()
 }
 
-// Return a channel to wait on. It will receive an empty struct when it is OK
+// OK returns a channel to wait on. It will receive an empty struct when it is OK
 // to resume reading. The channel will be closed if the RateCounter is Stopped.
 func (r *RateCounter) OK() <-chan struct{} {
 	return r.c

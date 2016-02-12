@@ -281,6 +281,7 @@ func (s *RESTServer) addRoutes() http.Handler {
 
 // General route handlers and convinence functions
 
+// NotImplementedHandler will return a 501 not implemented error.
 func NotImplementedHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	w.WriteHeader(http.StatusNotImplemented)
 	fmt.Fprintf(w, "Not Implemented\n")

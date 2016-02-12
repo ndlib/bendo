@@ -219,6 +219,7 @@ func (item Item) BlobByExtendedSlot(slot string) BlobID {
 // used to implement a no-op cache
 type cache struct{}
 
+// The Nullcache is an ItemCache which does not store anything.
 var Nullcache cache
 
 func (c cache) Lookup(id string) *Item    { return nil }

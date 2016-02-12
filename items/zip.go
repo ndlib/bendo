@@ -18,6 +18,7 @@ type BagreaderCloser struct {
 	*bagit.Reader           // the zip reader
 }
 
+// Close flushes the reader and closes the underlying io.Closer.
 func (bg *BagreaderCloser) Close() error {
 	return bg.f.Close()
 }

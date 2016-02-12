@@ -11,6 +11,7 @@ import (
 	"github.com/ndlib/bendo/store"
 )
 
+// BundleListHandler handles GET requests to "/bundle/list".
 func (s *RESTServer) BundleListHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	c := s.Items.S.List()
 	// we encode this as JSON ourselves....how could it go wrong?
@@ -24,6 +25,7 @@ func (s *RESTServer) BundleListHandler(w http.ResponseWriter, r *http.Request, p
 	w.Write([]byte("]"))
 }
 
+// BundleListPrefixHandler handles GET requests to "/bundle/list/:prefix".
 func (s *RESTServer) BundleListPrefixHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	prefix := ps.ByName("prefix")
 	result, err := s.Items.S.ListPrefix(prefix)
@@ -35,6 +37,7 @@ func (s *RESTServer) BundleListPrefixHandler(w http.ResponseWriter, r *http.Requ
 	enc.Encode(result) // ignore any error
 }
 
+// BundleOpenHandler handles GET requests to "/bundle/open/:key"
 func (s *RESTServer) BundleOpenHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	key := ps.ByName("key")
 	data, _, err := s.Items.S.Open(key)
