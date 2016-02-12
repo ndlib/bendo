@@ -109,6 +109,7 @@ func (s *RESTServer) ItemHandler(w http.ResponseWriter, r *http.Request, ps http
 	}
 	vid := item.Versions[len(item.Versions)-1].ID
 	w.Header().Set("ETag", fmt.Sprintf("%d", vid))
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	enc := json.NewEncoder(w)
 	enc.Encode(item)
 }

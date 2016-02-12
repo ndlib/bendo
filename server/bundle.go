@@ -14,6 +14,7 @@ import (
 // BundleListHandler handles GET requests to "/bundle/list".
 func (s *RESTServer) BundleListHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	c := s.Items.S.List()
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	// we encode this as JSON ourselves....how could it go wrong?
 	w.Write([]byte("["))
 	// comma starts as a space
@@ -33,6 +34,7 @@ func (s *RESTServer) BundleListPrefixHandler(w http.ResponseWriter, r *http.Requ
 		fmt.Fprintln(w, err)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	enc := json.NewEncoder(w)
 	enc.Encode(result) // ignore any error
 }
