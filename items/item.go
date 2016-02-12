@@ -166,7 +166,7 @@ func (item Item) blobByID(id BlobID) *Blob {
 }
 
 // BlobByVersionSlot returns the blob corresponding to the given version
-// identifier and slot name. It returns 0 if the version id and slot pair does
+// identifier and slot name. It returns 0 if the (version id, slot) pair do
 // not resolve to anything.
 func (item Item) BlobByVersionSlot(vid VersionID, slot string) BlobID {
 	var ver *Version
@@ -179,12 +179,7 @@ func (item Item) BlobByVersionSlot(vid VersionID, slot string) BlobID {
 	if ver == nil {
 		return 0
 	}
-	for name, bid := range ver.Slots {
-		if name == slot {
-			return bid
-		}
-	}
-	return 0
+	return ver.Slots[slot]
 }
 
 // BlobByExtendedSlot return the blob idenfifer for the given extended slot
@@ -196,7 +191,18 @@ func (item Item) BlobByVersionSlot(vid VersionID, slot string) BlobID {
 func (item Item) BlobByExtendedSlot(slot string) BlobID {
 	var vid VersionID
 	var vmax = item.Versions[len(item.Versions)-1].ID
+	// is this a special slot name?
 	if len(slot) >= 1 && slot[0] == '@' {
+		// handle "@blob/nnn" path
+		if strings.HasPrefix(slot, "@blob/") {
+			// try to parse the blob number
+			b, err := strconv.ParseInt(slot[6:], 10, 0)
+			if err != nil || b <= 0 || b > int64(len(item.Blobs)) {
+				return 0
+			}
+			return BlobID(b)
+		}
+		// handle "@nnn/path/to/file" paths
 		var err error
 		j := strings.Index(slot, "/")
 		if j >= 1 {
