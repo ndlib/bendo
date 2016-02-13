@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/julienschmidt/httprouter"
 
@@ -32,11 +31,17 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 	id := ps.ByName("id")
 	item, err := s.Items.Item(id)
 	if err != nil {
+		w.WriteHeader(404)
 		fmt.Fprintln(w, err.Error())
 		return
 	}
 	// the star parameter in httprouter returns the leading slash
-	slot := strings.TrimPrefix(ps.ByName("slot"), "/")
+	slot := ps.ByName("slot")[1:]
+	// if we have the empty path, reroute to the item metadata handler
+	if slot == "" {
+		s.ItemHandler(w, r, ps)
+		return
+	}
 	// slot might have a "@nnn" version prefix
 	bid := item.BlobByExtendedSlot(slot)
 	if bid == 0 {
