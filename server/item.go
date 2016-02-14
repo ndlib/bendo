@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"expvar"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +13,11 @@ import (
 
 	"github.com/ndlib/bendo/items"
 	"github.com/ndlib/bendo/store"
+)
+
+var (
+	nCacheHit  = expvar.NewInt("cache.hit")
+	nCacheMiss = expvar.NewInt("cache.miss")
 )
 
 // BlobHandler handles requests to GET /blob/:id/:bid
@@ -63,12 +69,14 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 	}
 	var src io.Reader
 	if cacheContents != nil {
+		nCacheHit.Add(1)
 		log.Printf("Cache Hit %s", key)
 		defer cacheContents.Close()
 		// need to wrap this since Cache.Get returns a ReadAtCloser
 		src = store.NewReader(cacheContents)
 	} else {
 		// cache miss...load from main store, AND put into cache
+		nCacheMiss.Add(1)
 		log.Printf("Cache Miss %s", key)
 		realContents, l, err := s.Items.Blob(id, bid)
 		length = l // use l so we don't redeclare length in this scope

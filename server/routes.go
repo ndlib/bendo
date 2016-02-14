@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"expvar"
 	"fmt"
 	"html/template"
 	"log"
@@ -265,10 +266,10 @@ func (s *RESTServer) addRoutes() http.Handler {
 		{"PUT", "/upload/:fileid/metadata", RoleWrite, s.SetFileInfoHandler},
 
 		// fixity reporting
-		{"GET", "/fixity", RoleRead, nil},
-		{"GET", "/fixity/errors", RoleRead, nil},
-		{"GET", "/fixity/item/:itemid", RoleRead, nil},
-		{"POST", "/fixity/:itemid", RoleWrite, nil},
+		{"GET", "/fixity", RoleRead, NotImplementedHandler},
+		{"GET", "/fixity/errors", RoleRead, NotImplementedHandler},
+		{"GET", "/fixity/item/:itemid", RoleRead, NotImplementedHandler},
+		{"POST", "/fixity/:itemid", RoleWrite, NotImplementedHandler},
 
 		// the read only bundle stuff
 		{"GET", "/bundle/list/:prefix", RoleRead, s.BundleListPrefixHandler},
@@ -278,6 +279,7 @@ func (s *RESTServer) addRoutes() http.Handler {
 		// other
 		{"GET", "/", RoleUnknown, WelcomeHandler},
 		{"GET", "/stats", RoleUnknown, NotImplementedHandler},
+		{"GET", "/debug/vars", RoleUnknown, VarHandler},
 	}
 
 	r := httprouter.New()
@@ -290,6 +292,22 @@ func (s *RESTServer) addRoutes() http.Handler {
 }
 
 // General route handlers and convinence functions
+
+// VarHandler adapts the expvar default handler to our router.
+func VarHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	// this code is taken from the stdlib expvar package.
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	fmt.Fprintf(w, "{\n")
+	first := true
+	expvar.Do(func(kv expvar.KeyValue) {
+		if !first {
+			fmt.Fprintf(w, ",\n")
+		}
+		first = false
+		fmt.Fprintf(w, "%q: %s", kv.Key, kv.Value)
+	})
+	fmt.Fprintf(w, "\n}\n")
+}
 
 // NotImplementedHandler will return a 501 not implemented error.
 func NotImplementedHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
