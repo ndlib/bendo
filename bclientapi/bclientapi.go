@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/ndlib/bendo/fileutil"
+	"path"
 	"strconv"
 	"sync"
+	"time"
 )
 
 var (
@@ -27,6 +29,7 @@ type itemAttributes struct {
 	item        string
 	bendoServer string
 	chunkSize   int
+	wait        bool
 }
 
 func addFileToTransactionList(filename string, fileID string, item string, isNew bool) {
@@ -44,13 +47,14 @@ func addFileToTransactionList(filename string, fileID string, item string, isNew
 	fileIDMutex.Unlock()
 }
 
-func New(server string, item string, fileroot string, chunkSize int) *itemAttributes {
+func New(server string, item string, fileroot string, chunkSize int, wait bool) *itemAttributes {
 
 	thisItem := new(itemAttributes)
 	thisItem.bendoServer = server
 	thisItem.item = item
 	thisItem.chunkSize = chunkSize
 	thisItem.fileroot = fileroot
+	thisItem.wait = wait
 
 	return thisItem
 }
@@ -130,16 +134,16 @@ func (ia *itemAttributes) updateBlobID(filename string, blobid int64) error {
 	return nil
 }
 
-// read  fileIDList for new files, build comment list, send to server
+// read  fileIDList for new files, build commit list, send to server
 
-func (ia *itemAttributes) SendNewTransactionRequest() error {
+func (ia *itemAttributes) SendNewTransactionRequest() (string, error) {
 
 	cmdlist := [][]string{}
 
 	// if fileIDList is empty, no need to send this
 
 	if len(fileIDList) == 0 {
-		return nil
+		return "", nil
 	}
 
 	for _, fid := range fileIDList {
@@ -151,7 +155,38 @@ func (ia *itemAttributes) SendNewTransactionRequest() error {
 
 	buf, _ := json.Marshal(cmdlist)
 
-	transErr := ia.createFileTransAction(buf)
+	transaction, transErr := ia.createFileTransAction(buf)
 
-	return transErr
+	return transaction, transErr
+}
+
+func (ia *itemAttributes) WaitForCommitFinish(tx string) {
+
+	seconds := 5
+
+	for {
+		fmt.Printf(".")
+		time.Sleep(time.Second * time.Duration(seconds))
+
+		v, err := ia.getTransactionStatus(path.Base(tx))
+
+		if err != nil {
+			fmt.Println(err.Error())
+			break
+		}
+
+		name, _ := v.GetString("Status")
+
+		if name == "StatusFinished" {
+			fmt.Printf("\nFinished\n")
+			break
+		}
+
+		if name == "StatusError" {
+			fmt.Printf("\nError\n")
+			break
+		}
+
+		seconds += 5
+	}
 }

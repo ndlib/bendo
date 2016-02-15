@@ -26,8 +26,9 @@ var (
 	chunksize    = flag.Int("chunksize", 10, "chunk size of uploads (in meagabytes)")
 	stub         = flag.Bool("stub", false, "Get Item Information, construct stub number")
 	numuploaders = flag.Int("ul", 2, "Number Uploaders")
+	wait         = flag.Bool("wait", false, "Wait for Upload Transaction to complte before exiting")
 
-        Usage  = `
+	Usage = `
 Usage:
 
 bclient [<flags>] <action> <bendo item number> [file]
@@ -41,7 +42,7 @@ Available actions:
 
     General Flags:
 
-    -fileroot (defaults to current directory)  location to get or put files
+    -root (defaults to current directory)  location to get or put files
     -server   (defaults to bendo-staging.library.nd.edu:14000) server_name:port of bendo server
     -numuploaders (defaults to 2) number of concurrent upload/download threads
     -version ( defaults to latest version: ls & get actions) desired version number
@@ -52,6 +53,7 @@ Available actions:
     -creator      ( defaults to bclient) owner of upload in bendo
     -numuploaders ( defaults to 2) number of upload threads
     -v            ( defaults to false) Provide verbose upload information for troubleshooting
+    -wait         ( defaults to true)  Wait for Upload Transaction to complte before exiting
 
     ls Flags:	  
 
@@ -62,15 +64,14 @@ Available actions:
 
     
 	`
-
-    )
+)
 
 // main program
 
 func main() {
 
 	// parse command line
-	flag.Usage = func() { fmt.Println(Usage) }	
+	flag.Usage = func() { fmt.Println(Usage) }
 	flag.Parse()
 	fileutil.SetVerbose(*verbose)
 
@@ -120,7 +121,7 @@ func doUpload(item string, files string) {
 	var json *jason.Object
 	var jsonFetchErr error
 
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize)
+	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait)
 	fileLists := fileutil.NewLists(*fileroot)
 
 	// Set up Barrier for 3 goroutines below
@@ -208,14 +209,20 @@ func doUpload(item string, files string) {
 	sendFileDone.Wait()
 
 	// chunks uploaded- submit trnsaction to add FileIDs to item
-	transErr := thisItem.SendNewTransactionRequest()
+	transaction, transErr := thisItem.SendNewTransactionRequest()
 
 	if transErr != nil {
 		fmt.Println(transErr)
 		return
 	}
 
-	// TODO: cleanup uploads on success
+	if *verbose {
+		fmt.Printf("\n Transaction id is %s\n", transaction)
+	}
+
+	if *wait {
+		thisItem.WaitForCommitFinish(transaction)
+	}
 }
 
 //  doGet , given only an item, returns all the files in that item.
@@ -240,7 +247,7 @@ func doGet(item string, files []string) {
 
 	// set up communication to the bendo server, and init local and remote filelists
 
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize)
+	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait)
 	fileLists := fileutil.NewLists(*fileroot)
 
 	// Fetch Item Info from bclientapi
@@ -304,7 +311,7 @@ func doGetStub(item string) {
 
 	// fetch info about this item from the bendo server
 
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize)
+	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait)
 
 	// Fetch Item Info from bclientapi
 	json, jsonFetchErr = thisItem.GetItemInfo()
@@ -326,7 +333,7 @@ func doHistory(item string) {
 	var json *jason.Object
 	var jsonFetchErr error
 
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize)
+	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait)
 
 	// Fetch Item Info from bclientapi
 	json, jsonFetchErr = thisItem.GetItemInfo()
@@ -347,7 +354,7 @@ func doLs(item string) {
 	var json *jason.Object
 	var jsonFetchErr error
 
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize)
+	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait)
 
 	// Fetch Item Info from bclientapi
 	json, jsonFetchErr = thisItem.GetItemInfo()

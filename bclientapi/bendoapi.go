@@ -126,7 +126,9 @@ func (ia *itemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5su
 	return route, nil
 }
 
-func (ia *itemAttributes) createFileTransAction(cmdlist []byte) error {
+// Not well named - sets a POST /item/:id/transaction
+
+func (ia *itemAttributes) createFileTransAction(cmdlist []byte) (string, error) {
 
 	var (
 		path     = "http://" + ia.bendoServer + "/item/" + ia.item
@@ -138,15 +140,48 @@ func (ia *itemAttributes) createFileTransAction(cmdlist []byte) error {
 
 	defer resp.Body.Close()
 	if err != nil {
-		return err
+		return "", err
 	}
 	if resp.StatusCode != 202 {
 
 		fmt.Printf("Received HTTP status %d for POST %s", resp.StatusCode, path+location)
-		return ErrUnexpectedResp
+		return "", ErrUnexpectedResp
 	}
 
-	//transaction  := resp.Header.Get("Location")
+	transaction := resp.Header.Get("Location")
 
-	return nil
+	return transaction, nil
+}
+
+func (ia *itemAttributes) getTransactionStatus(transaction string) (*jason.Object, error) {
+	var path = "http://" + ia.bendoServer + "/transaction/" + transaction
+
+	req, err := http.NewRequest("GET", path, nil)
+
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Accept-Encoding", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	defer resp.Body.Close()
+
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != 200 {
+		switch resp.StatusCode {
+		case 404:
+			return nil, ErrNotFound
+		case 401:
+			return nil, ErrNotAuthorized
+		default:
+			return nil, fmt.Errorf("Received status %d from Bendo", resp.StatusCode)
+		}
+	}
+
+	v, err := jason.NewObjectFromReader(resp.Body)
+
+	return v, err
 }
