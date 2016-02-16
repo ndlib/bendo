@@ -104,7 +104,24 @@ func TestSerialization(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Received error %s", err.Error())
 	}
-	if !reflect.DeepEqual(item, result) {
+	if item.ID != result.ID ||
+		item.MaxBundle != result.MaxBundle ||
+		len(item.Versions) != len(result.Versions) ||
+		len(item.Blobs) != len(result.Blobs) {
 		t.Errorf("Received %#v, expected %#v", result, item)
+	}
+	for i := range item.Blobs {
+		a := item.Blobs[i]
+		b := result.Blobs[i]
+		if !reflect.DeepEqual(a, b) {
+			t.Errorf("Received %#v, expected %#v", b, a)
+		}
+	}
+	for i := range item.Versions {
+		a := item.Versions[i]
+		b := result.Versions[i]
+		if !reflect.DeepEqual(a, b) {
+			t.Errorf("Received %#v, expected %#v", b, a)
+		}
 	}
 }
