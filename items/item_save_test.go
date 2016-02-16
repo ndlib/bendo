@@ -1,8 +1,11 @@
 package items
 
 import (
+	"bytes"
 	"io"
+	"reflect"
 	"testing"
+	"time"
 )
 
 func TestDecodeID(t *testing.T) {
@@ -70,5 +73,38 @@ func TestExtractBlobId(t *testing.T) {
 				b,
 				test.output)
 		}
+	}
+}
+
+func TestSerialization(t *testing.T) {
+	item := &Item{
+		ID:        "123456",
+		MaxBundle: 5,
+		Versions: []*Version{
+			&Version{
+				ID:       1,
+				SaveDate: time.Now(),
+				Creator:  "don",
+				Note:     "test note",
+				Slots: map[string]BlobID{
+					"file1":  2,
+					"file2":  2,
+					"README": 1,
+				},
+			},
+		},
+	}
+	buf := &bytes.Buffer{}
+
+	err := writeItemInfo(buf, item)
+	if err != nil {
+		t.Fatalf("Received error %s", err.Error())
+	}
+	result, err := readItemInfo(buf)
+	if err != nil {
+		t.Fatalf("Received error %s", err.Error())
+	}
+	if !reflect.DeepEqual(item, result) {
+		t.Errorf("Received %#v, expected %#v", result, item)
 	}
 }

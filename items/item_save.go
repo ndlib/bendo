@@ -20,7 +20,8 @@ func readItemInfo(rc io.Reader) (*Item, error) {
 		return nil, err
 	}
 	result := &Item{
-		ID: fromTape.ItemID,
+		ID:        fromTape.ItemID,
+		MaxBundle: fromTape.MaxBundle,
 	}
 	for _, ver := range fromTape.Versions {
 		v := &Version{
@@ -52,7 +53,8 @@ func readItemInfo(rc io.Reader) (*Item, error) {
 
 func writeItemInfo(w io.Writer, item *Item) error {
 	itemStore := itemOnTape{
-		ItemID: item.ID,
+		ItemID:    item.ID,
+		MaxBundle: item.MaxBundle,
 	}
 	var byteCount int64
 	for _, b := range item.Blobs {
@@ -77,6 +79,7 @@ func writeItemInfo(w io.Writer, item *Item) error {
 			SaveDate:  v.SaveDate,
 			Creator:   v.Creator,
 			Slots:     v.Slots,
+			Note:      v.Note,
 		}
 		itemStore.Versions = append(itemStore.Versions, vTape)
 	}
@@ -91,6 +94,7 @@ func writeItemInfo(w io.Writer, item *Item) error {
 type itemOnTape struct {
 	ItemID    string
 	ByteCount int64
+	MaxBundle int
 	Versions  []versionTape
 	Blobs     []blobTape
 }
@@ -98,8 +102,6 @@ type itemOnTape struct {
 type versionTape struct {
 	VersionID int
 	SaveDate  time.Time
-	ByteCount int64
-	BlobCount int
 	Creator   string
 	Note      string
 	Slots     map[string]BlobID
