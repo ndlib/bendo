@@ -80,6 +80,20 @@ func TestSerialization(t *testing.T) {
 	item := &Item{
 		ID:        "123456",
 		MaxBundle: 5,
+		Blobs: []*Blob{
+			&Blob{
+				ID:         1,
+				SaveDate:   time.Now(),
+				Creator:    "alice",
+				Size:       9876543210, // > 2**31
+				Bundle:     2,
+				MD5:        []byte{123, 234, 34, 45, 56, 67, 78, 89, 90, 12},
+				SHA256:     []byte{213, 24, 35, 46, 57, 68, 89, 31},
+				DeleteDate: time.Now(),
+				Deleter:    "bob",
+				DeleteNote: "this is not valid",
+			},
+		},
 		Versions: []*Version{
 			&Version{
 				ID:       1,
@@ -113,6 +127,14 @@ func TestSerialization(t *testing.T) {
 	for i := range item.Blobs {
 		a := item.Blobs[i]
 		b := result.Blobs[i]
+		if a.SaveDate.Sub(b.SaveDate) != 0 ||
+			a.DeleteDate.Sub(b.DeleteDate) != 0 {
+			t.Errorf("Received %v, expected %v", b, a)
+		}
+		// there is a location cache in dates, so deepequal
+		// keeps thinking they are different.
+		a.SaveDate = b.SaveDate
+		a.DeleteDate = b.DeleteDate
 		if !reflect.DeepEqual(a, b) {
 			t.Errorf("Received %#v, expected %#v", b, a)
 		}
@@ -120,7 +142,13 @@ func TestSerialization(t *testing.T) {
 	for i := range item.Versions {
 		a := item.Versions[i]
 		b := result.Versions[i]
-		if !reflect.DeepEqual(a, b) {
+		if a.SaveDate.Sub(b.SaveDate) != 0 {
+			t.Errorf("Received %v, expected %v", b, a)
+		}
+		// there is a location cache in dates, so deepequal
+		// keeps thinking they are different.
+		a.SaveDate = b.SaveDate
+		if !reflect.DeepEqual(*a, *b) {
 			t.Errorf("Received %#v, expected %#v", b, a)
 		}
 	}
