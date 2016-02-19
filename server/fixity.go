@@ -1,6 +1,7 @@
 package server
 
 import (
+	"expvar"
 	"log"
 	"math/rand"
 	"strings"
@@ -34,9 +35,20 @@ type FixityDB interface {
 	LookupCheck(id string) (time.Time, error)
 }
 
+var (
+	xFixityRunning      = expvar.NewInt("fixity.running")
+	xFixityItemsChecked = expvar.NewInt("fixity.check.count")
+	xFixityBytesChecked = expvar.NewInt("fixity.check.bytes")
+	xFixityDuration     = expvar.NewFloat("fixity.check.seconds")
+	xFixityError        = expvar.NewInt("fixity.check.error")
+	xFixityMismatch     = expvar.NewInt("fixity.check.mismatch")
+)
+
 // StartFixity starts the background goroutines to check item fixity. It
 // returns immediately and does not block.
 func (s *RESTServer) StartFixity() {
+	xFixityRunning.Add(1)
+
 	go s.fixity()
 
 	// should scanfixity run periodically? or only at startup?
@@ -69,19 +81,25 @@ func (s *RESTServer) fixity() {
 		}
 		log.Println("begin fixity check for", id)
 		starttime := time.Now()
-		_, problems, err := s.Items.Validate(id)
+		nbytes, problems, err := s.Items.Validate(id)
 		var status = "ok"
 		var notes string
 		if err != nil {
 			log.Println("fixity validate error", err.Error())
 			status = "error"
 			notes = err.Error()
+			xFixityError.Add(1)
 		} else if len(problems) > 0 {
 			status = "mismatch"
 			notes = strings.Join(problems, "\n")
+			xFixityMismatch.Add(1)
 		}
-		log.Println("Fixity for", id, "is", status, "duration = ", time.Now().Sub(starttime))
+		d := time.Now().Sub(starttime)
+		log.Println("Fixity for", id, "is", status, "duration = ", d)
 		err = s.Fixity.UpdateFixity(id, status, notes)
+		xFixityItemsChecked.Add(1)
+		xFixityBytesChecked.Add(nbytes)
+		xFixityDuration.Add(d.Seconds())
 		// schedule the next check unless one is already scheduled
 		when, _ := s.Fixity.LookupCheck(id)
 		if when.IsZero() {

@@ -279,7 +279,7 @@ func (s *RESTServer) addRoutes() http.Handler {
 		// other
 		{"GET", "/", RoleUnknown, WelcomeHandler},
 		{"GET", "/stats", RoleUnknown, NotImplementedHandler},
-		{"GET", "/debug/vars", RoleUnknown, VarHandler},
+		{"GET", "/debug/vars", RoleUnknown, VarHandler}, // standard route for expvars data
 	}
 
 	r := httprouter.New()
