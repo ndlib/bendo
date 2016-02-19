@@ -76,7 +76,8 @@ type RESTServer struct {
 	Cache blobcache.T
 
 	// Fixity stores the records tracking past and future fixity checks.
-	Fixity FixityDB
+	Fixity        FixityDB
+	DisableFixity bool
 
 	server httpdown.Server // used to close our listening socket
 	txgate *util.Gate      // limits number of concurrent transactions
@@ -125,10 +126,12 @@ func (s *RESTServer) Run() error {
 	s.Items.SetCache(db)
 
 	// init fixity
-	if s.Fixity == nil {
-		s.Fixity = db
+	if !s.DisableFixity {
+		if s.Fixity == nil {
+			s.Fixity = db
+		}
+		s.StartFixity()
 	}
-	s.StartFixity()
 
 	// init blobcache
 	if s.Cache == nil {

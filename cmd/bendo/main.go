@@ -21,6 +21,7 @@ func main() {
 		portNumber = flag.String("port", "14000", "Port Number to Use")
 		pProfPort  = flag.String("pfport", "14001", "PPROF Port Number to Use")
 		mysql      = flag.String("mysql", "", "Connection information to use a MySQL database")
+		cow        = flag.String("copy-on-write", "", "External bendo server to mirror content from")
 	)
 	flag.Parse()
 
@@ -42,14 +43,24 @@ func main() {
 	if *cacheDir != "" {
 		os.MkdirAll(*cacheDir, 0755)
 	}
+	var itemstore store.Store = store.NewFileSystem(*storeDir)
+	if *cow != "" {
+		itemstore = store.NewCOW(itemstore, *cow, "")
+	}
 	var s = server.RESTServer{
-		Items:      items.New(store.NewFileSystem(*storeDir)),
+		Items:      items.New(itemstore),
 		Validator:  validator,
 		MySQL:      *mysql,
 		CacheDir:   *cacheDir,
 		CacheSize:  *cacheSize * 1000000,
 		PortNumber: *portNumber,
 		PProfPort:  *pProfPort,
+	}
+	if *cow != "" {
+		// don't run fixity if we are using a copy-on-write.
+		// (doing so will cause us to download ALL the data from
+		// the target bendo over time)
+		s.DisableFixity = true
 	}
 
 	// set up signal handlers
