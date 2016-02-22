@@ -54,7 +54,13 @@ var (
 	<dt>Started</dt><dd>{{ .Started }}</dd>
 	<dt>Modified</dt><dd>{{ .Modified }}</dd>
 	<dt>Errors</dt><dd>{{ range .Err }}{{ . }}<br/>{{ end }}</dd>
-	<dt>Commands</dt><dd>{{ range .Commands }}{{ . }}<br/>{{ end }}</dd>
+	<dt>Commands</dt><dd>{{ range .Commands }}
+		{{ if index . 0 | eq "add" }}
+			{{ $fname := index . 1 }}
+			[add <a href="/upload/{{ $fname }}">{{ $fname }}</a>]
+		{{else}}{{ . }}
+		{{ end }}
+	<br/>{{ end }}</dd>
 	</dl>
 	<a href="/transaction">Back</a>
 	</html>`))
@@ -136,6 +142,90 @@ func (s *RESTServer) processCommit(tx *transaction.T) {
 	}
 	duration := time.Now().Sub(start)
 	log.Printf("Finish transaction %s on %s (%s)", tx.ID, tx.ItemID, duration.String())
+}
+
+// StartTxCleaner will spawn a background goroutine to remove old transactions.
+// That means any finished transactions which are older than a few days. Both
+// the transaction and any uploaded files referenced by the transaction are
+// deleted.
+func (s *RESTServer) StartTxCleaner() {
+	go func() {
+		for {
+			err := s.transactionCleaner()
+			if err == nil {
+				err = s.fileCleaner()
+			}
+			if err != nil {
+				log.Println("TxCleaner:", err)
+			}
+			// wait for a while before beginning again
+			time.Sleep(12 * time.Hour) // duration is arbitrary
+		}
+	}()
+}
+
+// transactionCleaner will go through all finished transactions (i.e. in either
+// the error or successful states) which are old, and delete them and any
+// uploaded files they reference. Successful transactions older than a day are
+// removed, and Failed transactions older than a week are removed.
+func (s *RESTServer) transactionCleaner() error {
+	// these time limits are completely arbitrary
+	cutoffSuccess := time.Now().Add(-24 * time.Hour)
+	cutoffError := time.Now().Add(-7 * 24 * time.Hour)
+	for _, txid := range s.TxStore.List() {
+		tx := s.TxStore.Lookup(txid)
+		if tx == nil {
+			continue
+		}
+		switch tx.Status {
+		default:
+			continue
+		case transaction.StatusFinished:
+			if tx.Modified.After(cutoffSuccess) {
+				continue
+			}
+		case transaction.StatusError:
+			if tx.Modified.After(cutoffError) {
+				continue
+			}
+		}
+		log.Printf("TxCleaner: removing transaction %s\n", txid)
+		// delete every file referenced by the transaction
+		for _, fid := range tx.ReferencedFiles() {
+			err := s.FileStore.Delete(fid)
+			if err != nil {
+				return err
+			}
+		}
+		// and delete the transaction itself
+		err := s.TxStore.Delete(txid)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// fileCleaner will remove any files in the upload cache directory older than
+// two weeks. (This time is completely arbitrary).
+func (s *RESTServer) fileCleaner() error {
+	cutoff := time.Now().Add(-14 * 24 * time.Hour)
+	for _, fid := range s.FileStore.List() {
+		f := s.FileStore.Lookup(fid)
+		if f == nil {
+			continue
+		}
+		stat := f.Stat()
+		if stat.Modified.After(cutoff) {
+			continue
+		}
+		log.Printf("TxCleaner: removing file %s\n", fid)
+		err := s.FileStore.Delete(fid)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // CancelTxHandler handles requests to POST /transaction/:tid/cancel

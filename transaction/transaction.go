@@ -2,6 +2,7 @@ package transaction
 
 import (
 	"errors"
+	"log"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -18,7 +19,7 @@ import (
 // from the underlying store.
 func New(s store.Store) *Store {
 	return &Store{
-		TxStore: fragment.NewJSON(store.NewWithPrefix(s, "tx:")),
+		TxStore: fragment.NewJSON(s),
 		txs:     make(map[string]*T),
 	}
 }
@@ -38,6 +39,7 @@ func (r *Store) Load() error {
 		tx := new(T)
 		err := r.TxStore.Open(key, tx)
 		if err != nil {
+			log.Printf("TxLoad %s: %s\n", key, err.Error())
 			continue
 		}
 		tx.txstore = &r.TxStore
@@ -167,11 +169,6 @@ const (
 )
 
 //go:generate stringer -type=Status
-
-// MarshalJSON lets statuses be exported as a string when json encoding.
-func (s Status) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + s.String() + `"`), nil
-}
 
 // AddCommandList changes the command list to process when committing this
 // transaction to the one given.
