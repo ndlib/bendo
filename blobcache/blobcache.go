@@ -121,7 +121,7 @@ func (t *StoreLRU) find(id string) *list.Element {
 // the Writer. The item is not formally added to the cache until the Writer is
 // closed.
 //
-// Only one writer to a given id can be active at a time. Subsusquient Puts
+// Only one writer to a given id can be active at a time. Subsequent Puts
 // will return an error. Also, once an item is in the cache, Puts for it will
 // return an error (until the item is evicted.)
 func (t *StoreLRU) Put(id string) (io.WriteCloser, error) {
