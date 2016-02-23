@@ -16,6 +16,9 @@ import (
 // various command line flags, with default values
 
 var (
+	goReturnMutex sync.Mutex
+	goReturn      int = 0
+
 	fileroot     = flag.String("root", ".", "root prefix to upload files")
 	server       = flag.String("server", "libvirt9.library.nd.edu:14000", "Bendo Server to Use")
 	creator      = flag.String("bclient", "butil", "Creator name to use")
@@ -79,41 +82,41 @@ func main() {
 
 	if len(args) == 0 {
 		fmt.Println(Usage)
-		return
+		os.Exit(1)
 	}
 
 	switch args[0] {
 	case "upload":
 		if len(args) != 3 {
 			fmt.Println("Usage: bclient <flags>upload <item> <file>")
-			return
+			os.Exit(1)
 		}
-		doUpload(args[1], args[2])
+		os.Exit(doUpload(args[1], args[2]))
 	case "ls":
 		if len(args) != 2 {
 			fmt.Println("Usage: bclient <flags> ls <item> ")
-			return
+			os.Exit(1)
 		}
-		doLs(args[1])
+		os.Exit(doLs(args[1]))
 	case "get":
 		if *stub {
-			doGetStub(args[1])
-			return
+			os.Exit(doGetStub(args[1]))
 		}
-		doGet(args[1], args[2:])
+		os.Exit(doGet(args[1], args[2:]))
 	case "history":
 		if len(args) != 2 {
 			fmt.Println("Usage: bclient <flags> history <item> ")
-			return
+			os.Exit(1)
 		}
-		doHistory(args[1])
+		os.Exit(doHistory(args[1]))
 	default:
 		fmt.Println(Usage)
+		os.Exit(1)
 	}
 
 }
 
-func doUpload(item string, files string) {
+func doUpload(item string, files string) int {
 
 	filesToSend := make(chan string)
 	var upLoadDone sync.WaitGroup
@@ -153,7 +156,7 @@ func doUpload(item string, files string) {
 		fileLists.PrintLocalList()
 	}
 
-	// If GetItemInfo returns ErrNotFound it's anew item- upload whole local list
+	// If GetItemInfo returns ErrNotFound it's a new item- upload whole local list
 	// If GetItemInfo returns other error, bendo unvavailable for upload- abort!
 	// default: build remote filelist of returned json, diff against local list, upload remainder
 
@@ -162,7 +165,7 @@ func doUpload(item string, files string) {
 		break
 	case jsonFetchErr != nil:
 		fmt.Println(jsonFetchErr)
-		return
+		return 1
 	default:
 		fileLists.BuildRemoteList(json)
 
@@ -184,7 +187,7 @@ func doUpload(item string, files string) {
 
 	if fileLists.IsLocalListEmpty() {
 		fmt.Printf("Nothing to do:\nThe vesions of All Files given for upload in item %s\nare already present on the server\n", item)
-		return
+		return 0
 	}
 
 	if *verbose {
@@ -198,7 +201,12 @@ func doUpload(item string, files string) {
 	//Spin off desire number of upload workers
 	for cnt := int(0); cnt < *numuploaders; cnt++ {
 		go func() {
-			thisItem.SendFiles(filesToSend, fileLists)
+			err := thisItem.SendFiles(filesToSend, fileLists)
+			if err != nil {
+				goReturnMutex.Lock()
+				goReturn = 1
+				goReturnMutex.Unlock()
+			}
 			sendFileDone.Done()
 		}()
 	}
@@ -208,12 +216,17 @@ func doUpload(item string, files string) {
 	// wait for all file chunks to be uploaded
 	sendFileDone.Wait()
 
+	// If a file upload failed, return an error to main
+	if goReturn == 1 {
+		return 1
+	}
+
 	// chunks uploaded- submit trnsaction to add FileIDs to item
 	transaction, transErr := thisItem.SendNewTransactionRequest()
 
 	if transErr != nil {
 		fmt.Println(transErr)
-		return
+		return 1
 	}
 
 	if *verbose {
@@ -223,12 +236,14 @@ func doUpload(item string, files string) {
 	if *wait {
 		thisItem.WaitForCommitFinish(transaction)
 	}
+
+	return 0
 }
 
 //  doGet , given only an item, returns all the files in that item.
 //  Given one or more files in the item, it returns only them
 
-func doGet(item string, files []string) {
+func doGet(item string, files []string) int {
 	var json *jason.Object
 	var jsonFetchErr error
 	filesToGet := make(chan string)
@@ -242,7 +257,7 @@ func doGet(item string, files []string) {
 	if err == nil {
 		// file already exists
 		fmt.Printf("Error: target %s already exists", pathPrefix)
-		return
+		return 1
 	}
 
 	// set up communication to the bendo server, and init local and remote filelists
@@ -258,10 +273,10 @@ func doGet(item string, files []string) {
 	switch {
 	case jsonFetchErr == bclientapi.ErrNotFound:
 		fmt.Printf("\n Item %s was not found on server %s\n", item, *server)
-		return
+		return 1
 	case jsonFetchErr != nil:
 		fmt.Println(jsonFetchErr)
-		return
+		return 1
 	}
 
 	// if item only, get all of the files; otherwise, only those asked for
@@ -281,20 +296,31 @@ func doGet(item string, files []string) {
 	//Spin off desire number of upload workers
 	for cnt := int(0); cnt < *numuploaders; cnt++ {
 		go func() {
-			thisItem.GetFiles(filesToGet, pathPrefix)
+			err := thisItem.GetFiles(filesToGet, pathPrefix)
+			if err != nil {
+				goReturnMutex.Lock()
+				goReturn = 1
+				goReturnMutex.Unlock()
+			}
 			getFileDone.Done()
 		}()
 	}
 
 	fileLists.QueueFiles(filesToGet)
 
-	// wait for all file chunks to be uploaded
 	getFileDone.Wait()
+
+	// If a file upload failed, return an error to main
+	if goReturn == 1 {
+		return 1
+	}
+
+	return 0
 }
 
 // doGetStub builds an empty skeleton of an item, with zero length files
 
-func doGetStub(item string) {
+func doGetStub(item string) int {
 	var json *jason.Object
 	var jsonFetchErr error
 
@@ -306,7 +332,7 @@ func doGetStub(item string) {
 	if err == nil {
 		// file already exists
 		fmt.Printf("Error: target %s already exists", pathPrefix)
-		return
+		return 1
 	}
 
 	// fetch info about this item from the bendo server
@@ -323,12 +349,15 @@ func doGetStub(item string) {
 		fmt.Printf("\n Item %s was not found on server %s\n", item, *server)
 	case jsonFetchErr != nil:
 		fmt.Println(jsonFetchErr)
+		return 1
 	default:
 		fileutil.MakeStubFromJSON(json, item, pathPrefix)
 	}
+
+	return 0
 }
 
-func doHistory(item string) {
+func doHistory(item string) int {
 
 	var json *jason.Object
 	var jsonFetchErr error
@@ -341,15 +370,19 @@ func doHistory(item string) {
 	switch {
 	case jsonFetchErr == bclientapi.ErrNotFound:
 		fmt.Printf("\n Item %s was not found on server %s\n", item, *server)
+		return 0
 	case jsonFetchErr != nil:
 		fmt.Println(jsonFetchErr)
+		return 1
 	default:
 		fileutil.PrintListFromJSON(json)
 	}
 
+	return 0
+
 }
 
-func doLs(item string) {
+func doLs(item string) int {
 
 	var json *jason.Object
 	var jsonFetchErr error
@@ -364,7 +397,10 @@ func doLs(item string) {
 		fmt.Printf("\n Item %s was not found on server %s\n", item, *server)
 	case jsonFetchErr != nil:
 		fmt.Println(jsonFetchErr)
+		return 1
 	default:
 		fileutil.PrintLsFromJSON(json, *version, *longV, *blobs, item)
 	}
+
+	return 0
 }
