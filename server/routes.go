@@ -178,6 +178,9 @@ func (s *RESTServer) Run() error {
 	log.Println("Scanning Upload Queue")
 	s.FileStore.Load()
 
+	log.Println("Starting Transaction Cleaner")
+	s.StartTxCleaner()
+
 	log.Println("Starting pending transactions")
 	s.txgate = util.NewGate(MaxConcurrentCommits)
 	go s.initCommitQueue()
