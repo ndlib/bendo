@@ -2,6 +2,7 @@ package bclientapi
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/ndlib/bendo/fileutil"
 	"path"
@@ -62,7 +63,7 @@ func New(server string, item string, fileroot string, chunkSize int, wait bool) 
 // serve the file queue. This is called from main as 1 or more goroutines
 // If the file Upload fails, close the channel and exit
 
-func (ia *itemAttributes) SendFiles(fileQueue chan string, ld *fileutil.ListData) {
+func (ia *itemAttributes) SendFiles(fileQueue chan string, ld *fileutil.ListData) error {
 
 	for filename := range fileQueue {
 
@@ -86,23 +87,28 @@ func (ia *itemAttributes) SendFiles(fileQueue chan string, ld *fileutil.ListData
 		if err != nil {
 			fmt.Println(err)
 			close(fileQueue)
+			return err
 		}
 	}
+
+	return nil
 }
 
 // serve file requests from the server for  a get
 // If the file Get fails, close the channel and exit
 
-func (ia *itemAttributes) GetFiles(fileQueue chan string, pathPrefix string) {
+func (ia *itemAttributes) GetFiles(fileQueue chan string, pathPrefix string) error {
 
 	for filename := range fileQueue {
 		err := ia.downLoad(filename, pathPrefix)
 
 		if err != nil {
 			fmt.Printf("Error: GetFile return %s\n", err.Error())
-			break
+			return err
 		}
 	}
+
+	return nil
 }
 
 func (ia *itemAttributes) uploadFile(filename string, uploadMd5 []byte) error {
@@ -160,7 +166,7 @@ func (ia *itemAttributes) SendNewTransactionRequest() (string, error) {
 	return transaction, transErr
 }
 
-func (ia *itemAttributes) WaitForCommitFinish(tx string) {
+func (ia *itemAttributes) WaitForCommitFinish(tx string) error {
 
 	seconds := 5
 
@@ -172,7 +178,7 @@ func (ia *itemAttributes) WaitForCommitFinish(tx string) {
 
 		if err != nil {
 			fmt.Println(err.Error())
-			break
+			return err
 		}
 
 		name, _ := v.GetString("Status")
@@ -184,9 +190,11 @@ func (ia *itemAttributes) WaitForCommitFinish(tx string) {
 
 		if name == "StatusError" {
 			fmt.Printf("\nError\n")
-			break
+			return errors.New("StatusError returned")
 		}
 
 		seconds += 5
 	}
+
+	return nil
 }
