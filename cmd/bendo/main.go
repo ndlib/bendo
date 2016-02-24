@@ -38,7 +38,7 @@ func main() {
 		}
 	} else {
 		log.Printf("No user token file specified")
-		validator = server.NewNobodyValidator()
+		validator = server.NobodyValidator{}
 	}
 	if *cacheDir != "" {
 		os.MkdirAll(*cacheDir, 0755)

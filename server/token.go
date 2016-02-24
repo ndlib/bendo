@@ -47,23 +47,19 @@ func AtoRole(s string) Role {
 	}
 }
 
-// NewNobodyValidator creates a TokenValidator that for every possible token
+// A NobodyValidator is a TokenValidator that for every possible token
 // returns a user named "nobody" with the Admin role.
-func NewNobodyValidator() TokenValidator { return new(nobodyValidator) }
+type NobodyValidator struct{}
 
-type nobodyValidator struct{}
-
-func (nobodyValidator) TokenValid(token string) (string, Role, error) {
+func (NobodyValidator) TokenValid(token string) (string, Role, error) {
 	return "nobody", RoleAdmin, nil
 }
 
-// NewInvalidValidator creates a TokenValidator that for which every token is
+// An InvalidValidator is a TokenValidator for which every token is
 // invalid. That is, it always returns the user "" with the Unknown role.
-func NewInvalidValidator() TokenValidator { return new(invalidValidator) }
+type InvalidValidator struct{}
 
-type invalidValidator struct{}
-
-func (invalidValidator) TokenValid(token string) (string, Role, error) {
+func (InvalidValidator) TokenValid(token string) (string, Role, error) {
 	return "", RoleUnknown, nil
 }
 

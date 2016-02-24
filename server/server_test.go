@@ -234,7 +234,7 @@ var testServer *httptest.Server
 
 func init() {
 	server := &RESTServer{
-		Validator: NewNobodyValidator(),
+		Validator: NobodyValidator{},
 		Items:     items.New(store.NewMemory()),
 		TxStore:   transaction.New(store.NewMemory()),
 		FileStore: fragment.New(store.NewMemory()),

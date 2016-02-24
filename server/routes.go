@@ -100,7 +100,7 @@ func (s *RESTServer) Run() error {
 
 	if s.Validator == nil {
 		log.Println("No Validator given")
-		s.Validator = NewNobodyValidator()
+		s.Validator = NobodyValidator{}
 	}
 
 	// init database
