@@ -31,6 +31,7 @@ type itemAttributes struct {
 	bendoServer string
 	chunkSize   int
 	wait        bool
+	token       string
 }
 
 func addFileToTransactionList(filename string, fileID string, item string, isNew bool) {
@@ -48,7 +49,7 @@ func addFileToTransactionList(filename string, fileID string, item string, isNew
 	fileIDMutex.Unlock()
 }
 
-func New(server string, item string, fileroot string, chunkSize int, wait bool) *itemAttributes {
+func New(server string, item string, fileroot string, chunkSize int, wait bool, token string) *itemAttributes {
 
 	thisItem := new(itemAttributes)
 	thisItem.bendoServer = server
@@ -56,6 +57,7 @@ func New(server string, item string, fileroot string, chunkSize int, wait bool) 
 	thisItem.chunkSize = chunkSize
 	thisItem.fileroot = fileroot
 	thisItem.wait = wait
+	thisItem.token = token
 
 	return thisItem
 }
