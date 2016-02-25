@@ -15,6 +15,12 @@ $repo = "github.com/ndlib/bendo"
 
 $bendo_cache_dir = hiera("bendo_cache_dir")
 $bendo_storage_dir = hiera("bendo_storage_dir")
+$bendo_mysql_db = hiera("bendo_mysql_db")
+$bendo_mysql_server = hiera("bendo_mysql_server")
+$bendo_mysql_user = hiera("bendo_mysql_user")
+$bendo_mysql_password = hiera("bendo_mysql_password")
+$env = hiera("env")
+$mysql_root_password = hiera("mysql_root_password")
 
 # Go Packages -  refactor into lib_go?
 
@@ -56,6 +62,21 @@ $bendo_storage_dir = hiera("bendo_storage_dir")
 		group => "app",
 		require => Class[['lib_runit','lib_go::build']],
 	} 
+
+# Create Bendo mysql database
+
+	if $env == "staging" {
+		class { 'mysql::server':
+			root_password => "$mysql_root_password",
+		}
+        	mysql::db { "$bendo_mysql_db":
+        		user =>	 "$bendo_mysql_user",
+        		password => "$bendo_mysql_password",
+        		host => "$bendo_mysql_server",
+        		grant => ['all'],
+			require => Class["mysql::server"],
+     		}
+       }
 
 # make exec and log files for runit
 
