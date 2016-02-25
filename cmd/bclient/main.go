@@ -22,7 +22,7 @@ var (
 	fileroot     = flag.String("root", ".", "root prefix to upload files")
 	server       = flag.String("server", "libvirt9.library.nd.edu:14000", "Bendo Server to Use")
 	creator      = flag.String("bclient", "butil", "Creator name to use")
-	token      = flag.String("token", "", "API authentication token")
+	token        = flag.String("token", "", "API authentication token")
 	longV        = flag.Bool("longV", false, "Print  Long Version")
 	blobs        = flag.Bool("blobs", false, "Show Blobs Instead of Files")
 	verbose      = flag.Bool("v", false, "Display more information")
