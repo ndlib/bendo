@@ -23,7 +23,11 @@ var (
 func (ia *itemAttributes) GetItemInfo() (*jason.Object, error) {
 	var path = "http://" + ia.bendoServer + "/item/" + ia.item
 
-	r, err := http.Get(path)
+	req, _ := http.NewRequest("GET", path, nil)
+        if ia.token != "" { req.Header.Add("X-Api-Key", ia.token) }
+        r, err := http.DefaultClient.Do(req)
+
+        defer r.Body.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +51,11 @@ func (ia *itemAttributes) GetItemInfo() (*jason.Object, error) {
 func (ia *itemAttributes) downLoad(fileName string, pathPrefix string) error {
 	var httpPath = "http://" + ia.bendoServer + "/item/" + ia.item + "/" + fileName
 
-	r, err := http.Get(httpPath)
+    	req, _ := http.NewRequest("GET", httpPath, nil)
+        if ia.token != "" { req.Header.Add("X-Api-Key", ia.token) }
+        r, err := http.DefaultClient.Do(req)
+
+        defer r.Body.Close()
 	if err != nil {
 		return err
 	}
@@ -104,6 +112,7 @@ func (ia *itemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5su
 
 	req, _ := http.NewRequest("POST", path, bytes.NewReader(chunk))
 	req.Header.Set("X-Upload-Md5", hex.EncodeToString(chunkmd5sum))
+        if ia.token != "" { req.Header.Add("X-Api-Key", ia.token) }
 	resp, err := http.DefaultClient.Do(req)
 
 	defer resp.Body.Close()
@@ -136,6 +145,7 @@ func (ia *itemAttributes) createFileTransAction(cmdlist []byte) (string, error) 
 	)
 
 	req, _ := http.NewRequest("POST", path+location, bytes.NewReader(cmdlist))
+        if ia.token != "" { req.Header.Add("X-Api-Key", ia.token) }
 	resp, err := http.DefaultClient.Do(req)
 
 	defer resp.Body.Close()
@@ -163,6 +173,7 @@ func (ia *itemAttributes) getTransactionStatus(transaction string) (*jason.Objec
 	}
 
 	req.Header.Set("Accept-Encoding", "application/json")
+        if ia.token != "" { req.Header.Add("X-Api-Key", ia.token) }
 
 	resp, err := http.DefaultClient.Do(req)
 	defer resp.Body.Close()

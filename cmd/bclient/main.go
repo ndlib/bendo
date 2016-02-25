@@ -22,6 +22,7 @@ var (
 	fileroot     = flag.String("root", ".", "root prefix to upload files")
 	server       = flag.String("server", "libvirt9.library.nd.edu:14000", "Bendo Server to Use")
 	creator      = flag.String("bclient", "butil", "Creator name to use")
+	token      = flag.String("token", "", "API authentication token")
 	longV        = flag.Bool("longV", false, "Print  Long Version")
 	blobs        = flag.Bool("blobs", false, "Show Blobs Instead of Files")
 	verbose      = flag.Bool("v", false, "Display more information")
@@ -49,6 +50,7 @@ Available actions:
     -server   (defaults to bendo-staging.library.nd.edu:14000) server_name:port of bendo server
     -numuploaders (defaults to 2) number of concurrent upload/download threads
     -version ( defaults to latest version: ls & get actions) desired version number
+    -token   ( no default ) API Authentication Token to be passed to the Bendo server
 
     upload Flags:
 
@@ -124,7 +126,7 @@ func doUpload(item string, files string) int {
 	var json *jason.Object
 	var jsonFetchErr error
 
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait)
+	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait, *token)
 	fileLists := fileutil.NewLists(*fileroot)
 
 	// Set up Barrier for 3 goroutines below
@@ -262,7 +264,7 @@ func doGet(item string, files []string) int {
 
 	// set up communication to the bendo server, and init local and remote filelists
 
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait)
+	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait, *token)
 	fileLists := fileutil.NewLists(*fileroot)
 
 	// Fetch Item Info from bclientapi
@@ -337,7 +339,7 @@ func doGetStub(item string) int {
 
 	// fetch info about this item from the bendo server
 
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait)
+	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait, *token)
 
 	// Fetch Item Info from bclientapi
 	json, jsonFetchErr = thisItem.GetItemInfo()
@@ -362,7 +364,7 @@ func doHistory(item string) int {
 	var json *jason.Object
 	var jsonFetchErr error
 
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait)
+	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait, *token)
 
 	// Fetch Item Info from bclientapi
 	json, jsonFetchErr = thisItem.GetItemInfo()
@@ -387,7 +389,7 @@ func doLs(item string) int {
 	var json *jason.Object
 	var jsonFetchErr error
 
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait)
+	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait, *token)
 
 	// Fetch Item Info from bclientapi
 	json, jsonFetchErr = thisItem.GetItemInfo()
