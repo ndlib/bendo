@@ -176,7 +176,7 @@ func TestDeleteBlob(t *testing.T) {
 	}
 
 	// is the 10th blob readable?
-	rc, err := s.Blob("abc", 10)
+	rc, _, err := s.Blob("abc", 10)
 	if err != nil {
 		t.Errorf("Received %s, expected nil", err.Error())
 	}
@@ -188,7 +188,7 @@ func TestDeleteBlob(t *testing.T) {
 	}
 
 	// is the 1st blob deleted?
-	_, err = s.Blob("abc", 1)
+	_, _, err = s.Blob("abc", 1)
 	if err == nil {
 		t.Errorf("Received nil, expected error")
 	}

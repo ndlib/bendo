@@ -55,7 +55,7 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 
 func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, bid items.BlobID) {
 	key := fmt.Sprintf("%s+%04d", id, bid)
-	cacheContents, _, err := s.Cache.Get(key)
+	cacheContents, length, err := s.Cache.Get(key)
 	if err != nil {
 		w.WriteHeader(500)
 		fmt.Fprintln(w, err)
@@ -70,7 +70,8 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 	} else {
 		// cache miss...load from main store, AND put into cache
 		log.Printf("Cache Miss %s", key)
-		realContents, err := s.Items.Blob(id, bid)
+		realContents, l, err := s.Items.Blob(id, bid)
+		length = l // use l so we don't redeclare length in this scope
 		if err != nil {
 			w.WriteHeader(404)
 			fmt.Fprintln(w, err)
@@ -87,7 +88,7 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 				return
 			}
 			defer cw.Close()
-			cr, err := s.Items.Blob(id, bid)
+			cr, _, err := s.Items.Blob(id, bid)
 			if err != nil {
 				log.Printf("cache items get %s: %s", key, err.Error())
 				return
@@ -97,6 +98,7 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 		}()
 	}
 	w.Header().Set("ETag", fmt.Sprintf("%d", bid))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", length))
 	n, err := io.Copy(w, src)
 	if err != nil {
 		log.Printf("getblob (%s,%d) %d,%s", id, bid, n, err.Error())
