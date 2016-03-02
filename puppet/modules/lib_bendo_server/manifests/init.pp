@@ -21,6 +21,7 @@ $bendo_mysql_user = hiera("bendo_mysql_user")
 $bendo_mysql_password = hiera("bendo_mysql_password")
 $env = hiera("env")
 $mysql_root_password = hiera("mysql_root_password")
+$bendo_tokens = hiera_array("bendo_tokens")
 
 # Go Packages -  refactor into lib_go?
 
@@ -101,6 +102,17 @@ $mysql_root_password = hiera("mysql_root_password")
                 require => File['bendorunitexec'],
 	}
 
+# create token file for bendo authentication
+#
+	file { "bendo_tokens":
+		name => "${bendo_root}/tokens", 
+		owner => "app",
+		group => "app",
+		replace => true,
+		mode => '0444',
+		content => template('lib_bendo_server/bendo.tokens.erb')
+	}
+
 # Enable the Service ( leave this out until app can run /sbin/sv ) 
 
 	service { 'bendo':
@@ -113,7 +125,7 @@ $mysql_root_password = hiera("mysql_root_password")
 		start => '/sbin/sv start bendo',
 		stop => '/sbin/sv stop bendo',
 		status => '/sbin/sv status bendo',
-		require => File['bendorunitlog'],
+		require => File[['bendorunitlog', 'bendo_tokens']],
 	}
 
 }
