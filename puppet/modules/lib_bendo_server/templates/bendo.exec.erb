@@ -1,4 +1,4 @@
 #!/bin/bash
 
 exec 2>&1
-exec /sbin/chpst -u app <%= @bendo_root %>/gocode/bin/bendo -storage <%= @bendo_storage_dir %> --cache-dir <%= @bendo_cache_dir %> --mysql <%= @bendo_mysql_user %>:<%= @bendo_mysql_password %>@tcp\(<%= @bendo_mysql_server %>:3306\)/<%= @bendo_mysql_db %>
+exec /sbin/chpst -u app <%= @bendo_root %>/gocode/bin/bendo -storage <%= @bendo_storage_dir %> --cache-dir <%= @bendo_cache_dir %> --mysql <%= @bendo_mysql_user %>:<%= @bendo_mysql_password %>@tcp\(<%= @bendo_mysql_server %>:3306\)/<%= @bendo_mysql_db %> -token <%= @bendo_root %>/tokens
