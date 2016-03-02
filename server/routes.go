@@ -241,9 +241,9 @@ func (s *RESTServer) addRoutes() http.Handler {
 	}{
 		{"GET", "/blob/:id/:bid", RoleRead, s.BlobHandler},
 		{"HEAD", "/blob/:id/:bid", RoleRead, s.BlobHandler},
-		{"GET", "/item/:id/*slot", RoleRead, s.SlotHandler},
-		{"HEAD", "/item/:id/*slot", RoleRead, s.SlotHandler},
-		{"GET", "/item/:id", RoleMDOnly, s.ItemHandler},
+		{"GET", "/item/:id/*slot", RoleUnknown, s.SlotHandler},
+		{"HEAD", "/item/:id/*slot", RoleUnknown, s.SlotHandler},
+		{"GET", "/item/:id", RoleUnknown, s.ItemHandler},
 
 		// all the transaction things.
 		{"POST", "/item/:id/transaction", RoleWrite, s.NewTxHandler},
