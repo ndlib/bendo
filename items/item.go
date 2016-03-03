@@ -135,25 +135,27 @@ func (s *Store) findMaxBundle(id string) int {
 	return max
 }
 
-// Blob returns an io.ReadCloser containing the given blob's contents.
+// Blob returns an io.ReadCloser containing the given blob's contents and
+// the blob's size.
 // It will block until the item and blob are loaded from the backing store.
 //
 // TODO: perhaps this should be moved to be a method on an Item*
-func (s *Store) Blob(id string, bid BlobID) (io.ReadCloser, error) {
+func (s *Store) Blob(id string, bid BlobID) (io.ReadCloser, int64, error) {
 	item, err := s.Item(id)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	b := item.blobByID(bid)
 	if b == nil {
-		return nil, fmt.Errorf("No blob (%s, %d)", id, bid)
+		return nil, 0, fmt.Errorf("No blob (%s, %d)", id, bid)
 	}
 	if b.Bundle == 0 {
 		// blob has been deleted
-		return nil, fmt.Errorf("Blob has been deleted")
+		return nil, 0, fmt.Errorf("Blob has been deleted")
 	}
 	sname := fmt.Sprintf("blob/%d", bid)
-	return OpenBundleStream(s.S, sugar(id, b.Bundle), sname)
+	stream, err := OpenBundleStream(s.S, sugar(id, b.Bundle), sname)
+	return stream, b.Size, err
 }
 
 func (item Item) blobByID(id BlobID) *Blob {

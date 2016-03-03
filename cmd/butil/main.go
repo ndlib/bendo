@@ -69,7 +69,7 @@ func main() {
 func doblob(r *items.Store, id, blob string) {
 	bid, _ := strconv.Atoi(blob)
 
-	rc, err := r.Blob(id, items.BlobID(bid))
+	rc, _, err := r.Blob(id, items.BlobID(bid))
 	if err != nil {
 		fmt.Printf("%s / %d: Error %s\n", id, bid, err.Error())
 	} else {
