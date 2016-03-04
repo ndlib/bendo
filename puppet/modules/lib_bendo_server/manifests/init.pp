@@ -115,7 +115,7 @@ $bendo_tokens = hiera_array("bendo_tokens")
 	}
 
 	class { 'lib_runit::add':
-		service => "bendo",
+		service_name => "bendo",
 		service_path => "/etc/sv/bendo",
 		require => File[['bendorunitlog', 'bendo_tokens']],
 	}
