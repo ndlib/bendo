@@ -14,6 +14,7 @@ $repo = "github.com/ndlib/bendo"
 # hiera config for runit run scripts
 
 $bendo_cache_dir = hiera("bendo_cache_dir")
+$bendo_cache_size = hiera("bendo_cache_size")
 $bendo_storage_dir = hiera("bendo_storage_dir")
 $bendo_mysql_db = hiera("bendo_mysql_db")
 $bendo_mysql_server = hiera("bendo_mysql_server")
@@ -113,6 +114,12 @@ $bendo_tokens = hiera_array("bendo_tokens")
 		content => template('lib_bendo_server/bendo.tokens.erb')
 	}
 
+	class { 'lib_runit::add':
+		service_name => "bendo",
+		service_path => "/etc/sv/bendo",
+		require => File[['bendorunitlog', 'bendo_tokens']],
+	}
+
 # Enable the Service ( leave this out until app can run /sbin/sv ) 
 
 	service { 'bendo':
@@ -125,7 +132,7 @@ $bendo_tokens = hiera_array("bendo_tokens")
 		start => '/sbin/sv start bendo',
 		stop => '/sbin/sv stop bendo',
 		status => '/sbin/sv status bendo',
-		require => File[['bendorunitlog', 'bendo_tokens']],
+		require => Class['lib_runit::add'],
 	}
 
 }
