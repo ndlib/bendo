@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/ndlib/bendo/fileutil"
 	"path"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/ndlib/bendo/fileutil"
+	"github.com/ndlib/bendo/transaction"
 )
 
 var (
@@ -169,34 +171,41 @@ func (ia *itemAttributes) SendNewTransactionRequest() (string, error) {
 }
 
 func (ia *itemAttributes) WaitForCommitFinish(tx string) error {
+	delay := 5 * time.Second
+	txid := path.Base(tx)
 
-	seconds := 5
+	fmt.Printf("Waiting on %s:", txid)
 
-	for {
+	// This gives bendo about 12 hours to finish this transaction
+	// length of time in seconds = 5 * (131) * (131+1) / 2
+	for i := 0; i < 131; i++ {
+		var status int64
+
 		fmt.Printf(".")
-		time.Sleep(time.Second * time.Duration(seconds))
+		time.Sleep(delay)
 
-		v, err := ia.getTransactionStatus(path.Base(tx))
+		v, err := ia.getTransactionStatus(txid)
+
+		if err == nil {
+			status, err = v.GetInt64("Status")
+		}
 
 		if err != nil {
 			fmt.Println(err.Error())
 			return err
 		}
 
-		name, _ := v.GetString("Status")
-
-		if name == "StatusFinished" {
+		switch transaction.Status(status) {
+		case transaction.StatusFinished:
 			fmt.Printf("\nFinished\n")
-			break
-		}
-
-		if name == "StatusError" {
+			return nil
+		case transaction.StatusError:
 			fmt.Printf("\nError\n")
 			return errors.New("StatusError returned")
 		}
 
-		seconds += 5
+		delay += 5 * time.Second
 	}
-
-	return nil
+	fmt.Printf("\nTimeout\n")
+	return errors.New("timeout")
 }
