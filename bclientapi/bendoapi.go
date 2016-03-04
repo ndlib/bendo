@@ -28,13 +28,11 @@ func (ia *itemAttributes) GetItemInfo() (*jason.Object, error) {
 		req.Header.Add("X-Api-Key", ia.token)
 	}
 	r, err := http.DefaultClient.Do(req)
-
-	defer r.Body.Close()
 	if err != nil {
 		return nil, err
 	}
+	defer r.Body.Close()
 	if r.StatusCode != 200 {
-		r.Body.Close()
 		switch r.StatusCode {
 		case 404:
 			return nil, ErrNotFound
