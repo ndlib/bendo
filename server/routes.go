@@ -110,6 +110,7 @@ func (s *RESTServer) Run() error {
 	}
 	var err error
 	if s.MySQL != "" {
+		log.Printf("Using MySQL")
 		db, err = NewMysqlCache(s.MySQL)
 	} else {
 		var path string
@@ -118,6 +119,7 @@ func (s *RESTServer) Run() error {
 		} else {
 			path = "memory"
 		}
+		log.Printf("Using internal database at %s", path)
 		db, err = NewQlCache(path)
 	}
 	if db == nil || err != nil {
