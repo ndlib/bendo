@@ -97,9 +97,11 @@ func (s *RESTServer) fixity() {
 		d := time.Now().Sub(starttime)
 		log.Println("Fixity for", id, "is", status, "duration = ", d)
 		err = s.Fixity.UpdateFixity(id, status, notes)
+
 		xFixityItemsChecked.Add(1)
 		xFixityBytesChecked.Add(nbytes)
 		xFixityDuration.Add(d.Seconds())
+
 		// schedule the next check unless one is already scheduled
 		when, _ := s.Fixity.LookupCheck(id)
 		if when.IsZero() {

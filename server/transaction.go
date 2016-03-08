@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"expvar"
 	"fmt"
 	"html/template"
 	"log"
@@ -142,26 +143,32 @@ func (s *RESTServer) processCommit(tx *transaction.T) {
 	}
 	duration := time.Now().Sub(start)
 	log.Printf("Finish transaction %s on %s (%s)", tx.ID, tx.ItemID, duration.String())
+
+	xTransactionTime.Add(duration.Seconds())
+	xTransactionCount.Add(1)
 }
 
-// StartTxCleaner will spawn a background goroutine to remove old transactions.
-// That means any finished transactions which are older than a few days. Both
-// the transaction and any uploaded files referenced by the transaction are
-// deleted.
-func (s *RESTServer) StartTxCleaner() {
-	go func() {
-		for {
-			err := s.transactionCleaner()
-			if err == nil {
-				err = s.fileCleaner()
-			}
-			if err != nil {
-				log.Println("TxCleaner:", err)
-			}
-			// wait for a while before beginning again
-			time.Sleep(12 * time.Hour) // duration is arbitrary
+var (
+	xTransactionCount = expvar.NewInt("tx.count")
+	xTransactionTime  = expvar.NewFloat("tx.seconds")
+)
+
+// TxCleaner will loop forever removing old transactions and old orphened
+// uploaded files. That means any finished transactions which are older than a
+// few days. Both the transaction and any uploaded files referenced by the
+// transaction are deleted. This function will never return.
+func (s *RESTServer) TxCleaner() {
+	for {
+		err := s.transactionCleaner()
+		if err == nil {
+			err = s.fileCleaner()
 		}
-	}()
+		if err != nil {
+			log.Println("TxCleaner:", err)
+		}
+		// wait for a while before beginning again
+		time.Sleep(12 * time.Hour) // duration is arbitrary
+	}
 }
 
 // transactionCleaner will go through all finished transactions (i.e. in either

@@ -182,7 +182,7 @@ func (s *RESTServer) Run() error {
 	s.FileStore.Load()
 
 	log.Println("Starting Transaction Cleaner")
-	s.StartTxCleaner()
+	go s.TxCleaner()
 
 	log.Println("Starting pending transactions")
 	s.txgate = util.NewGate(MaxConcurrentCommits)
