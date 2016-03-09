@@ -115,6 +115,8 @@ func (ia *itemAttributes) GetFiles(fileQueue chan string, pathPrefix string) err
 	return nil
 }
 
+// upload the give file to the bendo server
+
 func (ia *itemAttributes) uploadFile(filename string, uploadMd5 []byte) error {
 
 	// upload chunks buffer size is 1MB * cmd line flag chunksize

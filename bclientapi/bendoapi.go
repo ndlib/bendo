@@ -21,12 +21,46 @@ var (
 )
 
 func (ia *itemAttributes) GetItemInfo() (*jason.Object, error) {
+
 	var path = "http://" + ia.bendoServer + "/item/" + ia.item
 
 	req, _ := http.NewRequest("GET", path, nil)
 	if ia.token != "" {
 		req.Header.Add("X-Api-Key", ia.token)
 	}
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Body.Close()
+	if r.StatusCode != 200 {
+		switch r.StatusCode {
+		case 404:
+			return nil, ErrNotFound
+		case 401:
+			return nil, ErrNotAuthorized
+		default:
+			return nil, fmt.Errorf("Received status %d from Bendo", r.StatusCode)
+		}
+	}
+
+	v, err := jason.NewObjectFromReader(r.Body)
+
+	return v, err
+}
+
+// get upload metadata (if it exists) . Assumes that the upload fileid is item#-filemd5sum
+// returns json of metadata if successful, error otherwise
+
+func (ia *itemAttributes) getUploadMeta(fileId string) (*jason.Object, error) {
+
+	var path = "http://" + ia.bendoServer + "/upload/" + fileId + "/metadata"
+
+	req, _ := http.NewRequest("GET", path, nil)
+	if ia.token != "" {
+		req.Header.Add("X-Api-Key", ia.token)
+	}
+	req.Header.Add("Accept-Encoding", "application/json")
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -104,13 +138,7 @@ func (ia *itemAttributes) downLoad(fileName string, pathPrefix string) error {
 
 func (ia *itemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []byte, fileId string) (fileid string, err error) {
 
-	var path = "http://" + ia.bendoServer
-
-	if fileId != BogusFileId {
-		path += fileId
-	} else {
-		path += "/upload"
-	}
+	var path = "http://" + ia.bendoServer + "/upload/" + fileId
 
 	req, _ := http.NewRequest("POST", path, bytes.NewReader(chunk))
 	req.Header.Set("X-Upload-Md5", hex.EncodeToString(chunkmd5sum))
@@ -129,14 +157,7 @@ func (ia *itemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5su
 		return fileId, nil
 	}
 
-	route := resp.Header.Get("Location")
-
-	if route == "" {
-		fmt.Printf("No Location returned on POST: %s", route)
-		return fileId, err
-	}
-
-	return route, nil
+	return fileId, nil
 }
 
 // Not well named - sets a POST /item/:id/transaction
