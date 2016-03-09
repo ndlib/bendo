@@ -2,6 +2,7 @@ package bclientapi
 
 import (
 	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,20 @@ const BogusFileId string = ""
 
 func (ia *itemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, fileChunkSize int) (string, error) {
 
+	// check to see if metadata exists for this fileId
+	// if so, get size of data already uploaded
+
+	var fileId string = ia.item + "-" + hex.EncodeToString(srcFileMd5)
+	var offset int64
+
+	json, error := ia.getUploadMeta(fileId)
+
+	if error != nil {
+		offset = 0
+	} else {
+		offset, _ = json.GetInt64("Size")
+	}
+
 	sourceFile, err := os.Open(path.Join(ia.fileroot, srcFile))
 
 	if err != nil {
@@ -21,6 +36,13 @@ func (ia *itemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, file
 	}
 
 	defer sourceFile.Close()
+
+	_, err2 := sourceFile.Seek(offset, 0)
+
+	if err2 != nil {
+		fmt.Println(err2)
+		os.Exit(1)
+	}
 
 	// Get the file size from the file status
 
@@ -35,11 +57,9 @@ func (ia *itemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, file
 
 	chunk := make([]byte, fileChunkSize)
 
-	var fileId string = BogusFileId
-
 	start := time.Now()
 
-	fmt.Printf("Start Upload of %s/%s, size %d, chunkSize %d at %s\n", ia.item, srcFile, fileSize, fileChunkSize, start.String())
+	fmt.Printf("Start Upload of %s/%s at offset %d, size %d, chunkSize %d at %s\n", fileId, srcFile, offset, fileSize, fileChunkSize, start.String())
 
 	// upload the chunk
 
