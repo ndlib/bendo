@@ -79,23 +79,12 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 		}
 		defer realContents.Close()
 		src = realContents
-		// copy into the cache in the background
-		// TODO(dbrower): don't cache if blob is too large, say >= 50 GB?
-		go func() {
-			cw, err := s.Cache.Put(key)
-			if err != nil {
-				log.Printf("cache put %s: %s", key, err.Error())
-				return
-			}
-			defer cw.Close()
-			cr, _, err := s.Items.Blob(id, bid)
-			if err != nil {
-				log.Printf("cache items get %s: %s", key, err.Error())
-				return
-			}
-			defer cr.Close()
-			io.Copy(cw, cr)
-		}()
+		// cache this item f it is not too large.
+		// doing 1/8th of the cache size is arbitrary.
+		// not sure what a good cutoff would be.
+		if length < s.Cache.Size()/8 {
+			go s.copyBlobIntoCache(key, id, bid)
+		}
 	}
 	w.Header().Set("ETag", fmt.Sprintf("%d", bid))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", length))
@@ -103,6 +92,43 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 	if err != nil {
 		log.Printf("getblob (%s,%d) %d,%s", id, bid, n, err.Error())
 	}
+}
+
+// copyBlobIntoCache copies the given blob of the item id into s's blobcache
+// under the given key.
+func (s *RESTServer) copyBlobIntoCache(key, id string, bid items.BlobID) {
+	var keepcopy bool
+	// defer this first so it is the last to run at exit.
+	// doing thins since cw needs to be Closed() before we could
+	// possibly Delete it. And defered funcs are run LIFO.
+	defer func() {
+		if !keepcopy {
+			s.Cache.Delete(key)
+		}
+	}()
+	cw, err := s.Cache.Put(key)
+	if err != nil {
+		log.Printf("cache put %s: %s", key, err.Error())
+		keepcopy = true // in case someone else added a copy already
+		return
+	}
+	defer cw.Close()
+	cr, length, err := s.Items.Blob(id, bid)
+	if err != nil {
+		log.Printf("cache items get %s: %s", key, err.Error())
+		return
+	}
+	defer cr.Close()
+	n, err := io.Copy(cw, cr)
+	if err != nil {
+		log.Printf("cache copy %s: %s", key, err.Error())
+		return
+	}
+	if n != length {
+		log.Printf("cache length mismatch: read %d, expected %d", n, length)
+		return
+	}
+	keepcopy = true
 }
 
 // ItemHandler handles requests to GET /item/:id

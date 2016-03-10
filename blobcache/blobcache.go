@@ -20,9 +20,16 @@ import (
 
 // T is the basic blob cache interface.
 type T interface {
-	Contains(id string) bool
-	Get(id string) (store.ReadAtCloser, int64, error)
-	Put(id string) (io.WriteCloser, error)
+	// Is the given key in the cache?
+	Contains(key string) bool
+	// Get content associated with a key from the cache.
+	Get(key string) (store.ReadAtCloser, int64, error)
+	// Add content into the cache
+	Put(key string) (io.WriteCloser, error)
+	// Remove an entry from the cache
+	Delete(key string) error
+	// The maximum size of the cache
+	Size() int64
 }
 
 // A StoreLRU implements a cache using the least recently used (LRU) eviction
@@ -45,7 +52,7 @@ type StoreLRU struct {
 }
 
 type entry struct {
-	id   string
+	key  string
 	size int64
 }
 
@@ -75,15 +82,15 @@ func (t *StoreLRU) Scan() {
 			t.s.Delete(key)
 			continue
 		}
-		t.linkEntry(entry{id: key, size: size})
+		t.linkEntry(entry{key: key, size: size})
 	}
 }
 
 // Contains returns true if the given item is in the cache. It does not
 // update the LRU status, and does not guarantee the item will be in the
 // cache when Get() is called.
-func (t *StoreLRU) Contains(id string) bool {
-	e := t.find(id)
+func (t *StoreLRU) Contains(key string) bool {
+	e := t.find(key)
 	return e != nil
 }
 
@@ -91,8 +98,8 @@ func (t *StoreLRU) Contains(id string) bool {
 // ready to be read. The LRU list is updated. If the item is not in the cache
 // nil is returned for the ReadAtCloser. (NOTE: it is not an error for an item
 // to not be in the cache. Check the ReadAtCloser to see.)
-func (t *StoreLRU) Get(id string) (store.ReadAtCloser, int64, error) {
-	e := t.find(id)
+func (t *StoreLRU) Get(key string) (store.ReadAtCloser, int64, error) {
+	e := t.find(key)
 	if e == nil {
 		return nil, 0, nil
 	}
@@ -101,15 +108,15 @@ func (t *StoreLRU) Get(id string) (store.ReadAtCloser, int64, error) {
 	t.m.Unlock()
 	// TODO(dbrower): see if not found error is returned, and if so unlink
 	// this item from the lru list and unreserve its space.
-	return t.s.Open(id)
+	return t.s.Open(key)
 }
 
-func (t *StoreLRU) find(id string) *list.Element {
+func (t *StoreLRU) find(key string) *list.Element {
 	t.m.RLock()
 	defer t.m.RUnlock()
 	for e := t.lru.Front(); e != nil; e = e.Next() {
 		entry := e.Value.(entry)
-		if entry.id == id {
+		if entry.key == key {
 			return e
 		}
 	}
@@ -117,19 +124,43 @@ func (t *StoreLRU) find(id string) *list.Element {
 }
 
 // Put returns a WriteCloser which saves writes to it in the cache under the
-// provided id key. Items are evicted from the cache as content is written to
+// provided key. Items are evicted from the cache as content is written to
 // the Writer. The item is not formally added to the cache until the Writer is
 // closed.
 //
-// Only one writer to a given id can be active at a time. Subsequent Puts
+// Only one writer to a given key can be active at a time. Subsequent Puts
 // will return an error. Also, once an item is in the cache, Puts for it will
 // return an error (until the item is evicted.)
-func (t *StoreLRU) Put(id string) (io.WriteCloser, error) {
-	w, err := t.s.Create(id)
+func (t *StoreLRU) Put(key string) (io.WriteCloser, error) {
+	w, err := t.s.Create(key)
 	if err != nil {
 		return nil, err
 	}
-	return &writer{parent: t, id: id, w: w}, nil
+	return &writer{parent: t, key: key, w: w}, nil
+}
+
+// Delete removed an item from the cache. It is not an error to remove
+// a key which is not present.
+func (t *StoreLRU) Delete(key string) error {
+	e := t.find(key)
+	if e == nil {
+		return nil
+	}
+	t.m.Lock()
+	entry := t.lru.Remove(e).(entry)
+	t.m.Unlock()
+	err := t.s.Delete(entry.key)
+	err2 := t.reserve(-entry.size) // give the space back
+	if err != nil {
+		return err
+	}
+	return err2
+}
+
+// Size returns the maximum size of this cache in bytes.
+// (Not the current size of the cache.)
+func (t *StoreLRU) Size() int64 {
+	return t.maxSize
 }
 
 // linkEntry adds the given entry into our LRU list.
@@ -162,7 +193,7 @@ func (t *StoreLRU) reserve(size int64) error {
 			return ErrCacheFull
 		}
 		entry := t.lru.Remove(e).(entry)
-		err := t.s.Delete(entry.id)
+		err := t.s.Delete(entry.key)
 		if err != nil {
 			t.size -= size
 			return err
