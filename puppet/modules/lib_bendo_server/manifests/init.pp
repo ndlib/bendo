@@ -103,6 +103,16 @@ $bendo_tokens = hiera_array("bendo_tokens")
                 require => File['bendorunitexec'],
 	}
 
+	file { 'bendoconfig':
+		name => "${bendo_root}/config",
+		owner => "app",
+		group => "app",
+		replace => true,
+		mode => '0755',
+		content => template('lib_bendo_server/bendo.config.erb'),
+                require => File['bendorunitexec'],
+	}
+
 # create token file for bendo authentication
 #
 	file { "bendo_tokens":
@@ -117,7 +127,7 @@ $bendo_tokens = hiera_array("bendo_tokens")
 	class { 'lib_runit::add':
 		service_name => "bendo",
 		service_path => "/etc/sv/bendo",
-		require => File[['bendorunitlog', 'bendo_tokens']],
+		require => File[['bendorunitlog', 'bendo_tokens', File['bendoconfig']],
 	}
 
 # Enable the Service ( leave this out until app can run /sbin/sv ) 
