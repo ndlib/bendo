@@ -29,8 +29,16 @@ type bendoConfig struct {
 func main() {
 
 	// Start with the Default values
-	//config := bendoConfig{".", "", "", 100, "14000", "14001", "", ""}
-	var config bendoConfig
+	config := bendoConfig{
+		StoreDir:   ".",
+		Tokenfile:  "",
+		CacheDir:   "",
+		CacheSize:  100,
+		PortNumber: "14000",
+		PProfPort:  "14001",
+		Mysql:      "",
+		Cow:        "",
+	}
 
 	var configFile = flag.String("config-file", "", "Configuration File")
 
@@ -38,11 +46,11 @@ func main() {
 
 	// If config file arg provided, try to open & decode it
 	if *configFile != "" {
+		log.Printf("Using config file %s\n", *configFile)
 		if _, err := toml.DecodeFile(*configFile, &config); err != nil {
 			log.Println(err)
 			return
 		}
-		log.Printf("Using config file %s\n", *configFile)
 	}
 
 	log.Printf("Using storage dir %s\n", config.StoreDir)
