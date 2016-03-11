@@ -7,7 +7,7 @@ import (
 // writer provides a way to write a new item into the cache.
 type writer struct {
 	parent        *StoreLRU
-	id            string
+	key           string
 	w             io.WriteCloser
 	size          int64
 	deleteOnClose bool
@@ -17,12 +17,12 @@ func (w *writer) Close() error {
 	err := w.w.Close()
 	if err != nil || w.deleteOnClose {
 		// TODO: handle errors better here?
-		w.parent.s.Delete(w.id)
+		w.parent.s.Delete(w.key)
 		w.parent.reserve(-w.size) // give space back to cache
-		return nil                // what should this be?
+		return err                // what should this be?
 	}
 	w.parent.linkEntry(entry{
-		id:   w.id,
+		key:  w.key,
 		size: w.size,
 	})
 	return nil

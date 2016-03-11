@@ -115,3 +115,40 @@ func TestScan(t *testing.T) {
 		r.Close()
 	}
 }
+
+func TestDelete(t *testing.T) {
+	cache := NewLRU(store.NewMemory(), 100)
+	key := "1234"
+	w, err := cache.Put(key)
+	if err != nil {
+		t.Fatalf("received %s", err.Error())
+	}
+	w.Write([]byte("abcdefghijklmnopqrstuvwxyz"))
+	w.Close()
+
+	if !cache.Contains(key) {
+		t.Errorf("Cache does not contain item, expected it to.")
+	}
+	if cache.size != 26 {
+		t.Errorf("Cache size is %d, expected 26", cache.size)
+	}
+
+	err = cache.Delete(key)
+	if err != nil {
+		t.Errorf("Error deleting key, %s", err.Error())
+	}
+
+	if cache.Contains(key) {
+		t.Errorf("Cache contains item, expected it to be deleted.")
+	}
+	if cache.size != 0 {
+		t.Errorf("Cache size is %d, expected 0", cache.size)
+	}
+
+	// delete it a second time. should not get an error
+	err = cache.Delete(key)
+	if err != nil {
+		t.Errorf("Error deleting key, %s", err.Error())
+	}
+
+}
