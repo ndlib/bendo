@@ -7,31 +7,59 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/BurntSushi/toml"
 	"github.com/ndlib/bendo/items"
 	"github.com/ndlib/bendo/server"
 	"github.com/ndlib/bendo/store"
 )
 
+//Config info needed for Bendo
+
+type bendoConfig struct {
+	StoreDir   string
+	Tokenfile  string
+	CacheDir   string
+	CacheSize  int64
+	PortNumber string
+	PProfPort  string
+	Mysql      string
+	Cow        string
+}
+
 func main() {
-	var (
-		storeDir   = flag.String("storage", ".", "location of the storage directory")
-		tokenfile  = flag.String("user-tokens", "", "file containing allowable user tokens")
-		cacheDir   = flag.String("cache-dir", "", "directory to store the blob cache")
-		cacheSize  = flag.Int64("cache-size", 100, "the maximum size of the cache in MB")
-		portNumber = flag.String("port", "14000", "Port Number to Use")
-		pProfPort  = flag.String("pfport", "14001", "PPROF Port Number to Use")
-		mysql      = flag.String("mysql", "", "Connection information to use a MySQL database")
-		cow        = flag.String("copy-on-write", "", "External bendo server to mirror content from")
-	)
+
+	// Start with the Default values
+	config := bendoConfig{
+		StoreDir:   ".",
+		Tokenfile:  "",
+		CacheDir:   "",
+		CacheSize:  100,
+		PortNumber: "14000",
+		PProfPort:  "14001",
+		Mysql:      "",
+		Cow:        "",
+	}
+
+	var configFile = flag.String("config-file", "", "Configuration File")
+
 	flag.Parse()
 
-	log.Printf("Using storage dir %s\n", *storeDir)
-	log.Printf("Using cache dir %s\n", *cacheDir)
+	// If config file arg provided, try to open & decode it
+	if *configFile != "" {
+		log.Printf("Using config file %s\n", *configFile)
+		if _, err := toml.DecodeFile(*configFile, &config); err != nil {
+			log.Println(err)
+			return
+		}
+	}
+
+	log.Printf("Using storage dir %s\n", config.StoreDir)
+	log.Printf("Using cache dir %s\n", config.CacheDir)
 	var validator server.TokenValidator
-	if *tokenfile != "" {
+	if config.Tokenfile != "" {
 		var err error
-		log.Printf("Using user token file %s\n", *tokenfile)
-		validator, err = server.NewListValidatorFile(*tokenfile)
+		log.Printf("Using user token file %s\n", config.Tokenfile)
+		validator, err = server.NewListValidatorFile(config.Tokenfile)
 		if err != nil {
 			log.Println(err)
 			return
@@ -40,23 +68,23 @@ func main() {
 		log.Printf("No user token file specified")
 		validator = server.NobodyValidator{}
 	}
-	if *cacheDir != "" {
-		os.MkdirAll(*cacheDir, 0755)
+	if config.CacheDir != "" {
+		os.MkdirAll(config.CacheDir, 0755)
 	}
-	var itemstore store.Store = store.NewFileSystem(*storeDir)
-	if *cow != "" {
-		itemstore = store.NewCOW(itemstore, *cow, "")
+	var itemstore store.Store = store.NewFileSystem(config.StoreDir)
+	if config.Cow != "" {
+		itemstore = store.NewCOW(itemstore, config.Cow, "")
 	}
 	var s = server.RESTServer{
 		Items:      items.New(itemstore),
 		Validator:  validator,
-		MySQL:      *mysql,
-		CacheDir:   *cacheDir,
-		CacheSize:  *cacheSize * 1000000,
-		PortNumber: *portNumber,
-		PProfPort:  *pProfPort,
+		MySQL:      config.Mysql,
+		CacheDir:   config.CacheDir,
+		CacheSize:  config.CacheSize * 1000000,
+		PortNumber: config.PortNumber,
+		PProfPort:  config.PProfPort,
 	}
-	if *cow != "" {
+	if config.Cow != "" {
 		// don't run fixity if we are using a copy-on-write.
 		// (doing so will cause us to download ALL the data from
 		// the target bendo over time)
