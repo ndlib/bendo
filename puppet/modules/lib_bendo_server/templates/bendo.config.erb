@@ -1,8 +1,8 @@
-StoreDir <%= @bendo_storage_dir %> 
-CacheDir <%= @bendo_cache_dir %>
-CacheSize <%= @bendo_cache_size %>
-Mysql <%= @bendo_mysql_user %>:<%= @bendo_mysql_password %>@tcp\(<%= @bendo_mysql_server %>:3306\)/<%= @bendo_mysql_db %>
+StoreDir = "<%= @bendo_storage_dir %>" 
+CacheDir = "<%= @bendo_cache_dir %>"
+CacheSize = <%= @bendo_cache_size %>
+Mysql = "<%= @bendo_mysql_user %>:<%= @bendo_mysql_password %>@tcp(<%= @bendo_mysql_server %>:3306)/<%= @bendo_mysql_db %>"
 Cow = ""
-Tokenfile <%= @bendo_root %>/tokens
+Tokenfile "<%= @bendo_root %>/tokens"
 PortNumber = "14000"
 PProfPort  = "14001"
