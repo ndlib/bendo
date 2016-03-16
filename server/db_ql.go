@@ -231,16 +231,16 @@ func qlschema1(tx migration.LimitedTx) error {
 }
 
 func qlschema2(tx migration.LimitedTx) error {
-	const s = `
-	ALTER TABLE items CHANGE COLUMN id item varchar(255);
-	ALTER TABLE fixity CHANGE COLUMN id item varchar(255);
-	ALTER TABLE fixity ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST;
-	ALTER TABLE items ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST;
-	DROP INDEX fixityid ON fixity;
-	DROP INDEX itemid ON items;
-	CREATE INDEX fixityid ON fixity (item);
-	CREATE INDEX itemid ON items (item);`
+	var s = []string  { 
+	`ALTER TABLE items CHANGE COLUMN id item varchar(255)`,
+	`ALTER TABLE fixity CHANGE COLUMN id item varchar(255)`,
+	`ALTER TABLE fixity ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST`,
+	`ALTER TABLE items ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST`,
+	`DROP INDEX fixityid ON fixity`,
+	`DROP INDEX itemid ON items`,
+	`CREATE INDEX fixityid ON fixity (item)`,
+	`CREATE INDEX itemid ON items (item)`,
+	}
 
-	_, err := tx.Exec(s)
-	return err
+	return execlist(tx, s)
 }
