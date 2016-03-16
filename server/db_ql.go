@@ -27,6 +27,7 @@ var _ FixityDB = &qlCache{}
 // DO NOT change the order of items already in this list.
 var qlMigrations = []migration.Migrator{
 	qlschema1,
+	qlschema2,
 }
 
 // adapt schema versioning for QL
@@ -58,43 +59,43 @@ func NewQlCache(filename string) (*qlCache, error) {
 	return &qlCache{db: db}, nil
 }
 
-func (qc *qlCache) Lookup(id string) *items.Item {
-	const dbLookup = `SELECT value FROM items WHERE id == ?1 LIMIT 1`
+func (qc *qlCache) Lookup(item string) *items.Item {
+	const dbLookup = `SELECT value FROM items WHERE item == ?1 LIMIT 1`
 
 	var value string
-	err := qc.db.QueryRow(dbLookup, id).Scan(&value)
+	err := qc.db.QueryRow(dbLookup, item).Scan(&value)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			log.Printf("Item Cache QL: %s", err.Error())
 		}
 		return nil
 	}
-	var item = new(items.Item)
-	err = json.Unmarshal([]byte(value), item)
+	var thisItem = new(items.Item)
+	err = json.Unmarshal([]byte(value), thisItem)
 	if err != nil {
 		return nil
 	}
-	return item
+	return thisItem
 }
 
-func (qc *qlCache) Set(id string, item *items.Item) {
-	const dbUpdate = `UPDATE items SET created = ?2, modified = ?3, size = ?4, value = ?5 WHERE id == ?1`
-	const dbInsert = `INSERT INTO items VALUES (?1, ?2, ?3, ?4, ?5)`
+func (qc *qlCache) Set(item string, thisItem *items.Item) {
+	const dbUpdate = `UPDATE items SET created = ?2, modified = ?3, size = ?4, value = ?5 WHERE item == ?1`
+	const dbInsert = `INSERT INTO items ( VALUES (?1, ?2, ?3, ?4, ?5)`
 	var created, modified time.Time
 	var size int64
-	for i := range item.Blobs {
-		size += item.Blobs[i].Size
+	for i := range thisItem.Blobs {
+		size += thisItem.Blobs[i].Size
 	}
-	if len(item.Versions) > 0 {
-		created = item.Versions[0].SaveDate
-		modified = item.Versions[len(item.Versions)-1].SaveDate
+	if len(thisItem.Versions) > 0 {
+		created = thisItem.Versions[0].SaveDate
+		modified = thisItem.Versions[len(thisItem.Versions)-1].SaveDate
 	}
-	value, err := json.Marshal(item)
+	value, err := json.Marshal(thisItem)
 	if err != nil {
 		log.Printf("Item Cache QL: %s", err.Error())
 		return
 	}
-	result, err := performExec(qc.db, dbUpdate, id, created, modified, size, value)
+	result, err := performExec(qc.db, dbUpdate, item, created, modified, size, value)
 	if err != nil {
 		log.Printf("Item Cache QL: %s", err.Error())
 		return
@@ -106,7 +107,7 @@ func (qc *qlCache) Set(id string, item *items.Item) {
 	}
 	if nrows == 0 {
 		// record didn't exist. create it
-		_, err = performExec(qc.db, dbInsert, id, created, modified, size, value)
+		_, err = performExec(qc.db, dbInsert, item, created, modified, size, value)
 		if err != nil {
 			log.Printf("Item Cache QL: %s", err.Error())
 		}
@@ -115,15 +116,15 @@ func (qc *qlCache) Set(id string, item *items.Item) {
 
 func (qc *qlCache) NextFixity(cutoff time.Time) string {
 	const query = `
-		SELECT id, scheduled_time
+		SELECT item, scheduled_time
 		FROM fixity
 		WHERE status == "scheduled" AND scheduled_time <= ?1
 		ORDER BY scheduled_time
 		LIMIT 1`
 
-	var id string
+	var item string
 	var when time.Time
-	err := qc.db.QueryRow(query, cutoff).Scan(&id, &when)
+	err := qc.db.QueryRow(query, cutoff).Scan(&item, &when)
 	if err == sql.ErrNoRows {
 		// no next record
 		return ""
@@ -131,22 +132,22 @@ func (qc *qlCache) NextFixity(cutoff time.Time) string {
 		log.Println("nextfixity QL", err.Error())
 		return ""
 	}
-	return id
+	return item
 }
 
-func (qc *qlCache) UpdateFixity(id string, status string, notes string) error {
+func (qc *qlCache) UpdateFixity(item string, status string, notes string) error {
 	const query = `
 		UPDATE fixity
 		SET status = ?2, notes = ?3
-		WHERE id() in
-			(SELECT id from
-				(SELECT id() as id, scheduled_time
+		WHERE item() in
+			(SELECT item from
+				(SELECT item() as item, scheduled_time
 				FROM fixity
-				WHERE id == ?1 and status == "scheduled"
+				WHERE item == ?1 and status == "scheduled"
 				ORDER BY scheduled_time
 				LIMIT 1))`
 
-	result, err := performExec(qc.db, query, id, status, notes)
+	result, err := performExec(qc.db, query, item, status, notes)
 	if err != nil {
 		return err
 	}
@@ -156,30 +157,30 @@ func (qc *qlCache) UpdateFixity(id string, status string, notes string) error {
 	}
 	if nrows == 0 {
 		// record didn't exist. create it
-		const newquery = `INSERT INTO fixity VALUES (?1,?2,?3,?4)`
+		const newquery = `INSERT INTO fixity ( item, scheduled_time, status, notes) VALUES (?1,?2,?3,?4)`
 
-		_, err = performExec(qc.db, newquery, id, time.Now(), status, notes)
+		_, err = performExec(qc.db, newquery, item, time.Now(), status, notes)
 	}
 	return err
 }
 
-func (qc *qlCache) SetCheck(id string, when time.Time) error {
-	const query = `INSERT INTO fixity VALUES (?1,?2,?3,?4)`
+func (qc *qlCache) SetCheck(item string, when time.Time) error {
+	const query = `INSERT INTO fixity ( item, scheduled_time, status, notes)  VALUES (?1,?2,?3,?4)`
 
-	_, err := performExec(qc.db, query, id, when, "scheduled", "")
+	_, err := performExec(qc.db, query, item, when, "scheduled", "")
 	return err
 }
 
-func (qc *qlCache) LookupCheck(id string) (time.Time, error) {
+func (qc *qlCache) LookupCheck(item string) (time.Time, error) {
 	const query = `
 		SELECT scheduled_time
 		FROM fixity
-		WHERE id == ?1 AND status == "scheduled"
+		WHERE item == ?1 AND status == "scheduled"
 		ORDER BY scheduled_time ASC
 		LIMIT 1`
 
 	var when time.Time
-	err := qc.db.QueryRow(query, id).Scan(&when)
+	err := qc.db.QueryRow(query, item).Scan(&when)
 	if err == sql.ErrNoRows {
 		err = nil
 	}
@@ -224,6 +225,21 @@ func qlschema1(tx migration.LimitedTx) error {
 	CREATE INDEX IF NOT EXISTS fixityid ON fixity (id);
 	CREATE INDEX IF NOT EXISTS fixitytime ON fixity (scheduled_time);
 	CREATE INDEX IF NOT EXISTS fixitystatus ON fixity (status);`
+
+	_, err := tx.Exec(s)
+	return err
+}
+
+func qlschema2(tx migration.LimitedTx) error {
+	const s = `
+	ALTER TABLE items CHANGE COLUMN id item varchar(255);
+	ALTER TABLE fixity CHANGE COLUMN id item varchar(255);
+	ALTER TABLE fixity ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST;
+	ALTER TABLE items ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST;
+	DROP INDEX fixityid ON fixity;
+	DROP INDEX itemid ON items;
+	CREATE INDEX fixityid ON fixity (item);
+	CREATE INDEX itemid ON items (item);`
 
 	_, err := tx.Exec(s)
 	return err

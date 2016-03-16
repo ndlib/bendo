@@ -29,6 +29,7 @@ var _ FixityDB = &msqlCache{}
 // DO NOT change the order of items already in this list.
 var mysqlMigrations = []migration.Migrator{
 	mysqlschema1,
+	mysqlschema2,
 }
 
 // Adapt the schema versioning for MySQL
@@ -55,11 +56,11 @@ func NewMysqlCache(dial string) (*msqlCache, error) {
 	return &msqlCache{db: db}, nil
 }
 
-func (ms *msqlCache) Lookup(id string) *items.Item {
-	const dbLookup = `SELECT value FROM items WHERE id = ? LIMIT 1`
+func (ms *msqlCache) Lookup(item string) *items.Item {
+	const dbLookup = `SELECT value FROM items WHERE item = ? LIMIT 1`
 
 	var value string
-	err := ms.db.QueryRow(dbLookup, id).Scan(&value)
+	err := ms.db.QueryRow(dbLookup, item).Scan(&value)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			// some kind of error...treat it as a miss
@@ -68,30 +69,30 @@ func (ms *msqlCache) Lookup(id string) *items.Item {
 		return nil
 	}
 	// unserialize the json string
-	var item = new(items.Item)
-	err = json.Unmarshal([]byte(value), item)
+	var thisItem = new(items.Item)
+	err = json.Unmarshal([]byte(value), thisItem)
 	if err != nil {
 		return nil
 	}
-	return item
+	return thisItem
 }
 
-func (ms *msqlCache) Set(id string, item *items.Item) {
+func (ms *msqlCache) Set(item string, thisItem *items.Item) {
 	var created, modified time.Time
 	var size int64
-	for i := range item.Blobs {
-		size += item.Blobs[i].Size
+	for i := range thisItem.Blobs {
+		size += thisItem.Blobs[i].Size
 	}
-	if len(item.Versions) > 0 {
-		created = item.Versions[0].SaveDate
-		modified = item.Versions[len(item.Versions)-1].SaveDate
+	if len(thisItem.Versions) > 0 {
+		created = thisItem.Versions[0].SaveDate
+		modified = thisItem.Versions[len(thisItem.Versions)-1].SaveDate
 	}
-	value, err := json.Marshal(item)
+	value, err := json.Marshal(thisItem)
 	if err != nil {
 		log.Printf("Item Cache: %s", err.Error())
 		return
 	}
-	result, err := ms.db.Exec(`UPDATE items SET created = ?, modified = ?, size = ?, value = ? WHERE id = ?`, created, modified, size, value, id)
+	result, err := ms.db.Exec(`UPDATE items SET created = ?, modified = ?, size = ?, value = ? WHERE item = ?`, created, modified, size, value, item)
 	if err != nil {
 		log.Printf("Item Cache: %s", err.Error())
 		return
@@ -103,20 +104,20 @@ func (ms *msqlCache) Set(id string, item *items.Item) {
 	}
 	if nrows == 0 {
 		// record didn't exist. create it
-		ms.db.Exec(`INSERT INTO items VALUES (?, ?, ?, ?, ?)`, id, created, modified, size, value)
+		ms.db.Exec(`INSERT INTO items ( item, created, modified, size, value)  VALUES (?, ?, ?, ?, ?)`, item, created, modified, size, value)
 	}
 }
 
 func (ms *msqlCache) NextFixity(cutoff time.Time) string {
 	const query = `
-		SELECT id
+		SELECT item
 		FROM fixity
 		WHERE status = "scheduled" AND scheduled_time <= ?
 		ORDER BY scheduled_time
 		LIMIT 1`
 
-	var id string
-	err := ms.db.QueryRow(query, cutoff).Scan(&id)
+	var item string
+	err := ms.db.QueryRow(query, cutoff).Scan(&item)
 	if err == sql.ErrNoRows {
 		// no next record
 		return ""
@@ -124,17 +125,17 @@ func (ms *msqlCache) NextFixity(cutoff time.Time) string {
 		log.Println("nextfixity", err.Error())
 		return ""
 	}
-	return id
+	return item
 }
 
-func (ms *msqlCache) UpdateFixity(id string, status string, notes string) error {
+func (ms *msqlCache) UpdateFixity(item string, status string, notes string) error {
 	const query = `
 		UPDATE fixity
 		SET status = ?, notes = ?
-		WHERE id = ? and status = "scheduled"
+		WHERE item = ? and status = "scheduled"
 		ORDER BY scheduled_time
 		LIMIT 1`
-	result, err := ms.db.Exec(query, status, notes, id)
+	result, err := ms.db.Exec(query, status, notes, item)
 	if err != nil {
 		return err
 	}
@@ -144,30 +145,30 @@ func (ms *msqlCache) UpdateFixity(id string, status string, notes string) error 
 	}
 	if nrows == 0 {
 		// record didn't exist. create it
-		const newquery = `INSERT INTO fixity VALUES (?,?,?,?)`
+		const newquery = `INSERT INTO fixity ( item, scheduled_time, status, notes) VALUES (?,?,?,?)`
 
-		_, err = ms.db.Exec(newquery, id, time.Now(), status, notes)
+		_, err = ms.db.Exec(newquery, item, time.Now(), status, notes)
 	}
 	return err
 }
 
-func (ms *msqlCache) SetCheck(id string, when time.Time) error {
-	const query = `INSERT INTO fixity VALUES (?,?,?,?)`
+func (ms *msqlCache) SetCheck(item string, when time.Time) error {
+	const query = `INSERT INTO fixity (item, scheduled_time, status, notes) VALUES (?,?,?,?)`
 
-	_, err := ms.db.Exec(query, id, when, "scheduled", "")
+	_, err := ms.db.Exec(query, item, when, "scheduled", "")
 	return err
 }
 
-func (ms *msqlCache) LookupCheck(id string) (time.Time, error) {
+func (ms *msqlCache) LookupCheck(item string) (time.Time, error) {
 	const query = `
 		SELECT scheduled_time
 		FROM fixity
-		WHERE id = ? AND status = "scheduled"
+		WHERE item = ? AND status = "scheduled"
 		ORDER BY scheduled_time
 		LIMIT 1`
 
 	var when mysql.NullTime
-	err := ms.db.QueryRow(query, id).Scan(&when)
+	err := ms.db.QueryRow(query, item).Scan(&when)
 	if err == sql.ErrNoRows {
 		err = nil
 	}
@@ -196,6 +197,21 @@ func mysqlschema1(tx migration.LimitedTx) error {
 		notes text)`,
 	}
 	return execlist(tx, s)
+}
+
+func mysqlschema2(tx migration.LimitedTx) error {
+        var s = []string {
+        `ALTER TABLE items CHANGE COLUMN id item varchar(255)`,
+        `ALTER TABLE fixity CHANGE COLUMN id item varchar(255)`,
+        `ALTER TABLE fixity ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST`,
+        `ALTER TABLE items ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST`,
+        `DROP INDEX fixityid ON fixity`,
+        `DROP INDEX itemid ON items`,
+        `CREATE INDEX fixityid ON fixity (item)`,
+        `CREATE INDEX itemid ON items (item)`,
+	}
+
+        return execlist(tx, s)
 }
 
 // execlist exec's each item in the list, return if there is an error.
