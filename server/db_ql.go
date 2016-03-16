@@ -27,7 +27,6 @@ var _ FixityDB = &qlCache{}
 // DO NOT change the order of items already in this list.
 var qlMigrations = []migration.Migrator{
 	qlschema1,
-	qlschema2,
 }
 
 // adapt schema versioning for QL
@@ -60,7 +59,7 @@ func NewQlCache(filename string) (*qlCache, error) {
 }
 
 func (qc *qlCache) Lookup(item string) *items.Item {
-	const dbLookup = `SELECT value FROM items WHERE item == ?1 LIMIT 1`
+	const dbLookup = `SELECT value FROM items WHERE id == ?1 LIMIT 1`
 
 	var value string
 	err := qc.db.QueryRow(dbLookup, item).Scan(&value)
@@ -79,8 +78,8 @@ func (qc *qlCache) Lookup(item string) *items.Item {
 }
 
 func (qc *qlCache) Set(item string, thisItem *items.Item) {
-	const dbUpdate = `UPDATE items SET created = ?2, modified = ?3, size = ?4, value = ?5 WHERE item == ?1`
-	const dbInsert = `INSERT INTO items ( VALUES (?1, ?2, ?3, ?4, ?5)`
+	const dbUpdate = `UPDATE items SET created = ?2, modified = ?3, size = ?4, value = ?5 WHERE id == ?1`
+	const dbInsert = `INSERT INTO items (id, created, modified, size, value) VALUES (?1, ?2, ?3, ?4, ?5)`
 	var created, modified time.Time
 	var size int64
 	for i := range thisItem.Blobs {
@@ -116,7 +115,7 @@ func (qc *qlCache) Set(item string, thisItem *items.Item) {
 
 func (qc *qlCache) NextFixity(cutoff time.Time) string {
 	const query = `
-		SELECT item, scheduled_time
+		SELECT id, scheduled_time
 		FROM fixity
 		WHERE status == "scheduled" AND scheduled_time <= ?1
 		ORDER BY scheduled_time
@@ -139,11 +138,11 @@ func (qc *qlCache) UpdateFixity(item string, status string, notes string) error 
 	const query = `
 		UPDATE fixity
 		SET status = ?2, notes = ?3
-		WHERE item() in
-			(SELECT item from
-				(SELECT item() as item, scheduled_time
+		WHERE id() in
+			(SELECT id from
+				(SELECT id() as id, scheduled_time
 				FROM fixity
-				WHERE item == ?1 and status == "scheduled"
+				WHERE id == ?1 and status == "scheduled"
 				ORDER BY scheduled_time
 				LIMIT 1))`
 
@@ -157,7 +156,7 @@ func (qc *qlCache) UpdateFixity(item string, status string, notes string) error 
 	}
 	if nrows == 0 {
 		// record didn't exist. create it
-		const newquery = `INSERT INTO fixity ( item, scheduled_time, status, notes) VALUES (?1,?2,?3,?4)`
+		const newquery = `INSERT INTO fixity (id, scheduled_time, status, notes) VALUES (?1,?2,?3,?4)`
 
 		_, err = performExec(qc.db, newquery, item, time.Now(), status, notes)
 	}
@@ -165,7 +164,7 @@ func (qc *qlCache) UpdateFixity(item string, status string, notes string) error 
 }
 
 func (qc *qlCache) SetCheck(item string, when time.Time) error {
-	const query = `INSERT INTO fixity ( item, scheduled_time, status, notes)  VALUES (?1,?2,?3,?4)`
+	const query = `INSERT INTO fixity (id, scheduled_time, status, notes) VALUES (?1,?2,?3,?4)`
 
 	_, err := performExec(qc.db, query, item, when, "scheduled", "")
 	return err
@@ -175,7 +174,7 @@ func (qc *qlCache) LookupCheck(item string) (time.Time, error) {
 	const query = `
 		SELECT scheduled_time
 		FROM fixity
-		WHERE item == ?1 AND status == "scheduled"
+		WHERE id == ?1 AND status == "scheduled"
 		ORDER BY scheduled_time ASC
 		LIMIT 1`
 
@@ -228,19 +227,4 @@ func qlschema1(tx migration.LimitedTx) error {
 
 	_, err := tx.Exec(s)
 	return err
-}
-
-func qlschema2(tx migration.LimitedTx) error {
-	var s = []string  { 
-	`ALTER TABLE items CHANGE COLUMN id item varchar(255)`,
-	`ALTER TABLE fixity CHANGE COLUMN id item varchar(255)`,
-	`ALTER TABLE fixity ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST`,
-	`ALTER TABLE items ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST`,
-	`DROP INDEX fixityid`,
-	`DROP INDEX itemid`,
-	`CREATE INDEX fixityid ON fixity (item)`,
-	`CREATE INDEX itemid ON items (item)`,
-	}
-
-	return execlist(tx, s)
 }
