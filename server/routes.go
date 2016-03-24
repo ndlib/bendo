@@ -265,12 +265,6 @@ func (s *RESTServer) addRoutes() http.Handler {
 		{"GET", "/upload/:fileid/metadata", RoleMDOnly, s.GetFileInfoHandler},
 		{"PUT", "/upload/:fileid/metadata", RoleWrite, s.SetFileInfoHandler},
 
-		// fixity reporting
-		{"GET", "/fixity", RoleRead, NotImplementedHandler},
-		{"GET", "/fixity/errors", RoleRead, NotImplementedHandler},
-		{"GET", "/fixity/item/:itemid", RoleRead, NotImplementedHandler},
-		{"POST", "/fixity/:itemid", RoleWrite, NotImplementedHandler},
-
 		// the read only bundle stuff
 		{"GET", "/bundle/list/:prefix", RoleRead, s.BundleListPrefixHandler},
 		{"GET", "/bundle/list/", RoleRead, s.BundleListHandler},
@@ -293,7 +287,7 @@ func (s *RESTServer) addRoutes() http.Handler {
 
 // General route handlers and convinence functions
 
-// VarHandler adapts the expvar default handler to our router.
+// VarHandler adapts the expvar default handler to the httprouter three parameter handler.
 func VarHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	// this code is taken from the stdlib expvar package.
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

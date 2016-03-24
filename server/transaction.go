@@ -174,7 +174,7 @@ func (s *RESTServer) TxCleaner() {
 // transactionCleaner will go through all finished transactions (i.e. in either
 // the error or successful states) which are old, and delete them and any
 // uploaded files they reference. Successful transactions older than a day are
-// removed, and Failed transactions older than a week are removed.
+// removed, and failed transactions older than a week are removed.
 func (s *RESTServer) transactionCleaner() error {
 	// these time limits are completely arbitrary
 	cutoffSuccess := time.Now().Add(-24 * time.Hour)
