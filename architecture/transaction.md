@@ -39,7 +39,7 @@ of the following forms
     @blob/nnnn
 
 Where `@vvv` is a version identifier for the current item, and `nnnn` is a blob
-identifier for the current item. Examples are
+identifier for the current item. Examples extended source paths are
 
     @5/README.md
     @12/a/deep/path/to/a/file

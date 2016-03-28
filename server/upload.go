@@ -63,6 +63,9 @@ var (
 <dt>Created</dt><dd>{{ .Created }}</dd>
 <dt>Modified</dt><dd>{{ .Modified }}</dd>
 <dt>Creator</dt><dd>{{ .Creator }}</dd>
+<dt>Extra</dt><dd>{{ .Extra }}</dd>
+<dt>MD5</dt><dd>{{ .MD5 }}</dd>
+<dt>SHA256</dt><dd>{{ .SHA256 }}</dd>
 <dt>Labels</dt><dd>{{ range .Labels }}{{ . }}<br/>{{ end }}</dd>
 </dl>
 <a href="/upload/{{ $fileid }}">View content</a></br>
