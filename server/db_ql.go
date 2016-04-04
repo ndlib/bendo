@@ -232,8 +232,8 @@ func qlschema1(tx migration.LimitedTx) error {
 
 func qlschema2(tx migration.LimitedTx) error {
 	var s = []string  { 
-	`ALTER TABLE items CHANGE COLUMN id item varchar(255)`,
-	`ALTER TABLE fixity CHANGE COLUMN id item varchar(255)`,
+	`ALTER TABLE items MODIFY COLUMN id item varchar(255)`,
+	`ALTER TABLE fixity MODIFY COLUMN id item varchar(255)`,
 	`ALTER TABLE fixity ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST`,
 	`ALTER TABLE items ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST`,
 	`DROP INDEX fixityid`,
