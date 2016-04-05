@@ -50,10 +50,63 @@ following file hierarchy
 
 The file `item-info.json` is a utf-8 text file containing JSON encoded data
 describing this item and its serialization into the complete sequence of bundle
-files.
+files. It contains all the information needed to reconstruct the item from its
+bundle files. It has a list of versions, and for each version a mapping from
+paths to blob identifiers. It also has a list of blobs, and for each blob a
+mapping from blob identifier to the bundle file that contains it.
 
-[TODO: add item-info.json schema]
+An example `item-info.json` would look like the following.
 
+    {
+      "ItemID": "bendo",
+      "ByteCount": 14806273,
+      "Versions": [
+        {
+          "VersionID": 1,
+          "SaveDate": "2015-09-29T14:50:32.079237902-04:00",
+          "Creator": "db",
+          "Note": "",
+          "Slots": {
+            "main.go": 1
+          }
+        },
+        {
+          "VersionID": 2,
+          "SaveDate": "2015-09-29T17:03:04.161355379-04:00",
+          "Creator": "db",
+          "Note": "",
+          "Slots": {
+            "main.go": 2
+          }
+        }
+      ],
+      "Blobs": [
+        {
+          "BlobID": 1,
+          "Bundle": 1,
+          "ByteCount": 14805524,
+          "MD5": "a90734ff27b18c020c9885b5e72e3633",
+          "SHA256": "0588cacce12e9a56e0d4ef7d4b713c27ea9855a640223c8727ec2fb5fa68be63",
+          "SaveDate": "2015-09-29T17:03:03.678727469-04:00",
+          "Creator": "db",
+          "DeleteDate": "0001-01-01T00:00:00Z",
+          "Deleter": "",
+          "DeleteNote": ""
+        },
+        {
+          "BlobID": 2,
+          "Bundle": 2,
+          "ByteCount": 749,
+          "MD5": "83a945af5173197f9e9a383fb98cc20e",
+          "SHA256": "7000a38bd350158e6dccf20454aacf87a05115db5fadc3712a9ce22ef5335daf",
+          "SaveDate": "2015-09-29T17:03:04.148039931-04:00",
+          "Creator": "db",
+          "DeleteDate": "0001-01-01T00:00:00Z",
+          "Deleter": "",
+          "DeleteNote": ""
+        }
+      ]
+    }
 
 
 # Serialization of an Item
@@ -65,31 +118,6 @@ blob may appear in more than one bundle. The bundle file assigned to a blob may
 change over time due to blob deletion and bundle compaction. The metadata file
 keeps an index mapping each blob to its bundle file.
 
-[TODO: review the following wrt our error handling procedures]
-
-A blob is in one of four states
-
- * OK
- * Deleted
- * Error
- * ErrorDeleted
-
-Most blobs should be in the OK state, which means the blob metadata is up to
-date, and a correct version of the blob is available. The Deleted state means
-the blob has been removed from tape; it is not available, but information about
-its existence is maintained. An Error state happens if an error occured when
-writing the blob to tape the first time. In this case we need to track the
-incorrect blob. Error blobs are not available, and are not checksummed. Error
-blobs will be deleted whenever the opportunity presents itself (namely, they
-are not copied for blob deletions, effectually deleting them). ErrorDeleted is
-an blob in an error state which has been deleted.
-
-If a blob was successfully written to disk once, but an error occured while
-copying it (because, say, it was in the same bundle as a blob being deleted),
-it will remain in the OK state and not be in the Error state. The Error state
-is only for blobs which were incompletely copied the first time, and for which
-we do not have any correct data.
-
 The `item-info.json` in the bundle with the highest sequence number is taken as
 the complete truth. If the bundle with the highest sequence number is missing
 this file, there is an error condition and some intervention is needed to fix
@@ -98,23 +126,20 @@ the files.
 If a blob appears in more than one bundle, the version of the blob in the
 bundle indicated by the item-info.json file is taken to be the correct version.
 
-It is an error for a slot to reference a blob in the Error or ErrorDeleted
-state.
-
 
 ## Blob deletion
 
 A set of blobs are deleted by first identifying the set of bundle files
-containing their canonical versions. Then for each identified bundle file in
-turn, all other blobs in that file are copied into a new bundle file, and then,
-if there were no errors, the set of identified bundle files are deleted.
+containing their canonical versions. Then for each identified bundle file, all
+the other blobs in that file are copied into a new bundle file, and then, if
+there were no errors, the set of identified bundle files are deleted.
 
 # Bundle Verification
 
 Items can be verified at both the item level and the bundle level. Bundle level
 verification is performed at the BagIt level, which means each bundle file is
 tested to see if it can be opened, and then all the files inside are compared
-against their hashes in the bundle manifest file. Also the files listed in
+against their hashes in the BagIt manifest file. Also the files listed in
 the bag manifest should correspond one-to-one with the payload files in the
 bag.
 

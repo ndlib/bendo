@@ -56,11 +56,11 @@ func NewMysqlCache(dial string) (*msqlCache, error) {
 	return &msqlCache{db: db}, nil
 }
 
-func (ms *msqlCache) Lookup(item string) *items.Item {
+func (ms *msqlCache) Lookup(id string) *items.Item {
 	const dbLookup = `SELECT value FROM items WHERE item = ? LIMIT 1`
 
 	var value string
-	err := ms.db.QueryRow(dbLookup, item).Scan(&value)
+	err := ms.db.QueryRow(dbLookup, id).Scan(&value)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			// some kind of error...treat it as a miss
@@ -77,7 +77,7 @@ func (ms *msqlCache) Lookup(item string) *items.Item {
 	return thisItem
 }
 
-func (ms *msqlCache) Set(item string, thisItem *items.Item) {
+func (ms *msqlCache) Set(id string, thisItem *items.Item) {
 	var created, modified time.Time
 	var size int64
 	for i := range thisItem.Blobs {
@@ -92,7 +92,7 @@ func (ms *msqlCache) Set(item string, thisItem *items.Item) {
 		log.Printf("Item Cache: %s", err.Error())
 		return
 	}
-	result, err := ms.db.Exec(`UPDATE items SET created = ?, modified = ?, size = ?, value = ? WHERE item = ?`, created, modified, size, value, item)
+	result, err := ms.db.Exec(`UPDATE items SET created = ?, modified = ?, size = ?, value = ? WHERE item = ?`, created, modified, size, value, id)
 	if err != nil {
 		log.Printf("Item Cache: %s", err.Error())
 		return
@@ -104,7 +104,10 @@ func (ms *msqlCache) Set(item string, thisItem *items.Item) {
 	}
 	if nrows == 0 {
 		// record didn't exist. create it
-		ms.db.Exec(`INSERT INTO items ( item, created, modified, size, value)  VALUES (?, ?, ?, ?, ?)`, item, created, modified, size, value)
+		_, err = ms.db.Exec(`INSERT INTO items (item, created, modified, size, value) VALUES (?, ?, ?, ?, ?)`, id, created, modified, size, value)
+		if err != nil {
+			log.Printf("Item Cache: %s", err.Error())
+		}
 	}
 }
 
@@ -200,18 +203,14 @@ func mysqlschema1(tx migration.LimitedTx) error {
 }
 
 func mysqlschema2(tx migration.LimitedTx) error {
-        var s = []string {
-        `ALTER TABLE items CHANGE COLUMN id item varchar(255)`,
-        `ALTER TABLE fixity CHANGE COLUMN id item varchar(255)`,
-        `ALTER TABLE fixity ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST`,
-        `ALTER TABLE items ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST`,
-        //`DROP INDEX fixityid`,
-        //`DROP INDEX itemid`,
-        //`CREATE INDEX fixityid ON fixity (item)`,
-        //`CREATE INDEX itemid ON items (item)`,
+	var s = []string{
+		`ALTER TABLE items CHANGE COLUMN id item varchar(255)`,
+		`ALTER TABLE fixity CHANGE COLUMN id item varchar(255)`,
+		`ALTER TABLE fixity ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST`,
+		`ALTER TABLE items ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST`,
 	}
 
-        return execlist(tx, s)
+	return execlist(tx, s)
 }
 
 // execlist exec's each item in the list, return if there is an error.
