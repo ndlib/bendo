@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -49,6 +50,7 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 		fmt.Fprintf(w, "Invalid Version")
 		return
 	}
+	w.Header().Set("X-Content-Sha256", hex.EncodeToString(item.Blobs[bid-1].SHA256))
 	w.Header().Set("Location", fmt.Sprintf("/item/%s/@blob/%d", id, bid))
 	s.getblob(w, r, id, items.BlobID(bid))
 }
@@ -90,6 +92,7 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", length))
 	n, err := io.Copy(w, src)
 	if err != nil {
+
 		log.Printf("getblob (%s,%d) %d,%s", id, bid, n, err.Error())
 	}
 }
