@@ -176,6 +176,7 @@ func TestHeadCacheSHA(t *testing.T) {
 	if resp == nil {
 		t.Fatalf("Unexpected nil response")
 	}
+	resp.Body.Close()
 	cacheStatus := resp.Header.Get("X-Cached")
 	if cacheStatus != "0" {
 		t.Errorf("X-Cached expected 0, received %s", cacheStatus)
@@ -186,15 +187,17 @@ func TestHeadCacheSHA(t *testing.T) {
 	}
 
 	// get file twice and see if second time was cached
-	checkRoute(t, "GET", "/item/"+itemid+"/testFile1", 200)
+	resp = checkRoute(t, "GET", "/item/"+itemid+"/testFile1", 200)
+	resp.Body.Close()
+	time.Sleep(10 * time.Millisecond) // sleep a squinch so the caching can happen
 	resp = checkRoute(t, "GET", "/item/"+itemid+"/testFile1", 200)
 	if resp == nil {
 		t.Fatalf("Unexpected nil response")
 	}
+	resp.Body.Close()
 	cacheStatus = resp.Header.Get("X-Cached")
 	if cacheStatus != "1" {
 		t.Errorf("X-Cached expected 1, received %s", cacheStatus)
-		return
 	}
 	shaHexSum = resp.Header.Get("X-Content-Sha256")
 	if shaHexSum != fileShaHexSum {
