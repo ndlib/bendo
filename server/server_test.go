@@ -160,43 +160,45 @@ func TestHeadCacheSHA(t *testing.T) {
 	txpath := sendtransaction(t, "/item/"+itemid+"/transaction",
 		[][]string{{"add", path.Base(filePath)}, {"slot", "testFile1", path.Base(filePath)}}, 202)
 	t.Log("got tx path", txpath)
+	// tx is processed async from the commit above.
+	// maybe wait for it to be committed?
+	time.Sleep(10 * time.Millisecond) // sleep a squinch
 
-	// verify that header body is empty
-
-	resp := checkRoute(t, "HEAD", "/item/"+itemid+"/testFile1", 200)
-
+	// verify the HEAD body is empty
 	respBody := getbody(t, "HEAD", "/item/"+itemid+"/testFile1", 200)
-
 	if respBody != "" {
 		t.Errorf("Expected Empty HEAD body, got %s\n", respBody)
-		return
 	}
 
+	// see if item was cached
 	t.Log("Testing Cache Header")
-
+	resp := checkRoute(t, "HEAD", "/item/"+itemid+"/testFile1", 200)
+	if resp == nil {
+		t.Fatalf("Unexpected nil response")
+	}
 	cacheStatus := resp.Header.Get("X-Cached")
-
 	if cacheStatus != "0" {
 		t.Errorf("X-Cached expected 0, received %s", cacheStatus)
-		return
+	}
+	shaHexSum := resp.Header.Get("X-Content-Sha256")
+	if shaHexSum != fileShaHexSum {
+		t.Errorf("X-Content-Sha256 expected %s, received %s", fileShaHexSum, shaHexSum)
 	}
 
+	// get file twice and see if second time was cached
 	checkRoute(t, "GET", "/item/"+itemid+"/testFile1", 200)
 	resp = checkRoute(t, "GET", "/item/"+itemid+"/testFile1", 200)
+	if resp == nil {
+		t.Fatalf("Unexpected nil response")
+	}
 	cacheStatus = resp.Header.Get("X-Cached")
-
 	if cacheStatus != "1" {
 		t.Errorf("X-Cached expected 1, received %s", cacheStatus)
 		return
 	}
-
-	t.Log("Testing SHA256 hex header")
-
-	shaHexSum := resp.Header.Get("X-Content-Sha256")
-
+	shaHexSum = resp.Header.Get("X-Content-Sha256")
 	if shaHexSum != fileShaHexSum {
 		t.Errorf("X-Content-Sha256 expected %s, received %s", fileShaHexSum, shaHexSum)
-		return
 	}
 }
 
@@ -250,10 +252,10 @@ func getbody(t *testing.T, verb, route string, expstatus int) string {
 	resp := checkRoute(t, verb, route, expstatus)
 	if resp != nil {
 		body, err := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
 		if err != nil {
 			t.Fatal(route, err)
 		}
-		resp.Body.Close()
 		return string(body)
 	}
 	return ""
