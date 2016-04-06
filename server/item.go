@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"expvar"
 	"fmt"
@@ -33,6 +34,7 @@ func (s *RESTServer) BlobHandler(w http.ResponseWriter, r *http.Request, ps http
 }
 
 // SlotHandler handles requests to GET /item/:id/*slot
+//                and requests to HEAD /item/:id/*slot
 func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
 	item, err := s.Items.Item(id)
@@ -55,6 +57,7 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 		fmt.Fprintf(w, "Invalid Version")
 		return
 	}
+	w.Header().Set("X-Content-Sha256", hex.EncodeToString(item.Blobs[bid-1].SHA256))
 	w.Header().Set("Location", fmt.Sprintf("/item/%s/@blob/%d", id, bid))
 	s.getblob(w, r, id, items.BlobID(bid))
 }
@@ -71,6 +74,7 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 	if cacheContents != nil {
 		nCacheHit.Add(1)
 		log.Printf("Cache Hit %s", key)
+		w.Header().Set("X-Cached", "1")
 		defer cacheContents.Close()
 		// need to wrap this since Cache.Get returns a ReadAtCloser
 		src = store.NewReader(cacheContents)
@@ -78,27 +82,36 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 		// cache miss...load from main store, AND put into cache
 		nCacheMiss.Add(1)
 		log.Printf("Cache Miss %s", key)
-		realContents, l, err := s.Items.Blob(id, bid)
-		length = l // use l so we don't redeclare length in this scope
-		if err != nil {
-			w.WriteHeader(404)
-			fmt.Fprintln(w, err)
-			return
-		}
-		defer realContents.Close()
-		src = realContents
-		// cache this item f it is not too large.
-		// doing 1/8th of the cache size is arbitrary.
-		// not sure what a good cutoff would be.
-		if length < s.Cache.Size()/8 {
-			go s.copyBlobIntoCache(key, id, bid)
+		w.Header().Set("X-Cached", "0")
+
+		// If this is a GET, retrieve the blob- if it's a HEAD, don't
+		if r.Method != "HEAD" {
+			realContents, l, err := s.Items.Blob(id, bid)
+			length = l // use l so we don't redeclare length in this scope
+			if err != nil {
+				w.WriteHeader(404)
+				fmt.Fprintln(w, err)
+				return
+			}
+			defer realContents.Close()
+			src = realContents
+			// cache this item f it is not too large.
+			// doing 1/8th of the cache size is arbitrary.
+			// not sure what a good cutoff would be.
+			if length < s.Cache.Size()/8 {
+				go s.copyBlobIntoCache(key, id, bid)
+			}
 		}
 	}
 	w.Header().Set("ETag", fmt.Sprintf("%d", bid))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", length))
-	n, err := io.Copy(w, src)
-	if err != nil {
-		log.Printf("getblob (%s,%d) %d,%s", id, bid, n, err.Error())
+
+	// if it's a GET, copy the data into the response- if it's a HEAD, don't
+	if r.Method != "HEAD" {
+		n, err := io.Copy(w, src)
+		if err != nil {
+			log.Printf("getblob (%s,%d) %d,%s", id, bid, n, err.Error())
+		}
 	}
 }
 
