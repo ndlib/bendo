@@ -2,12 +2,14 @@ package transaction
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"math/rand"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/ndlib/bendo/blobcache"
 	"github.com/ndlib/bendo/fragment"
 	"github.com/ndlib/bendo/items"
 	"github.com/ndlib/bendo/store"
@@ -201,7 +203,7 @@ func (tx *T) SetStatus(s Status) {
 // underlying item.
 // Commit a creation/update of an item in s, possibly using files
 // in files, and with the given creator name.
-func (tx *T) Commit(s items.Store, files *fragment.Store) {
+func (tx *T) Commit(s items.Store, files *fragment.Store, cache blobcache.T) {
 	// we hold the lock on tx for the duration of the commit.
 	// That might be for a very long time.
 	tx.m.Lock()
@@ -215,7 +217,7 @@ func (tx *T) Commit(s items.Store, files *fragment.Store) {
 	tx.files = files
 	// execute commands. Errors will be appended to tx.Err
 	for _, cmd := range tx.Commands {
-		cmd.Execute(iw, tx)
+		cmd.Execute(iw, tx, cache)
 	}
 	err = iw.Close()
 	if err != nil {
@@ -288,7 +290,7 @@ type command []string
 // Execute this command on the given item writer and transaction.
 // Assumes the write mutex on tx is held on entry. Execute will
 // give up and then reacquire the write mutex on tx during lengthy processing steps.
-func (c command) Execute(iw *items.Writer, tx *T) {
+func (c command) Execute(iw *items.Writer, tx *T, cache blobcache.T) {
 	if !c.WellFormed() {
 		tx.Err = append(tx.Err, "Command is not well formed")
 		return
@@ -296,9 +298,12 @@ func (c command) Execute(iw *items.Writer, tx *T) {
 	cmd := []string(c)
 	switch cmd[0] {
 	case "delete":
-		// delete <blob id>
+		// delete <blob id>, both in store and in cache
 		id, err := strconv.Atoi(cmd[1])
 		if err == nil {
+			// key in blobcache is itemID+blobid
+			cacheKey := fmt.Sprintf("%s+%04d", tx.ItemID, id)
+			cache.Delete(cacheKey)
 			iw.DeleteBlob(items.BlobID(id))
 		}
 	case "slot":

@@ -139,7 +139,7 @@ func (s *RESTServer) processCommit(tx *transaction.T) {
 		tx.SetStatus(transaction.StatusIngest)
 		fallthrough
 	case transaction.StatusIngest:
-		tx.Commit(*s.Items, s.FileStore)
+		tx.Commit(*s.Items, s.FileStore, s.Cache)
 	}
 	duration := time.Now().Sub(start)
 	log.Printf("Finish transaction %s on %s (%s)", tx.ID, tx.ItemID, duration.String())
