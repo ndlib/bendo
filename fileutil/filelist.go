@@ -7,12 +7,13 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"github.com/antonholmquist/jason"
 	"io"
 	"os"
 	"path"
 	"sort"
 	"strings"
+
+	"github.com/antonholmquist/jason"
 )
 
 // Our underlying data structure

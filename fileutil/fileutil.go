@@ -7,11 +7,12 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"github.com/antonholmquist/jason"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/antonholmquist/jason"
 )
 
 var (

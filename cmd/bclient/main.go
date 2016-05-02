@@ -5,12 +5,13 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/antonholmquist/jason"
-	"github.com/ndlib/bendo/bclientapi"
-	"github.com/ndlib/bendo/fileutil"
 	"os"
 	"path"
 	"sync"
+
+	"github.com/antonholmquist/jason"
+	"github.com/ndlib/bendo/bclientapi"
+	"github.com/ndlib/bendo/fileutil"
 )
 
 // various command line flags, with default values

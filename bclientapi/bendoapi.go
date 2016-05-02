@@ -5,11 +5,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/antonholmquist/jason"
 	"io"
 	"net/http"
 	"os"
 	"path"
+
+	"github.com/antonholmquist/jason"
 )
 
 // Exported errors

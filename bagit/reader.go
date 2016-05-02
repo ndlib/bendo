@@ -5,9 +5,10 @@ import (
 	"bufio"
 	"encoding/hex"
 	"errors"
-	"github.com/ndlib/bendo/util"
 	"io"
 	"strings"
+
+	"github.com/ndlib/bendo/util"
 )
 
 // Reader allows for reading an existing Bag file (in ZIP format).
