@@ -1,4 +1,4 @@
-# Contributing to CurateND
+# Contributing to Bendo
 
 ## Getting Started
 Bendo is a go package. There are several steps you must complete before you can to compile, test, and commit to the project.
