@@ -66,6 +66,16 @@ bstress
 butil
 ```
 
+These executables need to be added to your `$PATH`. The simplest way to do that is to run the linking script:
+
+```console
+./link.sh
+```
+
+This symlinks the executables into `$GOPATH/bin`.
+
+> `$GOPATH/bin` is already added to your `$PATH` by [DLT dotfiles](https://github.com/ndlib/dlt-dotfiles)
+
 ## Running Bendo
 There are also several setup steps in order to _run_ Bendo.
 
@@ -89,4 +99,4 @@ cd ~/goapps/bendo
 bendo -config-file development.config
 ```
 
-> The `bendo` command is added to your `$PATH` by [DLT-dotfiles](https://github.com/ndlib/dlt-dotfiles). If you need to call it directly use `$GOPATH/src/github.com/ndlib/bendo/bin/bendo`.
+> The `bendo` command is added to your `$PATH` by [DLT-dotfiles](https://github.com/ndlib/dlt-dotfiles). If you need to call it directly use `$GOPATH/bin/bendo`.
