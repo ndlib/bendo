@@ -80,7 +80,7 @@ This symlinks the executables into `$GOPATH/bin`.
 There are also several setup steps in order to _run_ Bendo.
 
 ### Directory Setup
-By convention we will run Bendo out of the `~/goapps` directory. Bendo expects the presence of to directories: `bendo_cach` and `bendo_storage`.
+By convention we will run Bendo out of the `~/goapps` directory. Bendo expects the presence of two directories: `bendo_cach` and `bendo_storage`.
 
 ```console
 mkdir -p ~/goapps/bendo/{bendo_cache,bendo_storage}
