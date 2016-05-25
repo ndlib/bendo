@@ -90,8 +90,23 @@ mkdir -p ~/goapps/bendo/{bendo_cache,bendo_storage}
 Many aspects of Bendo are configurable via a config file. The sample configuration file contains a MySQL directive that is not necessary for running the application in development.
 
 ```console
-sed '/Mysql/d' $GOPATH/src/github.com/ndlib/bendo/sample.config > ~/goapps/bendo/development.config
+sed '/Mysql/d' $GOPATH/src/github.com/ndlib/bendo/config.example > ~/goapps/bendo/development.config
 ```
+
+API tokens are also stored in a Tokenfile. You can use the provided on or generate a new token.
+
+**Provided Token**
+```console
+cp $GOPATH/src/github.com/ndlib/bendo/Tokenfile.example ~/goapps/bendo/Tokenfile
+```
+
+> This token is included in the example configuration file for curatend-batch.
+
+**Generated Token**
+```console
+echo "dev Write $(openssl rand -base64 32)" > ~/goapps/bendo/Tokenfile
+```
+
 
 ### Starting the Application
 ```console
