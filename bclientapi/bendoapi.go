@@ -23,7 +23,7 @@ var (
 
 func (ia *itemAttributes) GetItemInfo() (*jason.Object, error) {
 
-	var path = "http://" + ia.bendoServer + "/item/" + ia.item
+	var path = ia.bendoServer + "/item/" + ia.item
 
 	req, _ := http.NewRequest("GET", path, nil)
 	if ia.token != "" {
@@ -55,7 +55,7 @@ func (ia *itemAttributes) GetItemInfo() (*jason.Object, error) {
 
 func (ia *itemAttributes) getUploadMeta(fileId string) (*jason.Object, error) {
 
-	var path = "http://" + ia.bendoServer + "/upload/" + fileId + "/metadata"
+	var path = ia.bendoServer + "/upload/" + fileId + "/metadata"
 
 	req, _ := http.NewRequest("GET", path, nil)
 	if ia.token != "" {
@@ -84,7 +84,7 @@ func (ia *itemAttributes) getUploadMeta(fileId string) (*jason.Object, error) {
 }
 
 func (ia *itemAttributes) downLoad(fileName string, pathPrefix string) error {
-	var httpPath = "http://" + ia.bendoServer + "/item/" + ia.item + "/" + fileName
+	var httpPath = ia.bendoServer + "/item/" + ia.item + "/" + fileName
 
 	req, _ := http.NewRequest("GET", httpPath, nil)
 	if ia.token != "" {
@@ -139,7 +139,7 @@ func (ia *itemAttributes) downLoad(fileName string, pathPrefix string) error {
 
 func (ia *itemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []byte, fileId string) (fileid string, err error) {
 
-	var path = "http://" + ia.bendoServer + "/upload/" + fileId
+	var path = ia.bendoServer + "/upload/" + fileId
 
 	req, _ := http.NewRequest("POST", path, bytes.NewReader(chunk))
 	req.Header.Set("X-Upload-Md5", hex.EncodeToString(chunkmd5sum))
@@ -165,12 +165,9 @@ func (ia *itemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5su
 
 func (ia *itemAttributes) createFileTransAction(cmdlist []byte) (string, error) {
 
-	var (
-		path     = "http://" + ia.bendoServer + "/item/" + ia.item
-		location = "/transaction"
-	)
+	var path = ia.bendoServer + "/item/" + ia.item + "/transaction"
 
-	req, _ := http.NewRequest("POST", path+location, bytes.NewReader(cmdlist))
+	req, _ := http.NewRequest("POST", path, bytes.NewReader(cmdlist))
 	if ia.token != "" {
 		req.Header.Add("X-Api-Key", ia.token)
 	}
@@ -182,7 +179,7 @@ func (ia *itemAttributes) createFileTransAction(cmdlist []byte) (string, error) 
 	}
 	if resp.StatusCode != 202 {
 
-		fmt.Printf("Received HTTP status %d for POST %s", resp.StatusCode, path+location)
+		fmt.Printf("Received HTTP status %d for POST %s", resp.StatusCode, path)
 		return "", ErrUnexpectedResp
 	}
 
@@ -192,7 +189,7 @@ func (ia *itemAttributes) createFileTransAction(cmdlist []byte) (string, error) 
 }
 
 func (ia *itemAttributes) getTransactionStatus(transaction string) (*jason.Object, error) {
-	var path = "http://" + ia.bendoServer + "/transaction/" + transaction
+	var path = ia.bendoServer + "/transaction/" + transaction
 
 	req, err := http.NewRequest("GET", path, nil)
 

@@ -21,7 +21,7 @@ var (
 	goReturn      int = 0
 
 	fileroot     = flag.String("root", ".", "root prefix to upload files")
-	server       = flag.String("server", "libvirt9.library.nd.edu:14000", "Bendo Server to Use")
+	server       = flag.String("server", "http://localhost:14000", "Bendo Server to Use")
 	creator      = flag.String("bclient", "butil", "Creator name to use")
 	token        = flag.String("token", "", "API authentication token")
 	longV        = flag.Bool("longV", false, "Print  Long Version")
@@ -48,7 +48,7 @@ Available actions:
     General Flags:
 
     -root (defaults to current directory)  location to get or put files
-    -server   (defaults to bendo-staging.library.nd.edu:14000) server_name:port of bendo server
+    -server   (defaults to http://localhost:14000) server_name:port of bendo server
     -numuploaders (defaults to 2) number of concurrent upload/download threads
     -version ( defaults to latest version: ls & get actions) desired version number
     -token   ( no default ) API Authentication Token to be passed to the Bendo server
