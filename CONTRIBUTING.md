@@ -77,7 +77,13 @@ This symlinks the executables into `$GOPATH/bin`.
 > `$GOPATH/bin` is already added to your `$PATH` by [DLT dotfiles](https://github.com/ndlib/dlt-dotfiles)
 
 ## Running Bendo
-There are also several setup steps in order to _run_ Bendo.
+Bendo has additional requirements in order for it to run successfully. The following steps have been automated in `bootstrap.sh` for your convenience.
+
+```console
+./bootstrap.sh
+```
+
+If you wish to run the setup tasks manually proceed with the rest of the instructions.
 
 ### Directory Setup
 By convention we will run Bendo out of the `~/goapps` directory. Bendo expects the presence of two directories: `bendo_cach` and `bendo_storage`.
