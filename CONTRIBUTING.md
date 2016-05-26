@@ -77,10 +77,16 @@ This symlinks the executables into `$GOPATH/bin`.
 > `$GOPATH/bin` is already added to your `$PATH` by [DLT dotfiles](https://github.com/ndlib/dlt-dotfiles)
 
 ## Running Bendo
-There are also several setup steps in order to _run_ Bendo.
+Bendo has additional requirements in order for it to run successfully. The following steps have been automated in `bootstrap.sh` for your convenience.
+
+```console
+./bootstrap.sh
+```
+
+If you wish to run the setup tasks manually proceed with the rest of the instructions.
 
 ### Directory Setup
-By convention we will run Bendo out of the `~/goapps` directory. Bendo expects the presence of to directories: `bendo_cach` and `bendo_storage`.
+By convention we will run Bendo out of the `~/goapps` directory. Bendo expects the presence of two directories: `bendo_cach` and `bendo_storage`.
 
 ```console
 mkdir -p ~/goapps/bendo/{bendo_cache,bendo_storage}
@@ -90,8 +96,23 @@ mkdir -p ~/goapps/bendo/{bendo_cache,bendo_storage}
 Many aspects of Bendo are configurable via a config file. The sample configuration file contains a MySQL directive that is not necessary for running the application in development.
 
 ```console
-sed '/Mysql/d' $GOPATH/src/github.com/ndlib/bendo/sample.config > ~/goapps/bendo/development.config
+sed '/Mysql/d' $GOPATH/src/github.com/ndlib/bendo/config.example > ~/goapps/bendo/development.config
 ```
+
+API tokens are also stored in a Tokenfile. You can use the provided on or generate a new token.
+
+**Provided Token**
+```console
+cp $GOPATH/src/github.com/ndlib/bendo/Tokenfile.example ~/goapps/bendo/Tokenfile
+```
+
+> This token is included in the example configuration file for curatend-batch.
+
+**Generated Token**
+```console
+echo "dev Write $(openssl rand -base64 32)" > ~/goapps/bendo/Tokenfile
+```
+
 
 ### Starting the Application
 ```console
