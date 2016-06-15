@@ -463,12 +463,15 @@ This route and the information tracked may be changed in the future.
 
 # Examples and Use Cases
 
-## See if an file is in the cache
+## See if a file is in the cache
 
 Given a path to a file in an item, see if it is on disk or on tape. Do not
 recall it from tape should it not be in the cache.
 
-Do a `HEAD` request to the file's URL. The header `X-Cached` is `1` if it is in the cache, and it is `0` if it is not in the cache.
+Do a `HEAD` request to the file's URL.
+The header `X-Cached` is `1` if it is in the cache,
+`0` if it is not in the cache, and
+`2` if it is not in the cache and will never be in the cache because it is too large.
 
     curl --verbose -I \
         http://bendo.example.org:14000/item/itemid/path/to/file \
@@ -479,6 +482,8 @@ Do a `HEAD` request to the file's URL. The header `X-Cached` is `1` if it is in 
 Warm the cache with an item from tape.
 
 Do a `GET` request to the file's URL, but don't download any content.
+The cache will be filled in the background and eventually the item will show up.
+(Provided the file is not too large, which is the case when the `X-Cached` header is "2").
 
     curl --verbose \
         'http://bendo.example.org:14000/' \
@@ -487,8 +492,9 @@ Do a `GET` request to the file's URL, but don't download any content.
 
 ## Upload a large file
 
-Suppose we have a 50 MB file. For illustration, we will upload it as two 25 MB
-chunks. In reality, there would be more chunks and the file could be larger.
+Upload large files in chunks. You can determine the chunk size.
+The important thing is to upload the chunks in order from first to last.
+For illustration, suppose we have a 50 MB file and are uploading it as two 25 MB chunks.
 
 This supposes we are uploading the file to the file "example" in temporary
 holding area. We have already chunked the file into pieces, with the following
@@ -514,6 +520,8 @@ MD5 sums for the entire file and for each chunk:
 ## Create a new item
 
 To create a new item, first upload any files you wish to store in the item.
+
+TODO: finish
 
 ## Delete a file (from the most current version)
 

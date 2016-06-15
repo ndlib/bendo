@@ -82,12 +82,29 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 		// cache miss...load from main store, AND put into cache
 		nCacheMiss.Add(1)
 		log.Printf("Cache Miss %s", key)
-		w.Header().Set("X-Cached", "0")
+		blobinfo, err := s.Items.BlobInfo(id, bid)
+		if err != nil {
+			w.WriteHeader(404)
+			fmt.Fprintln(w, err)
+			return
+		}
+		length = blobinfo.Size
+		// cache this item if it is not too large.
+		// doing 1/8th of the cache size is arbitrary.
+		// not sure what a good cutoff would be.
+		if length < s.Cache.Size()/8 {
+			w.Header().Set("X-Cached", "0")
+			if r.Method == "GET" {
+				go s.copyBlobIntoCache(key, id, bid)
+			}
+		} else {
+			// item is too large to be cached
+			w.Header().Set("X-Cached", "2")
+		}
 
 		// If this is a GET, retrieve the blob- if it's a HEAD, don't
-		if r.Method != "HEAD" {
-			realContents, l, err := s.Items.Blob(id, bid)
-			length = l // use l so we don't redeclare length in this scope
+		if r.Method == "GET" {
+			realContents, _, err := s.Items.Blob(id, bid)
 			if err != nil {
 				w.WriteHeader(404)
 				fmt.Fprintln(w, err)
@@ -95,23 +112,18 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 			}
 			defer realContents.Close()
 			src = realContents
-			// cache this item f it is not too large.
-			// doing 1/8th of the cache size is arbitrary.
-			// not sure what a good cutoff would be.
-			if length < s.Cache.Size()/8 {
-				go s.copyBlobIntoCache(key, id, bid)
-			}
 		}
 	}
 	w.Header().Set("ETag", fmt.Sprintf("%d", bid))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", length))
 
 	// if it's a GET, copy the data into the response- if it's a HEAD, don't
-	if r.Method != "HEAD" {
-		n, err := io.Copy(w, src)
-		if err != nil {
-			log.Printf("getblob (%s,%d) %d,%s", id, bid, n, err.Error())
-		}
+	if r.Method == "HEAD" {
+		return
+	}
+	n, err := io.Copy(w, src)
+	if err != nil {
+		log.Printf("getblob (%s,%d) %d,%s", id, bid, n, err.Error())
 	}
 }
 
@@ -120,8 +132,8 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 func (s *RESTServer) copyBlobIntoCache(key, id string, bid items.BlobID) {
 	var keepcopy bool
 	// defer this first so it is the last to run at exit.
-	// doing thins since cw needs to be Closed() before we could
-	// possibly Delete it. And defered funcs are run LIFO.
+	// because cw needs to be Closed() before the Delete().
+	// And defered funcs are run LIFO.
 	defer func() {
 		if !keepcopy {
 			s.Cache.Delete(key)
