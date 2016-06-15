@@ -141,13 +141,9 @@ func (s *Store) findMaxBundle(id string) int {
 //
 // TODO: perhaps this should be moved to be a method on an Item*
 func (s *Store) Blob(id string, bid BlobID) (io.ReadCloser, int64, error) {
-	item, err := s.Item(id)
+	b, err := s.BlobInfo(id, bid)
 	if err != nil {
 		return nil, 0, err
-	}
-	b := item.blobByID(bid)
-	if b == nil {
-		return nil, 0, fmt.Errorf("No blob (%s, %d)", id, bid)
 	}
 	if b.Bundle == 0 {
 		// blob has been deleted
@@ -156,6 +152,22 @@ func (s *Store) Blob(id string, bid BlobID) (io.ReadCloser, int64, error) {
 	sname := fmt.Sprintf("blob/%d", bid)
 	stream, err := OpenBundleStream(s.S, sugar(id, b.Bundle), sname)
 	return stream, b.Size, err
+}
+
+// BlobInfo returns a pointer to a Blob structure containing information
+// on the given blob. It is like Blob() but doesn't recall the content
+// from tape. Unlike Blob(), though, it will not return an error if the blob is
+// deleted.
+func (s *Store) BlobInfo(id string, bid BlobID) (*Blob, error) {
+	item, err := s.Item(id)
+	if err != nil {
+		return nil, err
+	}
+	b := item.blobByID(bid)
+	if b == nil {
+		return nil, fmt.Errorf("No blob (%s, %d)", id, bid)
+	}
+	return b, nil
 }
 
 func (item Item) blobByID(id BlobID) *Blob {
