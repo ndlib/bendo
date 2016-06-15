@@ -1,7 +1,7 @@
 Changes to Bendo and its associated commands and packages. Ordered from newest
 to oldest.
 
-* 2016.2 (2016-?)
+* 2016.2 (2016-6-15)
 
  ** bendo server
 
@@ -15,6 +15,7 @@ to oldest.
  - Support the `/item/:id/@blob/nnn` syntax
  - Redirect `/item/:id/` to `/item/:id`. This case fell through the cracks
  since we use a splat route for item paths.
+ - Add X-Cache == 2 header for content which is too large to be cached
 
  ** bclient
 
