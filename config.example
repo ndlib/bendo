@@ -3,6 +3,6 @@ CacheDir = "./bendo_cache"
 CacheSize = 1000   # in MB
 Mysql = "/test"
 Cow = ""
-Tokenfile = ""
+Tokenfile = "./Tokenfile"
 PortNumber = "14000"
 PProfPort  = "14001"

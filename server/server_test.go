@@ -50,8 +50,7 @@ func TestTransaction1(t *testing.T) {
 	t.Log("got tx path", txpath)
 
 	// tx is processed async to the web frontend.
-	// maybe we should see if the transaction completes first?
-	time.Sleep(10 * time.Millisecond) // sleep a squinch
+	waitTransaction(t, txpath)
 
 	checkStatus(t, "GET", "/item/"+itemid, 200)
 	checkStatus(t, "GET", "/blob/"+itemid+"/2", 404)
@@ -64,7 +63,7 @@ func TestTransaction1(t *testing.T) {
 func TestTransactionCommands(t *testing.T) {
 	// add two blobs, and then delete one
 	blob1 := uploadstring(t, "POST", "/upload", "hello world")
-	t.Log("blob1 = ", blob1)
+	t.Log("blob1 =", blob1)
 	blob2 := uploadstring(t, "POST", "/upload", "delete me")
 	t.Log("blob2 =", blob2)
 
@@ -75,8 +74,7 @@ func TestTransactionCommands(t *testing.T) {
 			{"add", path.Base(blob2)}}, 202)
 	t.Log("got tx path", txpath)
 	// tx is processed async from the commit above.
-	// maybe wait for it to be committed?
-	time.Sleep(10 * time.Millisecond) // sleep a squinch
+	waitTransaction(t, txpath)
 	checkStatus(t, "GET", "/item/"+itemid, 200)
 	text := getbody(t, "GET", "/blob/"+itemid+"/2", 200)
 	if text != "delete me" {
@@ -86,7 +84,7 @@ func TestTransactionCommands(t *testing.T) {
 	txpath = sendtransaction(t, "/item/"+itemid+"/transaction",
 		[][]string{{"delete", "2"}}, 202)
 	t.Log("got tx path", txpath)
-	time.Sleep(10 * time.Millisecond) // sleep a squinch
+	waitTransaction(t, txpath)
 	text = getbody(t, "GET", "/blob/"+itemid+"/1", 200)
 	if text != "hello world" {
 		t.Errorf("Received %#v, expected %#v", text, "hello world")
@@ -161,8 +159,7 @@ func TestHeadCacheSHA(t *testing.T) {
 		[][]string{{"add", path.Base(filePath)}, {"slot", "testFile1", path.Base(filePath)}}, 202)
 	t.Log("got tx path", txpath)
 	// tx is processed async from the commit above.
-	// maybe wait for it to be committed?
-	time.Sleep(10 * time.Millisecond) // sleep a squinch
+	waitTransaction(t, txpath)
 
 	// verify the HEAD body is empty
 	respBody := getbody(t, "HEAD", "/item/"+itemid+"/testFile1", 200)
@@ -245,7 +242,7 @@ func sendtransaction(t *testing.T, route string, commands [][]string, statuscode
 func getlocation(t *testing.T, verb, route string, expstatus int) string {
 	resp := checkRoute(t, verb, route, expstatus)
 	if resp != nil {
-		defer resp.Body.Close()
+		resp.Body.Close()
 		return resp.Header.Get("Location")
 	}
 	return ""
@@ -276,6 +273,7 @@ func checkRoute(t *testing.T, verb, route string, expstatus int) *http.Response 
 	if err != nil {
 		t.Fatal("Problem creating request", err)
 	}
+	req.Header.Set("Accept-Encoding", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(route, err)
@@ -290,6 +288,29 @@ func checkRoute(t *testing.T, verb, route string, expstatus int) *http.Response 
 		return nil
 	}
 	return resp
+}
+
+// waitTransaction doesn't return until the given txpath
+// is done processing, either because of success or error,
+// or 100 ms have passed.
+func waitTransaction(t *testing.T, txpath string) {
+	for i := 0; i < 10; i++ {
+		time.Sleep(10 * time.Millisecond) // sleep a squinch
+		resp := checkRoute(t, "GET", txpath, 200)
+		var info struct{ Status transaction.Status }
+		dec := json.NewDecoder(resp.Body)
+		err := dec.Decode(&info)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if info.Status == transaction.StatusFinished ||
+			info.Status == transaction.StatusError {
+
+			return
+		}
+	}
+	t.Errorf("Timeout waiting for transaction %s", txpath)
 }
 
 var testServer *httptest.Server
