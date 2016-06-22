@@ -127,7 +127,7 @@ $bendo_tokens = hiera_array("bendo_tokens")
 	class { 'lib_runit::add':
 		service_name => "bendo",
 		service_path => "/etc/sv/bendo",
-		require => File[['bendorunitlog', 'bendo_tokens', File['bendoconfig']],
+		require => File[['bendorunitlog', 'bendo_tokens', 'bendoconfig']],
 	}
 
 # Enable the Service ( leave this out until app can run /sbin/sv ) 
