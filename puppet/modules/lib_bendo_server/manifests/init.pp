@@ -40,6 +40,8 @@ $bendo_tokens = hiera_array("bendo_tokens")
 	file { "bendo-logdir":
 		name =>  "${bendo_root}/log",
 		ensure => directory,
+		owner => "app",
+		group => "app",
 	}
 
 
