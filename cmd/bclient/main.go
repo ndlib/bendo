@@ -255,14 +255,6 @@ func doGet(item string, files []string) int {
 	// if file or dir exists in target path named after the item, give error mesg and exit
 	pathPrefix := path.Join(*fileroot, item)
 
-	_, err := os.Stat(pathPrefix)
-
-	if err == nil {
-		// file already exists
-		fmt.Printf("Error: target %s already exists", pathPrefix)
-		return 1
-	}
-
 	// set up communication to the bendo server, and init local and remote filelists
 
 	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait, *token)
