@@ -37,14 +37,22 @@ func (s *RESTServer) BlobHandler(w http.ResponseWriter, r *http.Request, ps http
 //                and requests to HEAD /item/:id/*slot
 func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
+	// the star parameter in httprouter returns the leading slash
+	slot := ps.ByName("slot")[1:]
+
 	item, err := s.Items.Item(id)
+
 	if err != nil {
-		w.WriteHeader(404)
+		// if item store use disabled, return 503
+		if err == items.ErrNoStore {
+			w.WriteHeader(503)
+			log.Printf("GET/HEAD /item/%s/%s returns 503 - tape disabled", id, slot)
+		} else {
+			w.WriteHeader(404)
+		}
 		fmt.Fprintln(w, err.Error())
 		return
 	}
-	// the star parameter in httprouter returns the leading slash
-	slot := ps.ByName("slot")[1:]
 	// if we have the empty path, reroute to the item metadata handler
 	if slot == "" {
 		s.ItemHandler(w, r, ps)
@@ -82,6 +90,15 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 		// cache miss...load from main store, AND put into cache
 		nCacheMiss.Add(1)
 		log.Printf("Cache Miss %s", key)
+
+		// If Item Store Use disabled, and not in cache, return 503
+		if s.useTape == false {
+			w.WriteHeader(503)
+			fmt.Fprintln(w, items.ErrNoStore)
+			log.Printf("GET /blob/%s/%s returns 503 - tape disabled", id, bid)
+			return
+		}
+
 		blobinfo, err := s.Items.BlobInfo(id, bid)
 		if err != nil {
 			w.WriteHeader(404)
@@ -169,7 +186,13 @@ func (s *RESTServer) ItemHandler(w http.ResponseWriter, r *http.Request, ps http
 	id := ps.ByName("id")
 	item, err := s.Items.Item(id)
 	if err != nil {
-		w.WriteHeader(404)
+		// If Item Store Disable, return a 503
+		if err == items.ErrNoStore {
+			w.WriteHeader(503)
+			log.Printf("GET /item/%s returns 503 - tape disabled", id)
+		} else {
+			w.WriteHeader(404)
+		}
 		fmt.Fprintln(w, err.Error())
 		return
 	}
