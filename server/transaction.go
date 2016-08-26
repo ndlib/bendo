@@ -67,9 +67,10 @@ var (
 	</html>`))
 )
 
-// NewTxHandler handles requests to POST /item/:id
+// NewTxHandler handles requests to POST /item/:id/transaction
 func (s *RESTServer) NewTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
+
 	tx, err := s.TxStore.Create(id)
 	if err != nil {
 		// the err is probably that there is already a transaction open
@@ -115,10 +116,19 @@ func (s *RESTServer) processCommit(tx *transaction.T) {
 		return
 	}
 
+retry:
 	ok := s.txgate.Enter()
 	if !ok {
 		// Gate was stopped
 		return
+	}
+	// make sure the tape is available. Keep looping until it is.
+	if !s.useTape {
+		// release the txgate so the server can stop if signaled.
+		s.txgate.Leave()
+		log.Printf("Transaction %s waiting for tape availability", tx.ID)
+		time.Sleep(1 * time.Minute) // this time is arbitrary
+		goto retry
 	}
 	defer s.txgate.Leave()
 

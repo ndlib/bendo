@@ -80,8 +80,9 @@ type RESTServer struct {
 	Fixity        FixityDB
 	DisableFixity bool
 
-	server httpdown.Server // used to close our listening socket
-	txgate *util.Gate      // limits number of concurrent transactions
+	server  httpdown.Server // used to close our listening socket
+	txgate  *util.Gate      // limits number of concurrent transactions
+	useTape bool            // Is Bendo reading/writing from tape?
 }
 
 // the number of active commits onto tape we allow at a given time
@@ -135,6 +136,10 @@ func (s *RESTServer) Run() error {
 		}
 		s.StartFixity()
 	}
+
+	// init tapeuse
+
+	s.EnableTapeUse()
 
 	// init blobcache
 	if s.Cache == nil {
@@ -264,6 +269,10 @@ func (s *RESTServer) addRoutes() http.Handler {
 		{"DELETE", "/upload/:fileid", RoleWrite, s.DeleteFileHandler},
 		{"GET", "/upload/:fileid/metadata", RoleMDOnly, s.GetFileInfoHandler},
 		{"PUT", "/upload/:fileid/metadata", RoleWrite, s.SetFileInfoHandler},
+
+		// /admin/tape_use (enable, disable, get status)
+		{"GET", "/admin/use_tape", RoleUnknown, s.GetTapeUseHandler},
+		{"PUT", "/admin/use_tape/:status", RoleAdmin, s.SetTapeUseHandler},
 
 		// the read only bundle stuff
 		{"GET", "/bundle/list/:prefix", RoleRead, s.BundleListPrefixHandler},

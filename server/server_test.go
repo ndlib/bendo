@@ -318,10 +318,11 @@ var testServer *httptest.Server
 func init() {
 	server := &RESTServer{
 		Validator: NobodyValidator{},
-		Items:     items.New(store.NewMemory()),
+		Items:     items.NewWithCache(store.NewMemory(), items.NewMemoryCache()),
 		TxStore:   transaction.New(store.NewMemory()),
 		FileStore: fragment.New(store.NewMemory()),
 		Cache:     blobcache.NewLRU(store.NewMemory(), 400),
+		useTape:   true,
 	}
 	server.txgate = util.NewGate(MaxConcurrentCommits)
 	server.TxStore.Load()

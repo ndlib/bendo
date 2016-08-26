@@ -73,7 +73,7 @@ func (s *RESTServer) fixity() {
 	log.Println("Starting fixity loop")
 	for {
 		id := s.Fixity.NextFixity(time.Now())
-		if id == "" {
+		if id == "" || s.useTape == false {
 			// sleep if there are no ids available.
 			// an hour is arbitrary.
 			time.Sleep(time.Hour)

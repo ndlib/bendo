@@ -6,25 +6,27 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/ndlib/bendo/store"
 )
 
 // A Store holds a collection of items
 type Store struct {
-	cache ItemCache
-	S     store.Store // the underlying bundle store
+	cache    ItemCache
+	S        store.Store // the underlying bundle store
+	useStore bool        // true - use bundlestore: false - use only itemCache
 }
 
 // New creates a new item store which writes its bundles to the given store.Store.
 func New(s store.Store) *Store {
-	return &Store{S: s, cache: Nullcache}
+	return &Store{S: s, cache: Nullcache, useStore: true}
 }
 
 // NewWithCache creates a new item store which caches the item metadata in the
 // given cache. (Should be deprecated??)
 func NewWithCache(s store.Store, cache ItemCache) *Store {
-	return &Store{S: s, cache: cache}
+	return &Store{S: s, cache: cache, useStore: true}
 }
 
 // SetCache will set the metadata cache used. It is intended to be used during
@@ -32,6 +34,11 @@ func NewWithCache(s store.Store, cache ItemCache) *Store {
 // accessing this item store.
 func (s *Store) SetCache(cache ItemCache) {
 	s.cache = cache
+}
+
+// SetUseStore enables or disables access to the underlying store. true- on/ false-off 
+func (s *Store) SetUseStore(value bool) {
+	s.useStore = value
 }
 
 // List returns a channel which will contain all of the item ids in the current
@@ -83,6 +90,9 @@ var (
 	// ErrNoItem occurs when an item is requested for which no bundle
 	// files could be found in the backing store.
 	ErrNoItem = errors.New("no item, bad item id")
+	// ErrNoStore occurs when useStore has been set to false-
+	// backing store is unavailable.
+	ErrNoStore = errors.New("no item, item store unavailable")
 )
 
 // Item loads and return an item's metadata info. This will block until the
@@ -92,6 +102,11 @@ func (s *Store) Item(id string) (*Item, error) {
 	if result != nil && len(result.Versions) > 0 {
 		return result, nil // a complete item record
 	}
+	// if item not in cache, and useStore disabled, return ErrNoStore Error error
+	if  s.useStore == false {
+		return result, ErrNoStore
+	}
+
 	result, err := s.itemload(id)
 	if err == nil {
 		s.cache.Set(id, result)
@@ -244,3 +259,34 @@ var Nullcache cache
 
 func (c cache) Lookup(id string) *Item    { return nil }
 func (c cache) Set(id string, item *Item) {}
+
+// NewMemoryCache returns an empty ItemCache that keeps everything in memory
+// and never evicts anything. It is probably only useful in tests.
+func NewMemoryCache() ItemCache {
+	return &memoryCache{}
+}
+
+type memoryCache struct {
+	m      sync.RWMutex
+	memory map[string]*Item
+}
+
+func (c *memoryCache) Lookup(id string) *Item {
+	var result *Item
+	c.m.RLock()
+	if c.memory != nil {
+		result = c.memory[id]
+	}
+	c.m.RUnlock()
+	return result
+}
+
+func (c *memoryCache) Set(id string, item *Item) {
+	c.m.Lock()
+	if c.memory == nil {
+		// lazily create the cache store
+		c.memory = make(map[string]*Item)
+	}
+	c.memory[id] = item
+	c.m.Unlock()
+}
