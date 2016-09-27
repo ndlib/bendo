@@ -1,1 +1,5 @@
 bin/*
+cmd/bclient/bclient
+cmd/bendo/bendo
+cmd/bstress/bstress
+cmd/butil/butil
