@@ -3,3 +3,5 @@ cmd/bclient/bclient
 cmd/bendo/bendo
 cmd/bstress/bstress
 cmd/butil/butil
+bendo
+ql.db
