@@ -54,7 +54,7 @@ $bendo_tokens = hiera_array("bendo_tokens")
 		repo => $repo,
 		require => Package[$pkglist],
 		notify => Service['bendo'],
-	} 
+	}
 
 # Create bendo runit service directories
 
@@ -65,7 +65,7 @@ $bendo_tokens = hiera_array("bendo_tokens")
 		owner => "app",
 		group => "app",
 		require => Class[['lib_runit','lib_go::build']],
-	} 
+	}
 
 # Create Bendo mysql database
 
@@ -73,14 +73,14 @@ $bendo_tokens = hiera_array("bendo_tokens")
 		class { 'mysql::server':
 			root_password => "$mysql_root_password",
 		}
-        	mysql::db { "$bendo_mysql_db":
-        		user =>	 "$bendo_mysql_user",
-        		password => "$bendo_mysql_password",
-        		host => "$bendo_mysql_server",
-        		grant => ['all'],
+		mysql::db { "$bendo_mysql_db":
+			user =>	 "$bendo_mysql_user",
+			password => "$bendo_mysql_password",
+			host => "$bendo_mysql_server",
+			grant => ['all'],
 			require => Class["mysql::server"],
-     		}
-       }
+		}
+	}
 
 # make exec and log files for runit
 
@@ -91,8 +91,8 @@ $bendo_tokens = hiera_array("bendo_tokens")
 		mode => '0755',
 		replace => true,
 		content => template('lib_bendo_server/bendo.exec.erb'),
-                require => File[$bendorunitdirs],
-	} 
+		require => File[$bendorunitdirs],
+	}
 
 
 	file { 'bendorunitlog':
@@ -102,7 +102,7 @@ $bendo_tokens = hiera_array("bendo_tokens")
 		replace => true,
 		mode => '0755',
 		content => template('lib_bendo_server/bendo.log.erb'),
-                require => File['bendorunitexec'],
+		require => File['bendorunitexec'],
 	}
 
 	file { 'bendoconfig':
@@ -112,13 +112,13 @@ $bendo_tokens = hiera_array("bendo_tokens")
 		replace => true,
 		mode => '0755',
 		content => template('lib_bendo_server/bendo.config.erb'),
-                require => File['bendorunitexec'],
+		require => File['bendorunitexec'],
 	}
 
 # create token file for bendo authentication
 #
 	file { "bendo_tokens":
-		name => "${bendo_root}/tokens", 
+		name => "${bendo_root}/tokens",
 		owner => "app",
 		group => "app",
 		replace => true,
@@ -132,7 +132,7 @@ $bendo_tokens = hiera_array("bendo_tokens")
 		require => File[['bendorunitlog', 'bendo_tokens', 'bendoconfig']],
 	}
 
-# Enable the Service ( leave this out until app can run /sbin/sv ) 
+# Enable the Service ( leave this out until app can run /sbin/sv )
 
 	service { 'bendo':
 		provider => 'base',
