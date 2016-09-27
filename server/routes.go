@@ -10,6 +10,7 @@ import (
 	_ "net/http/pprof" // for pprof server
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/facebookgo/httpdown"
 	"github.com/julienschmidt/httprouter"
@@ -19,7 +20,6 @@ import (
 	"github.com/ndlib/bendo/items"
 	"github.com/ndlib/bendo/store"
 	"github.com/ndlib/bendo/transaction"
-	"github.com/ndlib/bendo/util"
 )
 
 // RESTServer holds the configuration for a Bendo REST API server.
@@ -80,12 +80,15 @@ type RESTServer struct {
 	Fixity        FixityDB
 	DisableFixity bool
 
-	server  httpdown.Server // used to close our listening socket
-	txgate  *util.Gate      // limits number of concurrent transactions
-	useTape bool            // Is Bendo reading/writing from tape?
+	server   httpdown.Server // used to close our listening socket
+	txqueue  chan string     // channel to feed background transaction workers. contains tx ids
+	txwg     sync.WaitGroup  // for waiting for all background tx workers to exit
+	txcancel chan struct{}   // Is closed to indicate tx workers should exit
+	useTape  bool            // Is Bendo reading/writing from tape?
 }
 
-// the number of active commits onto tape we allow at a given time
+// the number of transaction commits to tape we allow at a given time. If there are more
+// they will wait in a queue.
 const MaxConcurrentCommits = 2
 
 // Run initializes and starts all the goroutines used by the server. It then
@@ -190,8 +193,13 @@ func (s *RESTServer) Run() error {
 	go s.TxCleaner()
 
 	log.Println("Starting pending transactions")
-	s.txgate = util.NewGate(MaxConcurrentCommits)
-	go s.initCommitQueue()
+	s.txqueue = make(chan string, 100) // 100 is arbitrary. don't expect that many.
+	s.txcancel = make(chan struct{})
+	for i := 0; i < MaxConcurrentCommits; i++ {
+		s.txwg.Add(1)
+		go s.transactionWorker(s.txqueue)
+	}
+	go s.initCommitQueue() // run in background
 
 	// for pprof
 	if s.PProfPort != "" {
@@ -217,27 +225,27 @@ func (s *RESTServer) Run() error {
 // Stop will stop the server and return when all the server goroutines have
 // exited and the socked closed.
 func (s *RESTServer) Stop() error {
-	// first shutdown the transaction writing.
+	// first shutdown the transaction workers
 	// We don't stop the fixity process. Should we?
-	s.txgate.Stop() // release and wait for any in progress transactions
+	close(s.txcancel)
+	s.txwg.Wait() // wait for all tx workers to exit
 
 	// then shutdown all the HTTP connections
 	return s.server.Stop()
 }
 
+// initCommitQueue adds all transactions in the tx store to the transaction queue.
+// It may block until they are all loaded and processed.
 func (s *RESTServer) initCommitQueue() {
-	// for each commit, pass to processCommit, and let it sort things out
+	// throw all transactions, even finished and errored ones, into
+	// the queue. The transaction workers will sort it out.
 	for _, tid := range s.TxStore.List() {
-		tx := s.TxStore.Lookup(tid)
-		if tx.Status == transaction.StatusWaiting ||
-			tx.Status == transaction.StatusChecking ||
-			tx.Status == transaction.StatusIngest {
-
-			tx.SetStatus(transaction.StatusWaiting)
-			go s.processCommit(tx)
+		select {
+		case s.txqueue <- tid:
+		case <-s.txcancel:
+			return
 		}
 	}
-	// also! put username into tx record
 }
 
 func (s *RESTServer) addRoutes() http.Handler {

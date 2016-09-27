@@ -150,7 +150,6 @@ func (w *Writer) manifest(istag bool, name string, hash func(Checksum) []byte) {
 			} else {
 				mname = "manifest-" + name + ".txt"
 			}
-			// TODO(dbrower): check for error?
 			out, _ = w.create(mname)
 		}
 		// The 2 spaces is to be identical to the GNU md5sum output.

@@ -98,64 +98,71 @@ func (s *RESTServer) NewTxHandler(w http.ResponseWriter, r *http.Request, ps htt
 		return
 	}
 	tx.SetStatus(transaction.StatusWaiting)
-	go s.processCommit(tx)
+	go func() {
+		s.txqueue <- tx.ID
+	}()
 	w.WriteHeader(202)
 }
 
-// The transaction's status must be set to StatusWaiting before entering,
-// or nothing will happen to the transaction.
-func (s *RESTServer) processCommit(tx *transaction.T) {
-	// probably should hold lock on tx to access these fields directly
-	log.Printf("Queued transaction %s on %s (%s)",
-		tx.ID,
-		tx.ItemID,
-		tx.Status.String())
-	if tx.Status == transaction.StatusOpen ||
-		tx.Status == transaction.StatusFinished ||
-		tx.Status == transaction.StatusError {
-		return
+// transactionWorker pulls transactions off of the channel and then
+// processes them. It is intended for many of these to run in parallel.
+// Close queue to get all workers to gracefully exit.
+func (s *RESTServer) transactionWorker(queue <-chan string) {
+	defer s.txwg.Done()
+	for {
+		var txid string
+		select {
+		case txid = <-queue:
+		case <-s.txcancel:
+			return
+		}
+		tx := s.TxStore.Lookup(txid)
+		if tx == nil {
+			// must have been deleted
+			continue
+		}
+		switch tx.Status {
+		case transaction.StatusOpen,
+			transaction.StatusFinished,
+			transaction.StatusError:
+			// ignore and get next transaction
+			continue
+		}
+		log.Printf("Starting transaction %s on %s (%s)",
+			tx.ID,
+			tx.ItemID,
+			tx.Status.String())
+		start := time.Now()
+		switch tx.Status {
+		default:
+			log.Printf("Unknown status %s", tx.Status.String())
+		case transaction.StatusWaiting:
+			tx.SetStatus(transaction.StatusChecking)
+			fallthrough
+		case transaction.StatusChecking:
+			tx.VerifyFiles(s.FileStore)
+			// check for len(tx.Err) > 0
+			tx.SetStatus(transaction.StatusIngest)
+			fallthrough
+		case transaction.StatusIngest:
+			// make sure the tape is available. Keep looping until it is.
+			for !s.useTape {
+				log.Printf("Transaction %s waiting for tape availability", tx.ID)
+				select {
+				case <-s.txcancel:
+					return
+				case <-time.After(1 * time.Minute): // this time is arbitrary
+				}
+			}
+			tx.Commit(*s.Items, s.FileStore, s.Cache)
+		}
+		duration := time.Now().Sub(start)
+		log.Printf("Finish transaction %s on %s (%s)", tx.ID, tx.ItemID, duration.String())
+
+		xTransactionTime.Add(duration.Seconds())
+		xTransactionCount.Add(1)
 	}
 
-retry:
-	ok := s.txgate.Enter()
-	if !ok {
-		// Gate was stopped
-		return
-	}
-	// make sure the tape is available. Keep looping until it is.
-	if !s.useTape {
-		// release the txgate so the server can stop if signaled.
-		s.txgate.Leave()
-		log.Printf("Transaction %s waiting for tape availability", tx.ID)
-		time.Sleep(1 * time.Minute) // this time is arbitrary
-		goto retry
-	}
-	defer s.txgate.Leave()
-
-	log.Printf("Starting transaction %s on %s (%s)",
-		tx.ID,
-		tx.ItemID,
-		tx.Status.String())
-	start := time.Now()
-	switch tx.Status {
-	default:
-		log.Printf("Unknown status %s", tx.Status.String())
-	case transaction.StatusWaiting:
-		tx.SetStatus(transaction.StatusChecking)
-		fallthrough
-	case transaction.StatusChecking:
-		tx.VerifyFiles(s.FileStore)
-		// check for len(tx.Err) > 0
-		tx.SetStatus(transaction.StatusIngest)
-		fallthrough
-	case transaction.StatusIngest:
-		tx.Commit(*s.Items, s.FileStore, s.Cache)
-	}
-	duration := time.Now().Sub(start)
-	log.Printf("Finish transaction %s on %s (%s)", tx.ID, tx.ItemID, duration.String())
-
-	xTransactionTime.Add(duration.Seconds())
-	xTransactionCount.Add(1)
 }
 
 var (
@@ -248,8 +255,17 @@ func (s *RESTServer) fileCleaner() error {
 // CancelTxHandler handles requests to POST /transaction/:tid/cancel
 func (s *RESTServer) CancelTxHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	tid := ps.ByName("tid")
-	// TODO(dbrower): only delete tx if it is modifiable
-	//TODO(dbrower): how to remove waiting goroutine?
+	tx := s.TxStore.Lookup(tid)
+	if tx == nil {
+		w.WriteHeader(404)
+		fmt.Fprintln(w, "cannot find transaction")
+		return
+	}
+	if !(tx.Status == transaction.StatusFinished ||
+		tx.Status == transaction.StatusError) {
+		w.WriteHeader(400)
+		fmt.Fprintf(w, "cannot delete pending transaction")
+	}
 	err := s.TxStore.Delete(tid)
 	fmt.Fprintf(w, err.Error())
 }
