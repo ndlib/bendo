@@ -122,7 +122,7 @@ $bendo_tokens = hiera_array("bendo_tokens")
 		owner => "app",
 		group => "app",
 		replace => true,
-		mode => '0444',
+		mode => '0400',
 		content => template('lib_bendo_server/bendo.tokens.erb')
 	}
 
