@@ -1,6 +1,7 @@
 {
 	"ImportPath": "github.com/ndlib/bendo",
-	"GoVersion": "go1.5.1",
+	"GoVersion": "go1.7",
+	"GodepVersion": "v74",
 	"Packages": [
 		"./cmd/..."
 	],
@@ -11,7 +12,7 @@
 		},
 		{
 			"ImportPath": "github.com/BurntSushi/toml",
-			"Comment": "v0.1.0-46-gbbd5bb6",
+			"Comment": "v0.2.0",
 			"Rev": "bbd5bb678321a0d6e58f1099321dfa73391c1b6f"
 		},
 		{
@@ -45,6 +46,10 @@
 		},
 		{
 			"ImportPath": "github.com/cznic/ql",
+			"Rev": "9c77931b60c6317f94de402268bbc3e8334b71f4"
+		},
+		{
+			"ImportPath": "github.com/cznic/ql/driver",
 			"Rev": "9c77931b60c6317f94de402268bbc3e8334b71f4"
 		},
 		{

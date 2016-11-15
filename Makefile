@@ -3,7 +3,7 @@ TARGETS:=$(wildcard ./cmd/*)
 GOCMD:=$(if $(shell which godep),godep go,go)
 VERSION:=$(shell git describe --always)
 PACKAGES:=$(shell go list ./... | grep -v /vendor/)
-GOPATH:=$(realpath ./Godeps/_workspace/):$(GOPATH)
+GO15VENDOREXPERIMENT=1
 
 all: $(TARGETS)
 
