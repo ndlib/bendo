@@ -24,6 +24,7 @@ func (d dbVersion) Get(tx migration.LimitedTx) (int, error) {
 	if err != nil {
 		// we assume error means there is no migration table
 		log.Println(err.Error())
+		log.Println("Assuming this is because there is no migration table, yet")
 		return 0, nil
 	}
 	return v, nil

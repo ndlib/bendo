@@ -30,6 +30,7 @@ var _ FixityDB = &msqlCache{}
 var mysqlMigrations = []migration.Migrator{
 	mysqlschema1,
 	mysqlschema2,
+	mysqlschema3,
 }
 
 // Adapt the schema versioning for MySQL
@@ -72,6 +73,7 @@ func (ms *msqlCache) Lookup(id string) *items.Item {
 	var thisItem = new(items.Item)
 	err = json.Unmarshal([]byte(value), thisItem)
 	if err != nil {
+		log.Printf("Item Cache: error in lookup: %s", err.Error())
 		return nil
 	}
 	return thisItem
@@ -92,22 +94,12 @@ func (ms *msqlCache) Set(id string, thisItem *items.Item) {
 		log.Printf("Item Cache: %s", err.Error())
 		return
 	}
-	result, err := ms.db.Exec(`UPDATE items SET created = ?, modified = ?, size = ?, value = ? WHERE item = ?`, created, modified, size, value, id)
+	stmt := `INSERT INTO items (item, created, modified, size, value) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE created=?, modified=?, size=?, value=?`
+
+	_, err = ms.db.Exec(stmt, id, created, modified, size, value, created, modified, size, value)
 	if err != nil {
 		log.Printf("Item Cache: %s", err.Error())
 		return
-	}
-	nrows, err := result.RowsAffected()
-	if err != nil {
-		log.Printf("Item Cache: %s", err.Error())
-		return
-	}
-	if nrows == 0 {
-		// record didn't exist. create it
-		_, err = ms.db.Exec(`INSERT INTO items (item, created, modified, size, value) VALUES (?, ?, ?, ?, ?)`, id, created, modified, size, value)
-		if err != nil {
-			log.Printf("Item Cache: %s", err.Error())
-		}
 	}
 }
 
@@ -208,6 +200,16 @@ func mysqlschema2(tx migration.LimitedTx) error {
 		`ALTER TABLE fixity CHANGE COLUMN id item varchar(255)`,
 		`ALTER TABLE fixity ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST`,
 		`ALTER TABLE items ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST`,
+	}
+
+	return execlist(tx, s)
+}
+
+func mysqlschema3(tx migration.LimitedTx) error {
+	var s = []string{
+		`CREATE TEMPORARY TABLE mult_ids AS SELECT item FROM items GROUP BY item HAVING count(*) > 1`,
+		`DELETE FROM items WHERE item IN (SELECT * from mult_ids)`,
+		`ALTER TABLE items ADD UNIQUE INDEX items_item (item), CHANGE COLUMN value value LONGTEXT, CHANGE COLUMN size size BIGINT`,
 	}
 
 	return execlist(tx, s)
