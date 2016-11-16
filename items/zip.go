@@ -73,8 +73,11 @@ func OpenBundleStream(s store.Store, key, sname string) (io.ReadCloser, error) {
 			parent:     r,
 			ReadCloser: rc,
 		}
-	} else if err == bagit.ErrNotFound {
-		err = ErrNotFound
+	} else {
+		r.Close()
+		if err == bagit.ErrNotFound {
+			err = ErrNotFound
+		}
 	}
 	return result, err
 }

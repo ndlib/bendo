@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -23,10 +24,17 @@ import (
 // I consider this approach a proof of concept. The "for real" approach will
 // be to alter Item to make the appropriate calls into the remote bendo server.
 type COW struct {
-	local  Store        // where we write into
-	client *http.Client // to reuse keep-alive connections
-	host   string       // "http://hostname:port"
-	token  string       // the access token for the bendo server
+	local    Store                // where we write into
+	client   *http.Client         // to reuse keep-alive connections
+	host     string               // "http://hostname:port"
+	token    string               // the access token for the bendo server
+	mu       sync.Mutex           // controls everything below
+	inflight map[string]*download // bundles we are downloading
+}
+
+type download struct {
+	wg  sync.WaitGroup
+	err error
 }
 
 // NewCOW creates a COW store using the given local store and the given external
@@ -34,10 +42,11 @@ type COW struct {
 // the user token to use in requests to the server.
 func NewCOW(local Store, host, token string) *COW {
 	return &COW{
-		local:  local,
-		host:   host,
-		token:  token,
-		client: &http.Client{Timeout: 300 * time.Second},
+		local:    local,
+		host:     host,
+		token:    token,
+		client:   &http.Client{Timeout: 300 * time.Second},
+		inflight: make(map[string]*download),
 	}
 }
 
@@ -70,23 +79,52 @@ func (c *COW) Open(key string) (ReadAtCloser, int64, error) {
 	if err == nil {
 		return rac, n, err
 	}
-	// on error, see if it is on remote
-	rc, err := c.remoteOpen(key)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer rc.Close()
-	// copy rc into the local
-	w, err := c.local.Create(key)
-	if err != nil {
-		return nil, 0, err
-	}
-	_, err = io.Copy(w, rc)
-	w.Close()
+	err = c.copyToLocal(key)
 	if err != nil {
 		return nil, 0, err
 	}
 	return c.local.Open(key)
+}
+
+func (c *COW) copyToLocal(key string) error {
+	// not sure whether to check remote first or inflight list
+
+	// see if it is in remote
+	rc, err := c.remoteOpen(key)
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	if dwnld, ok := c.inflight[key]; ok {
+		// item is already being download
+		c.mu.Unlock()
+		rc.Close()
+		dwnld.wg.Wait()
+		return dwnld.err
+	}
+	defer rc.Close()
+	// set up a download record and then copy item into local store
+	dwnld := &download{}
+	dwnld.wg.Add(1)
+	c.inflight[key] = dwnld
+	c.mu.Unlock()
+	defer func() {
+		// at end we signal our error and remove download record
+		dwnld.err = err
+		dwnld.wg.Done()
+		c.mu.Lock()
+		delete(c.inflight, key)
+		c.mu.Unlock()
+	}()
+
+	// download item
+	w, err := c.local.Create(key)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(w, rc)
+	w.Close()
+	return err
 }
 
 // Create will make a new item in the local store. It is acceptable to

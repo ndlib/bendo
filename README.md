@@ -50,6 +50,24 @@ This will run bendo in the background on port 14000. You can test it by hitting 
 
 If you already had files in these directories Bendo will resync itself on them, but it may take some time. (How will one know when it is finished?)
 
+# Copy-On-Write
+
+It is possible for a bendo server to pull content from a second bendo server.
+In this way, the first bendo server will appear to have all the content the second one has, but any writes or changes to the data are kept
+only in the first one.
+The transfer of data happens in the background, and is not noticiable to any clients.
+The ability is only a proof-of-concept now, and entire bundle files are transferred.
+If the Copy-on-Write ability is useful, the code should be rewritten so that
+only individual blobs are transferred between the two bendo servers.
+
+Enable COW mode by setting the http address for the second bendo server in the config file.
+If the second bendo server is protected by a token, also give an access token.
+
+    CowHost = "http://bendo.example.com:14000"
+    CowToken = "1234567890"
+
+The second bendo server supports the copying by default and does not need to be configured in any way.
+
 # Deployment in Production
 
 TBD
