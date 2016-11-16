@@ -23,7 +23,8 @@ type bendoConfig struct {
 	PortNumber string
 	PProfPort  string
 	Mysql      string
-	Cow        string
+	CowHost    string
+	CowToken   string
 }
 
 func main() {
@@ -37,7 +38,8 @@ func main() {
 		PortNumber: "14000",
 		PProfPort:  "14001",
 		Mysql:      "",
-		Cow:        "",
+		CowHost:    "",
+		CowToken:   "",
 	}
 
 	var configFile = flag.String("config-file", "", "Configuration File")
@@ -72,8 +74,8 @@ func main() {
 		os.MkdirAll(config.CacheDir, 0755)
 	}
 	var itemstore store.Store = store.NewFileSystem(config.StoreDir)
-	if config.Cow != "" {
-		itemstore = store.NewCOW(itemstore, config.Cow, "")
+	if config.CowHost != "" {
+		itemstore = store.NewCOW(itemstore, config.CowHost, config.CowToken)
 	}
 	var s = server.RESTServer{
 		Items:      items.New(itemstore),
@@ -84,7 +86,7 @@ func main() {
 		PortNumber: config.PortNumber,
 		PProfPort:  config.PProfPort,
 	}
-	if config.Cow != "" {
+	if config.CowHost != "" {
 		// don't run fixity if we are using a copy-on-write.
 		// (doing so will cause us to download ALL the data from
 		// the target bendo over time)
