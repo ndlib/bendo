@@ -5,3 +5,5 @@ cmd/bstress/bstress
 cmd/butil/butil
 bendo
 ql.db
+bendo_storage/*
+bendo_cache/*
