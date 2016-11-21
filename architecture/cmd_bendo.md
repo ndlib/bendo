@@ -47,16 +47,21 @@ Set the maximum cache size, in megabytes (decimal, so passing "1" will set the c
 This size limit applies only to the download cache, not to the temporary storage used for file uploads, so
 the total space used for the cache directory may be larger than the size given.
 
-    Cow = <URL>
+    CowHost = <URL>
 
-Setting copy-on-write will cause this bendo server to mirror a second bendo server given by the URL.
+Setting this will enable copy-on-write mode, which cause this bendo server to mirror a second bendo server given by the URL.
 This bendo server will refer to the external one whenever an item is requested which is not in
 the local store. Any writes will be saved locally and not on the external bendo.
 When this is enabled, background fixity checking on this bendo server is disabled (since
 otherwise, all the content on the remote bendo server will end up copied to this one).
 An example:
 
-        Cow = "http://bendo.example.org:14000/"
+        CowHost = "http://bendo.example.org:14000/"
+
+    CowToken = "<Token>"
+
+Use this to give an access token to pass on when accessing the host given by the CowHost option.
+If not specified, no token is used.
 
     Mysql = "<LOCATION>"
 
