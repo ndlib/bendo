@@ -75,6 +75,7 @@ func main() {
 	}
 	var itemstore store.Store = store.NewFileSystem(config.StoreDir)
 	if config.CowHost != "" {
+		log.Printf("Using COW with target %s", config.CowHost)
 		itemstore = store.NewCOW(itemstore, config.CowHost, config.CowToken)
 	}
 	var s = server.RESTServer{
