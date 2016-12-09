@@ -186,14 +186,14 @@ func (c *COW) remoteList() <-chan string {
 	out := make(chan string)
 	go func() {
 		defer close(out)
-		resp, err := c.get(c.host + "/bundle/list")
+		resp, err := c.get(c.host + "/bundle/list/")
 		if err != nil {
 			log.Println(err.Error())
 			return
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != 200 {
-			log.Println("COW remoteList received %d", resp.StatusCode)
+			log.Println("COW remoteList received", resp.StatusCode)
 			return
 		}
 		dec := json.NewDecoder(resp.Body)
