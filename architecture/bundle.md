@@ -15,7 +15,7 @@ example, the bundle file `b4h89xw-0004.zip` would be stored at the location
 
 If a sequence number should pass 9999, then the file name is expanded to use
 five digits for the number, and a sixth digit is added when sequence numbers
-pass 1 million.
+pass 100,000.
 
 # Individual Bundle File
 
