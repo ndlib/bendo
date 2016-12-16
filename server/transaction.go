@@ -98,9 +98,7 @@ func (s *RESTServer) NewTxHandler(w http.ResponseWriter, r *http.Request, ps htt
 		return
 	}
 	tx.SetStatus(transaction.StatusWaiting)
-	go func() {
-		s.txqueue <- tx.ID
-	}()
+	s.txqueue <- tx.ID
 	w.WriteHeader(202)
 }
 
