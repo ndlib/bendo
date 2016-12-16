@@ -100,6 +100,7 @@ func main() {
 	go signalHandler(sig, &s)
 
 	s.Run()
+	log.Println("Exiting")
 }
 
 func signalHandler(sig <-chan os.Signal, svr *server.RESTServer) {
@@ -107,7 +108,6 @@ func signalHandler(sig <-chan os.Signal, svr *server.RESTServer) {
 		log.Println("---Received signal", s)
 		switch s {
 		case syscall.SIGINT, syscall.SIGTERM:
-			log.Println("Exiting")
 			svr.Stop() // this will cause Run to exit
 		}
 	}
