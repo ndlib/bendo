@@ -17,7 +17,6 @@ import (
 	"github.com/ndlib/bendo/items"
 	"github.com/ndlib/bendo/store"
 	"github.com/ndlib/bendo/transaction"
-	"github.com/ndlib/bendo/util"
 )
 
 func TestTransaction1(t *testing.T) {
@@ -324,7 +323,12 @@ func init() {
 		Cache:     blobcache.NewLRU(store.NewMemory(), 400),
 		useTape:   true,
 	}
-	server.txgate = util.NewGate(MaxConcurrentCommits)
+	server.txqueue = make(chan string)
+	server.txcancel = make(chan struct{})
+	for i := 0; i < MaxConcurrentCommits; i++ {
+		go server.transactionWorker(server.txqueue)
+	}
+
 	server.TxStore.Load()
 	testServer = httptest.NewServer(server.addRoutes())
 }
