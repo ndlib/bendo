@@ -106,9 +106,14 @@ func (t *StoreLRU) Get(key string) (store.ReadAtCloser, int64, error) {
 	t.m.Lock()
 	t.lru.MoveToFront(e)
 	t.m.Unlock()
-	// TODO(dbrower): see if not found error is returned, and if so unlink
-	// this item from the lru list and unreserve its space.
-	return t.s.Open(key)
+	rac, size, err := t.s.Open(key)
+	if err != nil {
+		// Something happened, so unlink this item from the lru list
+		// and unreserve its space.
+		// We assume Open will always return at least one of rac and err as nil.
+		err = t.Delete(key)
+	}
+	return rac, size, err
 }
 
 func (t *StoreLRU) find(key string) *list.Element {
