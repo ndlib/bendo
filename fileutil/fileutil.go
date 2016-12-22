@@ -15,10 +15,6 @@ import (
 	"github.com/antonholmquist/jason"
 )
 
-var (
-	verbose bool
-)
-
 type ListData struct {
 	localFileList  *FileList
 	remoteFileList *FileList
@@ -67,10 +63,6 @@ func NewLists(root string) *ListData {
 	this.FilesWalked = make(chan string)
 
 	return this
-}
-
-func SetVerbose(isVerbose bool) {
-	verbose = isVerbose
 }
 
 func (ld *ListData) CreateUploadList(files string) {
