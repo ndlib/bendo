@@ -132,6 +132,9 @@ func (s *RESTServer) Run() error {
 	}
 	s.Items.SetCache(db)
 
+	// init tapeuse
+	s.EnableTapeUse()
+
 	// init fixity
 	if !s.DisableFixity {
 		if s.Fixity == nil {
@@ -139,10 +142,6 @@ func (s *RESTServer) Run() error {
 		}
 		s.StartFixity()
 	}
-
-	// init tapeuse
-
-	s.EnableTapeUse()
 
 	// init blobcache
 	if s.Cache == nil {

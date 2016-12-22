@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
@@ -16,10 +15,9 @@ import (
 // BundleListHandler handles GET requests to "/bundle/list".
 func (s *RESTServer) BundleListHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 
-	if s.useTape == false {
+	if !s.useTape {
 		w.WriteHeader(503)
 		fmt.Fprintln(w, items.ErrNoStore)
-		log.Printf("GET /bundle/list returns 503 - tape disabled")
 		return
 	}
 
@@ -30,7 +28,7 @@ func (s *RESTServer) BundleListHandler(w http.ResponseWriter, r *http.Request, p
 	// comma starts as a space
 	var comma = ' '
 	for key := range c {
-		fmt.Fprintf(w, "%c\"%s\"", comma, key)
+		fmt.Fprintf(w, `%c"%s"`, comma, key)
 		comma = ','
 	}
 	w.Write([]byte("]"))
@@ -40,15 +38,15 @@ func (s *RESTServer) BundleListHandler(w http.ResponseWriter, r *http.Request, p
 func (s *RESTServer) BundleListPrefixHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	prefix := ps.ByName("prefix")
 
-	if s.useTape == false {
+	if !s.useTape {
 		w.WriteHeader(503)
 		fmt.Fprintln(w, items.ErrNoStore)
-		log.Printf("GET /bundle/list/%s returns 503 - tape disabled", prefix)
 		return
 	}
 
 	result, err := s.Items.S.ListPrefix(prefix)
 	if err != nil {
+		w.WriteHeader(500)
 		fmt.Fprintln(w, err)
 		return
 	}
@@ -61,18 +59,19 @@ func (s *RESTServer) BundleListPrefixHandler(w http.ResponseWriter, r *http.Requ
 func (s *RESTServer) BundleOpenHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	key := ps.ByName("key")
 
-	if s.useTape == false {
+	if !s.useTape {
 		w.WriteHeader(503)
 		fmt.Fprintln(w, items.ErrNoStore)
-		log.Printf("GET /bundle/open/%s returns 503 - tape disabled", key)
 		return
 	}
 
 	data, _, err := s.Items.S.Open(key)
 	if err != nil {
+		// assume it is a missing key
+		w.WriteHeader(404)
 		fmt.Fprintln(w, err)
 		return
 	}
+	defer data.Close()
 	io.Copy(w, store.NewReader(data))
-	data.Close()
 }

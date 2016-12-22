@@ -92,10 +92,9 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 		log.Printf("Cache Miss %s", key)
 
 		// If Item Store Use disabled, and not in cache, return 503
-		if s.useTape == false {
+		if !s.useTape {
 			w.WriteHeader(503)
 			fmt.Fprintln(w, items.ErrNoStore)
-			log.Printf("GET /blob/%s/%s returns 503 - tape disabled", id, bid)
 			return
 		}
 

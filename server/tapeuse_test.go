@@ -70,7 +70,7 @@ func TestTapeBundle(t *testing.T) {
 	checkStatus(t, "PUT", "/admin/use_tape/on", 201)
 	checkStatus(t, "GET", "/bundle/list/", 200)
 	checkStatus(t, "GET", "/bundle/list/noone", 200)
-	checkStatus(t, "GET", "/bundle/open/noone", 200)
+	checkStatus(t, "GET", "/bundle/open/noone", 404)
 	checkStatus(t, "PUT", "/admin/use_tape/off", 201)
 	checkStatus(t, "GET", "/bundle/list/", 503)
 	checkStatus(t, "GET", "/bundle/list/noone", 503)
