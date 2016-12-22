@@ -50,7 +50,7 @@ var (
 	{{ $txid := .ID }}
 	<dl>
 	<dt>ID</dt><dd>{{ .ID }}</dd>
-	<dt>For Item</dt><dd>{{ .ItemID }}</dd>
+	<dt>For Item</dt><dd><a href="/item/{{ .ItemID }}">{{ .ItemID }}</a></dd>
 	<dt>Status</dt><dd>{{ .Status }}</dd>
 	<dt>Started</dt><dd>{{ .Started }}</dd>
 	<dt>Modified</dt><dd>{{ .Modified }}</dd>
