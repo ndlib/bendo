@@ -16,14 +16,14 @@ import (
 // This file contains code implementing various caching interfaces to use
 // MySQL as a storage medium.
 
-// implements the items.ItemCache interface and the FixityDB interface
+// MsqlCache implements the items.ItemCache interface and the FixityDB interface
 // using MySQL as the backing store.
-type msqlCache struct {
+type MsqlCache struct {
 	db *sql.DB
 }
 
-var _ items.ItemCache = &msqlCache{}
-var _ FixityDB = &msqlCache{}
+var _ items.ItemCache = &MsqlCache{}
+var _ FixityDB = &MsqlCache{}
 
 // List of migrations to perform. Add new ones to the end.
 // DO NOT change the order of items already in this list.
@@ -43,7 +43,7 @@ var mysqlVersioning = dbVersion{
 
 // NewMysqlCache connects to a MySQL database and returns an item satisifying
 // both the ItemCache and FixityDB interfaces.
-func NewMysqlCache(dial string) (*msqlCache, error) {
+func NewMysqlCache(dial string) (*MsqlCache, error) {
 	db, err := migration.OpenWith(
 		"mysql",
 		dial,
@@ -54,10 +54,12 @@ func NewMysqlCache(dial string) (*msqlCache, error) {
 		log.Printf("Open Mysql: %s", err.Error())
 		return nil, err
 	}
-	return &msqlCache{db: db}, nil
+	return &MsqlCache{db: db}, nil
 }
 
-func (ms *msqlCache) Lookup(id string) *items.Item {
+// Lookup returns a cached Item, if one exists in the database.
+// Otherwise it returns nil.
+func (ms *MsqlCache) Lookup(id string) *items.Item {
 	const dbLookup = `SELECT value FROM items WHERE item = ? LIMIT 1`
 
 	var value string
@@ -79,7 +81,8 @@ func (ms *msqlCache) Lookup(id string) *items.Item {
 	return thisItem
 }
 
-func (ms *msqlCache) Set(id string, thisItem *items.Item) {
+// Set adds the given item to the cache under the key id.
+func (ms *MsqlCache) Set(id string, thisItem *items.Item) {
 	var created, modified time.Time
 	var size int64
 	for i := range thisItem.Blobs {
@@ -103,7 +106,10 @@ func (ms *msqlCache) Set(id string, thisItem *items.Item) {
 	}
 }
 
-func (ms *msqlCache) NextFixity(cutoff time.Time) string {
+// NextFixity returns the earliest scheduled fixity record
+// that is before the cutoff time. If there is no such record
+// it returns the empty string.
+func (ms *MsqlCache) NextFixity(cutoff time.Time) string {
 	const query = `
 		SELECT item
 		FROM fixity
@@ -123,7 +129,9 @@ func (ms *msqlCache) NextFixity(cutoff time.Time) string {
 	return item
 }
 
-func (ms *msqlCache) UpdateFixity(item string, status string, notes string) error {
+// UpdateFixity updates the earliest scheduled fixity record for
+// the given item. If there is no such fixity record, it will create one.
+func (ms *MsqlCache) UpdateFixity(item string, status string, notes string) error {
 	const query = `
 		UPDATE fixity
 		SET status = ?, notes = ?
@@ -147,14 +155,19 @@ func (ms *msqlCache) UpdateFixity(item string, status string, notes string) erro
 	return err
 }
 
-func (ms *msqlCache) SetCheck(item string, when time.Time) error {
+// SetCheck adds a fixity record for the given item. The created fixity
+// record will have the status of "scheduled".
+func (ms *MsqlCache) SetCheck(item string, when time.Time) error {
 	const query = `INSERT INTO fixity (item, scheduled_time, status, notes) VALUES (?,?,?,?)`
 
 	_, err := ms.db.Exec(query, item, when, "scheduled", "")
 	return err
 }
 
-func (ms *msqlCache) LookupCheck(item string) (time.Time, error) {
+// LookupCheck will return the time of the earliest scheduled fixity
+// check for the given item. If there is no pending fixity check for
+// the item, it returns the zero time.
+func (ms *MsqlCache) LookupCheck(item string) (time.Time, error) {
 	const query = `
 		SELECT scheduled_time
 		FROM fixity

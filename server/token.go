@@ -51,6 +51,7 @@ func AtoRole(s string) Role {
 // returns a user named "nobody" with the Admin role.
 type NobodyValidator struct{}
 
+// TokenValid will always return an Admin user named "nobody".
 func (NobodyValidator) TokenValid(token string) (string, Role, error) {
 	return "nobody", RoleAdmin, nil
 }
@@ -59,6 +60,7 @@ func (NobodyValidator) TokenValid(token string) (string, Role, error) {
 // invalid. That is, it always returns the user "" with the Unknown role.
 type InvalidValidator struct{}
 
+// TokenValid will always return an invalid user with no permissions.
 func (InvalidValidator) TokenValid(token string) (string, Role, error) {
 	return "", RoleUnknown, nil
 }

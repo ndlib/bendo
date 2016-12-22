@@ -16,12 +16,14 @@ import (
 // embedded database. These are intended to be used only
 // in development.
 
-type qlCache struct {
+// A QlCache implements an item.ItemCache and a FixityDB interface
+// backed by a QL database.
+type QlCache struct {
 	db *sql.DB
 }
 
-var _ items.ItemCache = &qlCache{}
-var _ FixityDB = &qlCache{}
+var _ items.ItemCache = &QlCache{}
+var _ FixityDB = &QlCache{}
 
 // List of migrations to perform. Add new ones to the end.
 // DO NOT change the order of items already in this list.
@@ -39,7 +41,7 @@ var qlVersioning = dbVersion{
 
 // NewQlCache makes a QL database cache. filename is
 // the name of the file to save the database to. The filname "memory" means to keep everything in memory.
-func NewQlCache(filename string) (*qlCache, error) {
+func NewQlCache(filename string) (*QlCache, error) {
 	var driver = "ql"
 	if filename == "memory" {
 		driver = "ql-mem"
@@ -55,10 +57,12 @@ func NewQlCache(filename string) (*qlCache, error) {
 		log.Printf("Open QL: %s", err.Error())
 		return nil, err
 	}
-	return &qlCache{db: db}, nil
+	return &QlCache{db: db}, nil
 }
 
-func (qc *qlCache) Lookup(item string) *items.Item {
+// Lookup returns an item from the cache if it exists. If there
+// is nothing under that key, it will return nil.
+func (qc *QlCache) Lookup(item string) *items.Item {
 	const dbLookup = `SELECT value FROM items WHERE id == ?1 LIMIT 1`
 
 	var value string
@@ -77,7 +81,8 @@ func (qc *qlCache) Lookup(item string) *items.Item {
 	return thisItem
 }
 
-func (qc *qlCache) Set(item string, thisItem *items.Item) {
+// Set adds the given item to the cache under the key item.
+func (qc *QlCache) Set(item string, thisItem *items.Item) {
 	const dbUpdate = `UPDATE items SET created = ?2, modified = ?3, size = ?4, value = ?5 WHERE id == ?1`
 	const dbInsert = `INSERT INTO items (id, created, modified, size, value) VALUES (?1, ?2, ?3, ?4, ?5)`
 	var created, modified time.Time
@@ -113,7 +118,10 @@ func (qc *qlCache) Set(item string, thisItem *items.Item) {
 	}
 }
 
-func (qc *qlCache) NextFixity(cutoff time.Time) string {
+// NextFixity will return the id of the earliest scheduled fixity check
+// that is before the cutoff time. If there is no such record, the
+// empty string is returned.
+func (qc *QlCache) NextFixity(cutoff time.Time) string {
 	const query = `
 		SELECT id, scheduled_time
 		FROM fixity
@@ -134,7 +142,9 @@ func (qc *qlCache) NextFixity(cutoff time.Time) string {
 	return item
 }
 
-func (qc *qlCache) UpdateFixity(item string, status string, notes string) error {
+// UpdateFixity will update the earliest scheduled fixity record for the given item.
+// If there is no such record, one will be created.
+func (qc *QlCache) UpdateFixity(item string, status string, notes string) error {
 	const query = `
 		UPDATE fixity
 		SET status = ?2, notes = ?3
@@ -163,14 +173,18 @@ func (qc *qlCache) UpdateFixity(item string, status string, notes string) error 
 	return err
 }
 
-func (qc *qlCache) SetCheck(item string, when time.Time) error {
+// SetCheck adds a new fixity record for the given item. The new
+// record will have the status of "scheduled".
+func (qc *QlCache) SetCheck(item string, when time.Time) error {
 	const query = `INSERT INTO fixity (id, scheduled_time, status, notes) VALUES (?1,?2,?3,?4)`
 
 	_, err := performExec(qc.db, query, item, when, "scheduled", "")
 	return err
 }
 
-func (qc *qlCache) LookupCheck(item string) (time.Time, error) {
+// LookupCheck returns the earliest scheduled fixity check for the given
+// item. If there is no scheduled fixity check, it returns the zero time.
+func (qc *QlCache) LookupCheck(item string) (time.Time, error) {
 	const query = `
 		SELECT scheduled_time
 		FROM fixity
