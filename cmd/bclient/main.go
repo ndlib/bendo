@@ -79,8 +79,6 @@ func main() {
 	// parse command line
 	flag.Usage = func() { fmt.Println(Usage) }
 	flag.Parse()
-	fileutil.SetVerbose(*verbose)
-
 	args := flag.Args()
 
 	if len(args) == 0 {
