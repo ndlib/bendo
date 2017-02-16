@@ -34,7 +34,7 @@ type Store interface {
 }
 
 // ROStore is the read-only pieces of a Store. It allows one to list contents,
-// and to retreive data.
+// and to retrieve data.
 type ROStore interface {
 	List() <-chan string
 	ListPrefix(prefix string) ([]string, error)

@@ -134,7 +134,7 @@ func (r *Reader) loadtagfile(name string) error {
 // provided. If no entry exists for the given file, it returns nil
 func (r *Reader) Checksum(name string) *Checksum {
 
-	// load the manifest files in from whereever
+	// load the manifest files in from wherever
 
 	if len(r.t.manifest) == 0 {
 		err := r.loadManifests()
@@ -190,7 +190,7 @@ func (err BagError) Error() string {
 // hashes, although only MD5 and SHA256 hashes are actually computed and verified.
 // Files missing an entry in a manifest file, or manifest entires missing a
 // corresponding file will cause a verification error. Tag files which are
-// missing a manifest entry are the only execption to the verification error.
+// missing a manifest entry are the only exception to the verification error.
 func (r *Reader) Verify() error {
 	err := r.loadManifests()
 	if err != nil {

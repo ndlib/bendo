@@ -26,7 +26,7 @@ func TestTransaction1(t *testing.T) {
 	// non-well-formed json is rejected
 	// must use uploadstringhash to send the bad json
 	uploadstringhash(t, "POST", "/item/abc1/transaction", `["not correct format"]`, "", 400)
-	// bad or non-existant commands are rejected
+	// bad or non-existent commands are rejected
 	sendtransaction(t, "/item/abc2/transaction", [][]string{{"not a command"}}, 400)
 	sendtransaction(t, "/item/abc3/transaction", [][]string{{"not a command"}}, 400)
 

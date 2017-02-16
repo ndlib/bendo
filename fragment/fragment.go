@@ -229,7 +229,7 @@ func combineCommon(lists [][]string) []string {
 				if nEqual < len(lists) {
 					break
 				}
-				// a match accross every list!
+				// a match across every list!
 				result = append(result, bar)
 				nEqual = 0
 			} else if list[idxs[currentList]] > bar {
