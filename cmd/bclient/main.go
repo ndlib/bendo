@@ -1,6 +1,6 @@
 package main
 
-//The bclient tool is meant to be invoked by the CurateND batch ingest procees
+// The bclient tool is meant to be invoked by the CurateND batch ingest process
 
 import (
 	"flag"
@@ -66,7 +66,7 @@ Available actions:
     -longV        ( defaults to false) show blob id, size, date created, and creator of each file in item 
 
     get Flags:
-    -stub         (defaults to false)  retreive file tree of item, create zero-length stub for each file
+    -stub         (defaults to false)  retrieve file tree of item, create zero-length stub for each file
 
     
 	`

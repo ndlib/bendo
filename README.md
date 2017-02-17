@@ -5,6 +5,8 @@ Bendo
 License](http://img.shields.io/badge/APACHE2-license-blue.svg)](./LICENSE)
 [![Contributing
 Guidelines](http://img.shields.io/badge/CONTRIBUTING-Guidelines-blue.svg)](./CONTRIBUTING.md)
+[![Go Report
+Card](https://goreportcard.com/badge/github.com/ndlib/bendo)](https://goreportcard.com/report/github.com/ndlib/bendo)
 
 Bendo is a front-end to our tape system.
 It provides an object store, a REST interface, groups small files into larger bundles,
