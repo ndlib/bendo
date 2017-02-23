@@ -91,11 +91,10 @@ func (ia *itemAttributes) downLoad(fileName string, pathPrefix string) error {
 		req.Header.Add("X-Api-Key", ia.token)
 	}
 	r, err := http.DefaultClient.Do(req)
-
-	defer r.Body.Close()
 	if err != nil {
 		return err
 	}
+	defer r.Body.Close()
 	if r.StatusCode != 200 {
 		r.Body.Close()
 		switch r.StatusCode {
@@ -112,25 +111,22 @@ func (ia *itemAttributes) downLoad(fileName string, pathPrefix string) error {
 	// How do we handle large downloads?
 
 	targetFile := path.Join(pathPrefix, fileName)
-
 	targetDir, _ := path.Split(targetFile)
 
 	err = os.MkdirAll(targetDir, 0755)
 
-	defer r.Body.Close()
-
 	if err != nil {
-		fmt.Printf("Error: could not create directory %s\n%s\n", err.Error())
+		fmt.Printf("Error: could not create directory %s\n%s\n", targetDir, err.Error())
 		return err
 	}
 
 	filePtr, err := os.Create(targetFile)
-	defer filePtr.Close()
 
 	if err != nil {
-		fmt.Printf("Error: could not create file %s\n%s\n", err.Error())
+		fmt.Printf("Error: could not create file %s\n%s\n", targetFile, err.Error())
 		return err
 	}
+	defer filePtr.Close()
 
 	_, err = io.Copy(filePtr, r.Body)
 
@@ -148,10 +144,10 @@ func (ia *itemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5su
 	}
 	resp, err := http.DefaultClient.Do(req)
 
-	defer resp.Body.Close()
 	if err != nil {
 		return fileId, err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 
 		fmt.Printf("Received HTTP status %d for %s\n", resp.StatusCode, path)
@@ -173,12 +169,12 @@ func (ia *itemAttributes) createFileTransAction(cmdlist []byte) (string, error) 
 	}
 	resp, err := http.DefaultClient.Do(req)
 
-	defer resp.Body.Close()
 	if err != nil {
 		return "", err
 	}
-	if resp.StatusCode != 202 {
+	defer resp.Body.Close()
 
+	if resp.StatusCode != 202 {
 		fmt.Printf("Received HTTP status %d for POST %s", resp.StatusCode, path)
 		return "", ErrUnexpectedResp
 	}
@@ -203,11 +199,12 @@ func (ia *itemAttributes) getTransactionStatus(transaction string) (*jason.Objec
 	}
 
 	resp, err := http.DefaultClient.Do(req)
-	defer resp.Body.Close()
 
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != 200 {
 		switch resp.StatusCode {
 		case 404:

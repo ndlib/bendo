@@ -207,21 +207,21 @@ func MakeStubFromJSON(json *jason.Object, item string, pathPrefix string) {
 		err := os.MkdirAll(targetDir, 0755)
 
 		if err != nil {
-			fmt.Printf("Error: could not create directory %s\n%s\n", err.Error())
+			fmt.Printf("Error: could not create directory %s\n%s\n", targetDir, err.Error())
 			return
 		}
 
 		filePtr, err := os.Create(targetFile)
 
 		if err != nil {
-			fmt.Printf("Error: could not file directory %s\n%s\n", err.Error())
+			fmt.Printf("Error: could not create file %s\n%s\n", targetFile, err.Error())
 			return
 		}
 
 		err = filePtr.Close()
 
 		if err != nil {
-			fmt.Printf("Error: could not close file %s\n%s\n", err.Error())
+			fmt.Printf("Error: could not close file %s\n%s\n", targetFile, err.Error())
 			return
 		}
 
