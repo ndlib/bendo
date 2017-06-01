@@ -1,4 +1,8 @@
-version 0.2
+version 0.1
+
+environment_variables:
+  plaintext:
+    GOPATH: "$GOPATH:/opt/bendo/gocode:/opt/bendo/gocode/Godeps/_workspace"
 phases:
   install:
     commands:
@@ -9,9 +13,11 @@ phases:
       - mkdir -p /opt/bendo/gocode
       - mkdir -p /opt/bendo/gocode/{src,pkg,bin}
       - chmod -R 755 /opt/bendo
+
   build:
     commands: 
       - cd /opt/bendo/gocode && go get github.com/ndlib/bendo/bendo
+
   post_build:
     commands:
 artifacts:
