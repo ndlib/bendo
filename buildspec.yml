@@ -1,0 +1,20 @@
+version 0.2
+
+phases:
+  install:
+    commands:
+      - apt-get install git
+  pre_build:
+    commands:
+      - mkdir /opt/bendo
+      - mkdir -p /opt/bendo/gocode
+      - mkdir -p /opt/bendo/gocode/{src,pkg,bin}
+      - chmod -R 755 /opt/bendo
+  build:
+    commands: 
+      - cd /opt/bendo/gocode && go get github.com/ndlib/bendo/bendo
+  post_build:
+    commands:
+artifacts:
+  files:
+    bendo/bendo.tar.gz
