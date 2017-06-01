@@ -230,8 +230,9 @@ func (wr *Writer) ClearSlots() {
 // every other blob in the bundle the blob is stored in will be copied into a
 // new bundle.
 //
-// This is intended to be used seldomly. What is probably desired is to make a new
-// version with the given slot removed by calling SetSlot with a 0 as a blob id.
+// This function should be used infrequently. What is probably desired is to make
+// a new version with the given slot removed by calling SetSlot with a 0 as a
+// blob id.
 func (wr *Writer) DeleteBlob(bid BlobID) {
 	// deal with deduplication of blob ids in Close()
 	wr.del = append(wr.del, bid)

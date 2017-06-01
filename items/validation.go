@@ -76,7 +76,7 @@ func (s *Store) Validate(id string) (nb int64, problems []string, err error) {
 		switch {
 		case blob.Size > 0:
 			if blob.Bundle <= 0 {
-				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has non-positve bundle ID", id, blob.ID))
+				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has non-positive bundle ID", id, blob.ID))
 			}
 			if len(blob.MD5) != 16 {
 				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has malformed MD5 hash", id, blob.ID))
