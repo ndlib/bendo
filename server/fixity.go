@@ -55,7 +55,9 @@ func (s *RESTServer) StartFixity() {
 	// this will keep running it in a loop with 24 hour rest in between.
 	go func() {
 		for {
-			s.scanfixity()
+			if s.useTape {
+				s.scanfixity()
+			}
 			time.Sleep(24 * time.Hour)
 		}
 	}()
