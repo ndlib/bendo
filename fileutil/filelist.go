@@ -125,34 +125,34 @@ func (f *FileList) BuildListFromJSON(json *jason.Object) {
 }
 
 // Parse item JSON returned from bendo get item  for ls action
-
 func PrintLsFromJSON(json *jason.Object, version int, long bool, blobs bool, item string) {
+	// note: the blobs parameter is unused. remove it?
 
-	var thisVersion int
+	var displayVersion bool
 
 	blobArray, _ := json.GetObjectArray("Blobs")
 	versionArray, _ := json.GetObjectArray("Versions")
 
 	// if version set to zero, use lastest, else use the one given
-
-	if version == 0 {
-		thisVersion = len(versionArray)
+	if version < 0 || version > len(versionArray) {
+		fmt.Printf("Version %d is out of range\n", version)
+		return
+	} else if version == 0 {
+		version = len(versionArray)
 	} else {
-		thisVersion = version
+		// if a specific version is desired, display it in the file listing
+		// to make copy and paste easy
+		displayVersion = true
 	}
 
 	// Find the version in the JSON, and its subtending slot map
-
-	versionElement := versionArray[thisVersion-1]
-	slotMap, _ := versionElement.GetObject("Slots")
+	slotMap, _ := versionArray[version-1].GetObject("Slots")
 
 	// sort the Slot Keys (filenames) in an array
-
-	keyMap := []string{}
+	var keyMap []string
 
 	for key, _ := range slotMap.Map() {
 		keyMap = append(keyMap, key)
-
 	}
 
 	sort.Strings(keyMap)
@@ -160,7 +160,7 @@ func PrintLsFromJSON(json *jason.Object, version int, long bool, blobs bool, ite
 	// Print the slots in the sorted order
 
 	if long {
-		fmt.Println("Blob       Size Date                 Creator File")
+		fmt.Println(" Blob        Bytes Uploaded            Creator  File")
 		fmt.Println("-------------------------------------------------------------------------------------")
 	}
 
@@ -172,17 +172,18 @@ func PrintLsFromJSON(json *jason.Object, version int, long bool, blobs bool, ite
 			saveDate, _ := blobArray[blobID-1].GetString("SaveDate")
 			creator, _ := blobArray[blobID-1].GetString("Creator")
 
-			fmt.Printf("%03d %12d %s %-8s ", blobID, itemSize, strings.Split(strings.Replace(saveDate, "T", " ", 1), ".")[0], creator)
+			fmt.Printf("%5d %12d %s %-8s ",
+				blobID,
+				itemSize,
+				strings.Split(strings.Replace(saveDate, "T", " ", 1), ".")[0],
+				creator)
 		}
 
 		fmt.Printf("%s/", item)
-
-		if version != 0 {
-			fmt.Printf("@%d/", thisVersion)
+		if displayVersion {
+			fmt.Printf("@%d/", version)
 		}
-
-		fmt.Printf("%s ", keyMap[i])
-		fmt.Printf("\n")
+		fmt.Printf("%s\n", keyMap[i])
 	}
 }
 
