@@ -5,8 +5,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"path"
+	"runtime"
+	"runtime/pprof"
 	"sync"
 
 	"github.com/antonholmquist/jason"
@@ -72,6 +75,9 @@ Available actions:
 	`
 )
 
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile `file`")
+var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
+
 // main program
 
 func main() {
@@ -81,40 +87,69 @@ func main() {
 	flag.Parse()
 	args := flag.Args()
 
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+		}
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+	}
+
 	if len(args) == 0 {
 		fmt.Println(Usage)
 		os.Exit(1)
 	}
 
+	var code int
 	switch args[0] {
 	case "upload":
 		if len(args) != 3 {
 			fmt.Println("Usage: bclient <flags>upload <item> <file>")
 			os.Exit(1)
 		}
-		os.Exit(doUpload(args[1], args[2]))
+		code = doUpload(args[1], args[2])
 	case "ls":
 		if len(args) != 2 {
 			fmt.Println("Usage: bclient <flags> ls <item> ")
 			os.Exit(1)
 		}
-		os.Exit(doLs(args[1]))
+		code = doLs(args[1])
 	case "get":
 		if *stub {
-			os.Exit(doGetStub(args[1]))
+			code = doGetStub(args[1])
+		} else {
+			code = doGet(args[1], args[2:])
 		}
-		os.Exit(doGet(args[1], args[2:]))
 	case "history":
 		if len(args) != 2 {
 			fmt.Println("Usage: bclient <flags> history <item> ")
 			os.Exit(1)
 		}
-		os.Exit(doHistory(args[1]))
+		code = doHistory(args[1])
 	default:
 		fmt.Println(Usage)
 		os.Exit(1)
 	}
 
+	if *cpuprofile != "" {
+		pprof.StopCPUProfile()
+	}
+
+	if *memprofile != "" {
+		f, err := os.Create(*memprofile)
+		if err != nil {
+			log.Fatal("could not create memory profile: ", err)
+		}
+		runtime.GC() // get up-to-date statistics
+		if err := pprof.WriteHeapProfile(f); err != nil {
+			log.Fatal("could not write memory profile: ", err)
+		}
+		f.Close()
+	}
+
+	os.Exit(code)
 }
 
 func doUpload(item string, files string) int {
