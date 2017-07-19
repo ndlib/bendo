@@ -101,9 +101,9 @@ func (f *FileList) BuildListFromJSON(json *jason.Object) {
 		versionID, _ := version.GetInt64("ID")
 		slotMap, _ := version.GetObject("Slots")
 
-		for key, _ := range slotMap.Map() {
+		for key, value := range slotMap.Map() {
 
-			blobID, _ := slotMap.GetInt64(key)
+			blobID, _ := value.Int64()
 			md5Sum, _ := blobArray[blobID-1].GetString("MD5")
 			DecodedMD5, _ := base64.StdEncoding.DecodeString(md5Sum)
 
