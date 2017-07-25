@@ -3,6 +3,7 @@ package server
 import (
 	"path"
 	"testing"
+	"time"
 )
 
 // test /admin/tape_use commmands
@@ -51,16 +52,44 @@ func TestTapeItem(t *testing.T) {
 	waitTransaction(t, txpath)
 
 	t.Log("first")
-	checkStatus(t, "GET", "/item/"+itemid+"/testFile1", 200)
-	t.Log("second")
-	checkStatus(t, "GET", "/item/"+itemid+"/testFile1", 200)
+	waitCached(t, itemid, "testFile1")
 
 	checkStatus(t, "PUT", "/admin/use_tape/off", 201)
 	// get item cached
-	t.Log("third")
+	t.Log("second")
 	checkStatus(t, "GET", "/item/"+itemid+"/testFile1", 200)
 	// get item non-cached
 	checkStatus(t, "GET", "/item/"+itemid+"/testFile2", 503)
+}
+
+// waitCached will ask the test server to cache a file.
+// It doesn't return until the file is cached.
+// It uses a poll interval of 20 ms.
+// Errors are flagged with t.Errorf().
+func waitCached(t *testing.T, itemid, path string) {
+	route := "/item/" + itemid + "/" + path
+	count := 0
+	for {
+		resp := checkRoute(t, "GET", route, 200)
+		if resp == nil {
+			break
+		}
+		resp.Body.Close()
+		status := resp.Header.Get("X-Cached")
+		switch status {
+		case "1":
+			return // cached
+		case "2":
+			t.Errorf("Asked to cache uncachable file %s/%s", itemid, path)
+			return
+		}
+		count++
+		if count > 50 {
+			t.Errorf("waitCached timed out on %s/%s", itemid, path)
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 func TestTapeBundle(t *testing.T) {

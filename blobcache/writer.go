@@ -18,6 +18,7 @@ func (w *writer) Close() error {
 	if err != nil || w.deleteOnClose {
 		// TODO: handle errors better here?
 		w.parent.s.Delete(w.key)
+		w.parent.unpending(w.key)
 		w.parent.reserve(-w.size) // give space back to cache
 		return err                // what should this be?
 	}
@@ -25,6 +26,7 @@ func (w *writer) Close() error {
 		key:  w.key,
 		size: w.size,
 	})
+	w.parent.unpending(w.key) // do AFTER adding the LRU entry!
 	return nil
 }
 
