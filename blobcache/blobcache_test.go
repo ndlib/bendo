@@ -152,3 +152,72 @@ func TestDelete(t *testing.T) {
 	}
 
 }
+
+func TestStoreSync(t *testing.T) {
+	// the cache keeps a LRU list in memory.
+	// That means it can get out of sync with the backing store
+	// in two ways: a file could exist that the LRU does not know about
+	// and the LRU can think a file exists that doesn't.
+
+	s := store.NewMemory()
+	cache := NewLRU(s, 100)
+
+	// A) If file exists and LRU does not know about it, it is not cached
+	// make file out-of-band
+	w, _ := s.Create("1234")
+	w.Write([]byte("abcdefghijklmnopqrstuvwxyz"))
+	w.Close()
+
+	// should not contain the key
+	if cache.Contains("1234") {
+		t.Errorf("Cache contains item, expected it not to")
+	}
+
+	// should not get the key
+	rac, n, err := cache.Get("1234")
+	if err != nil {
+		t.Errorf("Error getting item: %v", err)
+	}
+	if rac != nil {
+		t.Errorf("Got item, but didn't expect to get item")
+		rac.Close()
+	}
+	// should be able to add the key
+	w, err = cache.Put("1234")
+	if err != nil {
+		t.Error("Error putting item: %v", err)
+	}
+	w.Write([]byte("1234567890"))
+	// should get error while the first add is pending
+	_, err = cache.Put("1234")
+	if err != ErrPutPending {
+		t.Errorf("Expected ErrPutPending, got %v", err)
+	}
+	w.Close()
+	// should now get the key
+	rac, n, err = cache.Get("1234")
+	if err != nil {
+		t.Errorf("Error getting item: %v", err)
+	}
+	if rac == nil {
+		t.Errorf("Didn't get item")
+	}
+	if n != 10 {
+		t.Errorf("Got length %v, expected 10", n)
+	}
+	rac.Close()
+
+	// B) If LRU thinks a file exists and it doesn't, it is not cached
+	// remove the file out-of-band
+	s.Delete("1234")
+
+	// should not get the key
+	rac, n, err = cache.Get("1234")
+	if err != nil {
+		t.Errorf("Error getting item: %v", err)
+	}
+	if rac != nil {
+		t.Errorf("Got item, but didn't expect to get item")
+		rac.Close()
+	}
+}

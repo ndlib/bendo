@@ -49,6 +49,9 @@ type StoreLRU struct {
 	// list of cache contents
 	// front of list is MRU, tail is LRU.
 	lru *list.List
+
+	// set of keys that have a Put() started on them, but not closed yet.
+	pending map[string]struct{}
 }
 
 type entry struct {
@@ -61,7 +64,12 @@ type entry struct {
 // You must call Scan() (either inline or in another goroutine) to add the
 // preexisting items in the store to the LRU list.
 func NewLRU(s store.Store, maxSize int64) *StoreLRU {
-	return &StoreLRU{s: s, maxSize: maxSize, lru: list.New()}
+	return &StoreLRU{
+		s:       s,
+		maxSize: maxSize,
+		lru:     list.New(),
+		pending: make(map[string]struct{}),
+	}
 }
 
 // Scan enumerates the items in the given store and enters them into the LRU
@@ -137,11 +145,35 @@ func (t *StoreLRU) find(key string) *list.Element {
 // will return an error. Also, once an item is in the cache, Puts for it will
 // return an error (until the item is evicted.)
 func (t *StoreLRU) Put(key string) (io.WriteCloser, error) {
+	// is there currently a Put pending on that key?
+	t.m.Lock()
+	_, exists := t.pending[key]
+	t.pending[key] = struct{}{} // dosn't hurt since we already know exists
+	t.m.Unlock()
+	if exists {
+		return nil, ErrPutPending
+	}
 	w, err := t.s.Create(key)
+	// special case situation where the key already exists to try again after
+	// deleting the key.
+	// since we passed the pending check, there are no open Puts on that key
+	if err == store.ErrKeyExists {
+		t.s.Delete(key)
+		w, err = t.s.Create(key)
+	}
 	if err != nil {
+		t.unpending(key)
 		return nil, err
 	}
 	return &writer{parent: t, key: key, w: w}, nil
+}
+
+// unpending removes the given key from the pending set.
+func (t *StoreLRU) unpending(key string) {
+	t.m.Lock()
+	defer t.m.Unlock()
+
+	delete(t.pending, key)
 }
 
 // Delete removed an item from the cache. It is not an error to remove
@@ -179,7 +211,8 @@ func (t *StoreLRU) linkEntry(entry entry) {
 var (
 	// ErrCacheFull means the item being added to the cache is too big
 	// for the cache.
-	ErrCacheFull = errors.New("Cache is full and no more items can be removed")
+	ErrCacheFull  = errors.New("Cache is full and no more items can be removed")
+	ErrPutPending = errors.New("Key is already being added to cache")
 )
 
 // reserve space for the passed in size, evicting items if necessary to stay
