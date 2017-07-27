@@ -130,7 +130,7 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 			src = realContents
 		}
 	}
-	w.Header().Set("ETag", fmt.Sprintf("%d", bid))
+	w.Header().Set("ETag", fmt.Sprintf(`"%d"`, bid))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", length))
 
 	// if it's a GET, copy the data into the response- if it's a HEAD, don't
@@ -196,7 +196,7 @@ func (s *RESTServer) ItemHandler(w http.ResponseWriter, r *http.Request, ps http
 		return
 	}
 	vid := item.Versions[len(item.Versions)-1].ID
-	w.Header().Set("ETag", fmt.Sprintf("%d", vid))
+	w.Header().Set("ETag", fmt.Sprintf(`"%d"`, vid))
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	enc := json.NewEncoder(w)
 	enc.Encode(item)
