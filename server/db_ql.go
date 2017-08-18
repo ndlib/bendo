@@ -142,6 +142,29 @@ func (qc *QlCache) NextFixity(cutoff time.Time) string {
 	return item
 }
 
+// GetFixityById
+func (qc *QlCache) GetFixityById(id string)  *fixity {
+	const query = `
+		SELECT id, scheduled_time, status, notes
+		FROM fixity
+		WHERE id == ?1
+		LIMIT 1`
+
+	var thisFixity = new(fixity)
+
+	err := qc.db.QueryRow(query, id).Scan(&thisFixity.Id, &thisFixity.Scheduled_time, &thisFixity.Status, &thisFixity.Notes)
+	if err == sql.ErrNoRows {
+		// no next record
+		log.Println("GetFixityById retruns NoRows")
+		return nil
+	} else if err != nil {
+		log.Println("nextfixity QL", err.Error())
+		return nil
+	}
+	log.Println("id= ", thisFixity.Id, "scheduled_time= ", thisFixity.Scheduled_time, "status= ", thisFixity.Status, "notes= ", thisFixity.Notes)
+	return thisFixity
+}
+
 // UpdateFixity will update the earliest scheduled fixity record for the given item.
 // If there is no such record, one will be created.
 func (qc *QlCache) UpdateFixity(item string, status string, notes string) error {

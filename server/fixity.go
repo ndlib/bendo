@@ -1,14 +1,27 @@
 package server
 
 import (
+	"encoding/json"
 	"expvar"
 	"log"
 	"math/rand"
 	"strings"
 	"time"
+        "net/http"
+
+       "github.com/julienschmidt/httprouter"
 )
 
-// A FixityDB tracks the information the fixity service needs to know what
+// Strcture for fixity records
+type fixity struct {
+   Id string
+   Scheduled_time time.Time
+   Status string
+   Notes string
+}
+
+
+// A Finformation the fixity service needs to know what
 // items have been checked, what needs to be checked, and any fixity errors
 // found. It is presumed to be backed by a database, but that is not assumed.
 // Methods should be safe to be called by multiple goroutines.
@@ -18,6 +31,7 @@ type FixityDB interface {
 	// the empty string is returned. It will also not return anything in an
 	// "error" state.
 	NextFixity(cutoff time.Time) string
+        GetFixityById(id string)  *fixity
 
 	// UpdateItem takes the id of an item and adjusts the earliest pending
 	// fixity check for that item to have the given status and notes.
@@ -138,4 +152,32 @@ func (s *RESTServer) scanfixity() {
 		s.Fixity.SetCheck(id, time.Now().Add(time.Duration(jitter)))
 	}
 	log.Println("Ending scanfixity. duration = ", time.Now().Sub(starttime))
+}
+
+func (s *RESTServer) GetFixityHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+
+	item := r.FormValue("item")
+	start := r.FormValue("start")
+	end := r.FormValue("end")
+        status := r.FormValue("status")
+
+	log.Println("GetFixityHandler called")
+	log.Println("item= ", item)
+	log.Println("start= ", start)
+	log.Println("end= ", end)
+}
+
+func (s *RESTServer) GetFixityIdHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	 id := ps.ByName("id")
+	 log.Println("GetFixityIdHandler passed id =",id)
+	 thisFixity := s.Fixity.GetFixityById(id)
+
+	 if thisFixity == nil {
+		w.WriteHeader(404)
+	        log.Println("GetFixityIdHandler id =",id, " Returns 404")
+		return
+	 }
+
+	 enc := json.NewEncoder(w)
+	 enc.Encode(thisFixity)
 }

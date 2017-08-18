@@ -277,6 +277,11 @@ func (s *RESTServer) addRoutes() http.Handler {
 		{"GET", "/upload/:fileid/metadata", RoleMDOnly, s.GetFileInfoHandler},
 		{"PUT", "/upload/:fileid/metadata", RoleWrite, s.SetFileInfoHandler},
 
+		// fixity routes
+		{ "GET", "/fixity", RoleRead, s.GetFixityHandler},
+		{ "GET", "/fixity/:id", RoleRead, s.GetFixityIdHandler},
+
+
 		// /admin/tape_use (enable, disable, get status)
 		{"GET", "/admin/use_tape", RoleUnknown, s.GetTapeUseHandler},
 		{"PUT", "/admin/use_tape/:status", RoleAdmin, s.SetTapeUseHandler},

@@ -129,6 +129,37 @@ func (ms *MsqlCache) NextFixity(cutoff time.Time) string {
 	return item
 }
 
+// GetFixityById
+func (ms *MsqlCache) GetFixityById(id string)  *fixity {
+        const query = `
+                SELECT  id, scheduled_time, status, notes
+                FROM fixity
+                WHERE id = ?
+                LIMIT 1`
+
+	var thisFixity = new(fixity)
+	var thisWhen mysql.NullTime
+
+        err := ms.db.QueryRow(query, id).Scan(&thisFixity.Id, &thisWhen, &thisFixity.Status, &thisFixity.Notes)
+        if err == sql.ErrNoRows {
+                // no next record
+                return nil
+        } else if err != nil {
+                log.Println("nextfixity MySQL", err.Error())
+                return nil
+        }
+
+        // Handle for nil time value
+	if thisWhen.Valid {
+	    thisFixity.Scheduled_time = thisWhen.Time
+	} else {
+	    thisFixity.Scheduled_time = time.Time{}
+	}
+
+        log.Println("id= ", thisFixity.Id, "scheduled_time= ", thisFixity.Scheduled_time, "status= ", thisFixity.Status, "notes= ", thisFixity.Notes)
+        return thisFixity
+}
+
 // UpdateFixity updates the earliest scheduled fixity record for
 // the given item. If there is no such fixity record, it will create one.
 func (ms *MsqlCache) UpdateFixity(item string, status string, notes string) error {
