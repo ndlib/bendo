@@ -78,8 +78,8 @@ func TestQlFixity(t *testing.T) {
 			thisId := qc.GetFixityById(tab.id)
 			if thisId == nil {
 				t.Error("GetFixityById returned nil ")
-			} else if thisId.id != tab.id {
-				t.Errorf("Received %s, expected %s", thisId.id, tab.id)
+			} else if thisId.Id != tab.id {
+				t.Errorf("Received %s, expected %s", thisId.Id, tab.id)
 			}
 		}
 	}

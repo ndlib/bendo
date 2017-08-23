@@ -165,6 +165,7 @@ func (s *RESTServer) GetFixityHandler(w http.ResponseWriter, r *http.Request, ps
 	log.Println("item= ", item)
 	log.Println("start= ", start)
 	log.Println("end= ", end)
+	log.Println("status= ", status)
 }
 
 func (s *RESTServer) GetFixityIdHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
