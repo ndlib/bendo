@@ -2,24 +2,25 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"expvar"
 	"log"
 	"math/rand"
+	"net/http"
 	"strings"
 	"time"
-        "net/http"
 
-       "github.com/julienschmidt/httprouter"
+	"github.com/julienschmidt/httprouter"
 )
 
 // Strcture for fixity records
 type fixity struct {
-   Id string
-   Scheduled_time time.Time
-   Status string
-   Notes string
+	Id             string
+	Item           string
+	Scheduled_time time.Time
+	Status         string
+	Notes          string
 }
-
 
 // A Finformation the fixity service needs to know what
 // items have been checked, what needs to be checked, and any fixity errors
@@ -31,7 +32,8 @@ type FixityDB interface {
 	// the empty string is returned. It will also not return anything in an
 	// "error" state.
 	NextFixity(cutoff time.Time) string
-        GetFixityById(id string)  *fixity
+	GetFixityById(id string) *fixity
+	GetFixity(start string, end string, item string, status string) []*fixity
 
 	// UpdateItem takes the id of an item and adjusts the earliest pending
 	// fixity check for that item to have the given status and notes.
@@ -159,26 +161,112 @@ func (s *RESTServer) GetFixityHandler(w http.ResponseWriter, r *http.Request, ps
 	item := r.FormValue("item")
 	start := r.FormValue("start")
 	end := r.FormValue("end")
-        status := r.FormValue("status")
+	status := r.FormValue("status")
 
 	log.Println("GetFixityHandler called")
 	log.Println("item= ", item)
 	log.Println("start= ", start)
 	log.Println("end= ", end)
 	log.Println("status= ", status)
+
+	startValue, startErr := startValidate(start)
+	if startErr != nil {
+		w.WriteHeader(400)
+		log.Println("GetFixityHandler :", startErr.Error())
+		return
+	}
+
+	endValue, endErr := endValidate(end)
+	if endErr != nil {
+		w.WriteHeader(400)
+		log.Println("GetFixityHandler :", endErr.Error())
+		return
+	}
+
+	itemValue, itemErr := itemValidate(item)
+	if itemErr != nil {
+		w.WriteHeader(400)
+		log.Println("GetFixityHandler :", itemErr.Error())
+		return
+	}
+
+	statusValue, statusErr := statusValidate(status)
+	if statusErr != nil {
+		w.WriteHeader(400)
+		log.Println("GetFixityHandler :", statusErr.Error())
+		return
+	}
+
+	fixityResults := s.Fixity.GetFixity(startValue, endValue, itemValue, statusValue)
+	if fixityResults == nil {
+		w.WriteHeader(404)
+		log.Println("GetFixityHandler start =", startValue, "end= ", endValue, "item =", itemValue, "status = ", statusValue, " Returns 404")
+		return
+	}
+
+	//Return results
+	enc := json.NewEncoder(w)
+	enc.Encode(fixityResults)
 }
 
 func (s *RESTServer) GetFixityIdHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	 id := ps.ByName("id")
-	 log.Println("GetFixityIdHandler passed id =",id)
-	 thisFixity := s.Fixity.GetFixityById(id)
+	id := ps.ByName("id")
+	log.Println("GetFixityIdHandler passed id =", id)
+	thisFixity := s.Fixity.GetFixityById(id)
 
-	 if thisFixity == nil {
+	if thisFixity == nil {
 		w.WriteHeader(404)
-	        log.Println("GetFixityIdHandler id =",id, " Returns 404")
+		log.Println("GetFixityIdHandler id =", id, " Returns 404")
 		return
-	 }
+	}
 
-	 enc := json.NewEncoder(w)
-	 enc.Encode(thisFixity)
+	enc := json.NewEncoder(w)
+	enc.Encode(thisFixity)
+}
+
+// Some validation routines for GET /fixity params
+
+func startValidate(param string) (string, error) {
+	if param == "" {
+		time_midnight := time.Now().Truncate(86400 * time.Second)
+		return time_midnight.Format(time.RFC3339), nil
+	}
+	if param == "*" {
+		return "*", nil
+	}
+	time_formatted, terr := time.Parse(time.RFC3339, param)
+	if terr != nil {
+		return "", terr
+	}
+	return time_formatted.Format(time.RFC3339), nil
+}
+
+func endValidate(param string) (string, error) {
+	if param == "" {
+		next_midnight := time.Now().Truncate(86400 * time.Second).Unix() + 86400
+		time_next := time.Unix(next_midnight, 0)
+		return time_next.Format(time.RFC3339), nil
+	}
+	if param == "*" {
+		return "*", nil
+	}
+	time_formatted, terr := time.Parse(time.RFC3339, param)
+	if terr != nil {
+		return "", terr
+	}
+	return time_formatted.Format(time.RFC3339), nil
+}
+
+func itemValidate(param string) (string, error) {
+
+	return param, nil
+}
+
+func statusValidate(param string) (string, error) {
+	switch param {
+	case "scheduled", "error", "mismatches", "":
+		return param, nil
+	}
+
+	return "", errors.New("Invalid status value provided")
 }
