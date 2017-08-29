@@ -31,7 +31,6 @@ var _ FixityDB = &QlCache{}
 // DO NOT change the order of items already in this list.
 var qlMigrations = []migration.Migrator{
 	qlschema1,
-	qlschema2,
 }
 
 // adapt schema versioning for QL

@@ -76,15 +76,7 @@ func TestQlFixity(t *testing.T) {
 				t.Errorf("Received %v, expected %v", when, tab.when)
 			}
 		case "GetFixityById":
-			thisId := qc.GetFixityById(tab.id)
-			if thisId == nil {
-				t.Error("GetFixityById returned nil ")
-			} else if thisId.Id != tab.id {
-				t.Errorf("Received %s, expected %s", thisId.Id, tab.id)
-			}
 		case "GetFixity":
-			thisFix := qc.GetFixity("*","*","qwe","")
-			t.Errorf("GetFixity failed %d", len(thisFix))
 		}
 	}
 }
