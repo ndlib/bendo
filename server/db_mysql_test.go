@@ -84,14 +84,13 @@ func TestMySQLFixity(t *testing.T) {
 			} else if math.Abs(when.Sub(tab.when).Seconds()) >= 1 {
 				t.Errorf("Received %v, expected %v", when, tab.when)
 			}
-               case "GetFixityById":
-                        id := qc.GetFixityById(tab.id)
-                        if id == "" {
-                                t.Error("GetFixityById returned empty string")
-                        } else if id != tab.id {
-                                t.Errorf("Received %s, expected %s", id, tab.id)
-                        }
-                }
+		case "GetFixityById":
+			id := qc.GetFixityById(tab.id)
+			if id == "" {
+				t.Error("GetFixityById returned empty string")
+			} else if id != tab.id {
+				t.Errorf("Received %s, expected %s", id, tab.id)
+			}
 		}
 	}
 }

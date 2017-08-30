@@ -77,8 +77,8 @@ type RESTServer struct {
 	Cache blobcache.T
 
 	// Fixity stores the records tracking past and future fixity checks.
-	Fixity        FixityDB
-	DisableFixity bool
+	FixityDatabase FixityDB
+	DisableFixity  bool
 
 	server   httpdown.Server // used to close our listening socket
 	txqueue  chan string     // channel to feed background transaction workers. contains tx ids
@@ -137,8 +137,8 @@ func (s *RESTServer) Run() error {
 
 	// init fixity
 	if !s.DisableFixity {
-		if s.Fixity == nil {
-			s.Fixity = db
+		if s.FixityDatabase == nil {
+			s.FixityDatabase = db
 		}
 		s.StartFixity()
 	}
@@ -278,9 +278,8 @@ func (s *RESTServer) addRoutes() http.Handler {
 		{"PUT", "/upload/:fileid/metadata", RoleWrite, s.SetFileInfoHandler},
 
 		// fixity routes
-		{ "GET", "/fixity", RoleRead, s.GetFixityHandler},
-		{ "GET", "/fixity/:id", RoleRead, s.GetFixityIdHandler},
-
+		{"GET", "/fixity", RoleRead, s.GetFixityHandler},
+		{"GET", "/fixity/:id", RoleRead, s.GetFixityIdHandler},
 
 		// /admin/tape_use (enable, disable, get status)
 		{"GET", "/admin/use_tape", RoleUnknown, s.GetTapeUseHandler},
