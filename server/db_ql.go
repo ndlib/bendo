@@ -31,6 +31,7 @@ var _ FixityDB = &QlCache{}
 // DO NOT change the order of items already in this list.
 var qlMigrations = []migration.Migrator{
 	qlschema1,
+	qlschema2,
 }
 
 // adapt schema versioning for QL
@@ -65,7 +66,7 @@ func NewQlCache(filename string) (*QlCache, error) {
 // Lookup returns an item from the cache if it exists. If there
 // is nothing under that key, it will return nil.
 func (qc *QlCache) Lookup(item string) *items.Item {
-	const dbLookup = `SELECT value FROM items WHERE id == ?1 LIMIT 1`
+	const dbLookup = `SELECT value FROM items WHERE item == ?1 LIMIT 1`
 
 	var value string
 	err := qc.db.QueryRow(dbLookup, item).Scan(&value)
@@ -85,8 +86,8 @@ func (qc *QlCache) Lookup(item string) *items.Item {
 
 // Set adds the given item to the cache under the key item.
 func (qc *QlCache) Set(item string, thisItem *items.Item) {
-	const dbUpdate = `UPDATE items SET created = ?2, modified = ?3, size = ?4, value = ?5 WHERE id == ?1`
-	const dbInsert = `INSERT INTO items (id, created, modified, size, value) VALUES (?1, ?2, ?3, ?4, ?5)`
+	const dbUpdate = `UPDATE items SET created = ?2, modified = ?3, size = ?4, value = ?5 WHERE item == ?1`
+	const dbInsert = `INSERT INTO items (item, created, modified, size, value) VALUES (?1, ?2, ?3, ?4, ?5)`
 	var created, modified time.Time
 	var size int64
 	for i := range thisItem.Blobs {
@@ -120,12 +121,12 @@ func (qc *QlCache) Set(item string, thisItem *items.Item) {
 	}
 }
 
-// NextFixity will return the id of the earliest scheduled fixity check
+// NextFixity will return the item id of the earliest scheduled fixity check
 // that is before the cutoff time. If there is no such record, the
 // empty string is returned.
 func (qc *QlCache) NextFixity(cutoff time.Time) string {
 	const query = `
-		SELECT id, scheduled_time
+		SELECT item, scheduled_time
 		FROM fixity
 		WHERE status == "scheduled" AND scheduled_time <= ?1
 		ORDER BY scheduled_time
@@ -257,7 +258,7 @@ func (qc *QlCache) UpdateFixity(item string, status string, notes string) error 
 			(SELECT id from
 				(SELECT id() as id, scheduled_time
 				FROM fixity
-				WHERE id == ?1 and status == "scheduled"
+				WHERE item == ?1 and status == "scheduled"
 				ORDER BY scheduled_time
 				LIMIT 1))`
 
@@ -271,7 +272,7 @@ func (qc *QlCache) UpdateFixity(item string, status string, notes string) error 
 	}
 	if nrows == 0 {
 		// record didn't exist. create it
-		const newquery = `INSERT INTO fixity (id, scheduled_time, status, notes) VALUES (?1,?2,?3,?4)`
+		const newquery = `INSERT INTO fixity (item, scheduled_time, status, notes) VALUES (?1,?2,?3,?4)`
 
 		_, err = performExec(qc.db, newquery, item, time.Now(), status, notes)
 	}
@@ -281,7 +282,7 @@ func (qc *QlCache) UpdateFixity(item string, status string, notes string) error 
 // SetCheck adds a new fixity record for the given item. The new
 // record will have the status of "scheduled".
 func (qc *QlCache) SetCheck(item string, when time.Time) error {
-	const query = `INSERT INTO fixity (id, scheduled_time, status, notes) VALUES (?1,?2,?3,?4)`
+	const query = `INSERT INTO fixity (item, scheduled_time, status, notes) VALUES (?1,?2,?3,?4)`
 
 	_, err := performExec(qc.db, query, item, when, "scheduled", "")
 	return err
@@ -293,7 +294,7 @@ func (qc *QlCache) LookupCheck(item string) (time.Time, error) {
 	const query = `
 		SELECT scheduled_time
 		FROM fixity
-		WHERE id == ?1 AND status == "scheduled"
+		WHERE item == ?1 AND status == "scheduled"
 		ORDER BY scheduled_time ASC
 		LIMIT 1`
 
@@ -349,13 +350,15 @@ func qlschema1(tx migration.LimitedTx) error {
 }
 
 func qlschema2(tx migration.LimitedTx) error {
+	// make the field names mirror the mysql names.
+	// since ql has id() built in, we use that for the autoincrement field
 	var s = []string{
-		`ALTER TABLE items MODIFY COLUMN id item varchar(255)`,
-		`ALTER TABLE fixity MODIFY COLUMN id item varchar(255)`,
-		`ALTER TABLE fixity ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST`,
-		`ALTER TABLE items ADD COLUMN id int PRIMARY KEY AUTO_INCREMENT FIRST`,
-		`DROP INDEX fixityid`,
-		`DROP INDEX itemid`,
+		`ALTER TABLE items ADD item string`,
+		`UPDATE items item = id`,
+		`ALTER TABLE items DROP COLUMN id`,
+		`ALTER TABLE fixity ADD item string`,
+		`UPDATE fixity item = id`,
+		`ALTER TABLE fixity DROP COLUMN id`,
 		`CREATE INDEX fixityid ON fixity (item)`,
 		`CREATE INDEX itemid ON items (item)`,
 	}
