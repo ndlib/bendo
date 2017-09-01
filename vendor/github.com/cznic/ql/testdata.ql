@@ -811,7 +811,7 @@ FROM
 	SELECT *
 	FROM department
 );
-|"", "", "", ""
+|"LastName", "DepartmentID", "DepartmentID", "DepartmentName"
 [Williams <nil> 35 Marketing]
 [Williams <nil> 34 Clerical]
 [Williams <nil> 33 Engineering]
@@ -849,7 +849,7 @@ FROM
 	FROM department
 )
 ORDER BY e.LastName, e.DepartmentID;
-|"e.LastName", "e.DepartmentID", "", ""
+|"e.LastName", "e.DepartmentID", "DepartmentID", "DepartmentName"
 [Heisenberg 33 35 Marketing]
 [Heisenberg 33 34 Clerical]
 [Heisenberg 33 33 Engineering]
@@ -887,7 +887,7 @@ FROM
 	FROM department
 ) AS d
 ORDER BY d.DepartmentID DESC;
-|"", "", "d.DepartmentID", "d.DepartmentName"
+|"LastName", "DepartmentID", "d.DepartmentID", "d.DepartmentName"
 [Rafferty 31 35 Marketing]
 [Jones 33 35 Marketing]
 [Heisenberg 33 35 Marketing]
@@ -922,7 +922,7 @@ FROM
 		FROM department
 	)
 ORDER BY employee.LastName;
-|"employee.LastName", "employee.DepartmentID", "", ""
+|"employee.LastName", "employee.DepartmentID", "DepartmentID", "DepartmentName"
 [Heisenberg 33 35 Marketing]
 [Heisenberg 33 34 Clerical]
 [Heisenberg 33 33 Engineering]
@@ -1654,7 +1654,7 @@ FROM
 	employee AS e,
 	( SELECT * FROM department)
 ORDER BY e.LastName;
-|"e.LastName", "e.DepartmentID", "", ""
+|"e.LastName", "e.DepartmentID", "DepartmentID", "DepartmentName"
 [Heisenberg 33 35 Marketing]
 [Heisenberg 33 34 Clerical]
 [Heisenberg 33 33 Engineering]
@@ -15606,7 +15606,7 @@ COMMIT;
 SELECT t.count(*) FROM t;
 ||invalid expression
 
--- 1339
+-- 1340
 BEGIN TRANSACTION;
 	CREATE TABLE t (t time);
 COMMIT;
@@ -15614,7 +15614,7 @@ SELECT count(*) FROM t;
 |""
 [0]
 
--- 1340
+-- 1341
 BEGIN TRANSACTION;
 	CREATE TABLE t (i int);
 	INSERT INTO t VALUES (1), (NULL), (3);
@@ -15623,11 +15623,134 @@ SELECT count(*) FROM t;
 |""
 [3]
 
--- 1341
+-- 1342
 BEGIN TRANSACTION;
 	CREATE TABLE t (i int);
 	INSERT INTO t VALUES (1), (NULL), (3);
 COMMIT;
 SELECT count() FROM t;
 |""
+[3]
+
+-- 1343 // https://github.com/cznic/ql/issues/118
+BEGIN TRANSACTION;
+	CREATE TABLE foo (bar int, when time);
+	INSERT INTO foo VALUES (1, parseTime("2006-01-02", "3016-02-01"));
+	CREATE INDEX FooWhen ON foo (when);
+COMMIT;
+SELECT * FROM foo WHERE when > now();
+|"bar", "when"
+[1 3016-02-01 00:00:00 +0000 UTC]
+
+-- 1344 // https://github.com/cznic/ql/issues/118
+BEGIN TRANSACTION;
+	CREATE TABLE foo (bar int, when time);
+	INSERT INTO foo VALUES (1, parseTime("2006-01-02", "2017-02-01"));
+	CREATE INDEX FooWhen ON foo (when);
+COMMIT;
+SELECT * FROM foo WHERE when > date(2017, 1, 31, 23, 59, 59, 999999999, "UTC");
+|"bar", "when"
+[1 2017-02-01 00:00:00 +0000 UTC]
+
+-- 1345 // https://github.com/cznic/ql/issues/118
+BEGIN TRANSACTION;
+	CREATE TABLE foo (bar int, when time);
+	INSERT INTO foo VALUES (1, parseTime("2006-01-02", "2017-02-01"));
+	CREATE INDEX FooWhen ON foo (when);
+COMMIT;
+SELECT * FROM foo WHERE when > date(2017, 2, 1, 0, 0, 0, 0, "UTC");
+|"bar", "when"
+
+-- 1346 // https://github.com/cznic/ql/issues/131
+BEGIN TRANSACTION;
+	CREATE TABLE t (c1 int, c2 string);
+	INSERT INTO t VALUES (1, "a");
+	INSERT INTO t VALUES (2, "b");
+COMMIT;
+SELECT * FROM t WHERE c1 = 1;
+|"c1", "c2"
+[1 a]
+
+-- 1347 // https://github.com/cznic/ql/issues/155
+SELECT 42;
+|""
+[42]
+
+-- 1348 // https://github.com/cznic/ql/issues/155, see also #1353
+BEGIN TRANSACTION;
+	CREATE TABLE t (i int);
+	INSERT INTO t VALUES (1);
+	INSERT INTO t VALUES (2);
+	INSERT INTO t VALUES (3);
+COMMIT;
+SELECT * FROM t WHERE EXISTS (SELECT * FROM t WHERE i == 2) ORDER BY i;
+|"i"
+[1]
+[2]
+[3]
+
+-- 1349 // https://github.com/cznic/ql/issues/155
+BEGIN TRANSACTION;
+	CREATE TABLE t (i int);
+COMMIT;
+SELECT * FROM t WHERE EXISTS (SELECT * FROM t WHERE i == 2);
+|"i"
+
+-- 1350 // https://github.com/cznic/ql/issues/155
+BEGIN TRANSACTION;
+	CREATE TABLE t (i int);
+	INSERT INTO t VALUES (1);
+	INSERT INTO t VALUES (2);
+	INSERT INTO t VALUES (3);
+COMMIT;
+SELECT * FROM t WHERE EXISTS (SELECT * FROM t WHERE i == 4);
+|"i"
+
+-- 1351 // https://github.com/cznic/ql/issues/155
+BEGIN TRANSACTION;
+	CREATE TABLE t (i int);
+	INSERT INTO t VALUES (1);
+	INSERT INTO t VALUES (2);
+	INSERT INTO t VALUES (3);
+COMMIT;
+SELECT * FROM t WHERE NOT EXISTS (SELECT * FROM t WHERE i == 2);
+|"i"
+
+-- 1352 // https://github.com/cznic/ql/issues/155
+BEGIN TRANSACTION;
+	CREATE TABLE t (i int);
+	INSERT INTO t VALUES (1);
+	INSERT INTO t VALUES (2);
+	INSERT INTO t VALUES (3);
+COMMIT;
+SELECT * FROM t WHERE NOT EXISTS (SELECT * FROM t WHERE i == 4) ORDER BY i;
+|"i"
+[1]
+[2]
+[3]
+
+-- 1353 // https://github.com/cznic/ql/issues/155, illustrates why #1348 should return 3 rows
+BEGIN TRANSACTION;
+	CREATE TABLE t (i int);
+	INSERT INTO t VALUES (1);
+	INSERT INTO t VALUES (2);
+	INSERT INTO t VALUES (3);
+COMMIT;
+SELECT * FROM t WHERE true ORDER BY i
+|"i"
+[1]
+[2]
+[3]
+
+-- 1354 // https://github.com/cznic/ql/issues/176
+BEGIN TRANSACTION;
+	CREATE TABLE t (á int);
+	INSERT INTO t VALUES (1);
+	INSERT INTO t VALUES (2);
+	INSERT INTO t VALUES (3);
+COMMIT;
+SELECT * FROM t ORDER BY á
+|"á"
+[1]
+[2]
 [3]
