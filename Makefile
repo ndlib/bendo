@@ -1,6 +1,6 @@
 
 TARGETS:=$(wildcard ./cmd/*)
-GOCMD:=$(if $(shell which godep),godep go,go)
+GOCMD:=go
 VERSION:=$(shell git describe --always)
 PACKAGES:=$(shell go list ./... | grep -v /vendor/)
 GO15VENDOREXPERIMENT=1
