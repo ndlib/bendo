@@ -5,6 +5,7 @@
 package ql
 
 import (
+	"bytes"
 	"fmt"
 	"math/big"
 	"regexp"
@@ -135,12 +136,6 @@ func mentionedColumns(e expression) map[string]struct{} {
 	return m
 }
 
-func mentionedQColumns(e expression) map[string]struct{} {
-	m := map[string]struct{}{}
-	mentionedColumns0(e, true, false, m)
-	return m
-}
-
 func staticExpr(e expression) (expression, error) {
 	if e.isStatic() {
 		v, err := e.eval(nil, nil)
@@ -165,11 +160,6 @@ type (
 	idealRune    int32
 	idealUint    uint64
 )
-
-type exprTab struct {
-	expr  expression
-	table string
-}
 
 type pexpr struct {
 	expr expression
@@ -790,6 +780,13 @@ func (o *binaryOperation) eval(execCtx *execCtx, ctx map[interface{}]interface{}
 			default:
 				return invOp2(x, y, op)
 			}
+		case []byte:
+			switch y := b.(type) {
+			case []byte:
+				return bytes.Equal(x, y), nil
+			default:
+				return invOp2(x, y, op)
+			}
 		default:
 			return invOp2(a, b, op)
 		}
@@ -938,6 +935,13 @@ func (o *binaryOperation) eval(execCtx *execCtx, ctx map[interface{}]interface{}
 			switch y := b.(type) {
 			case time.Time:
 				return x.Before(y), nil
+			default:
+				return invOp2(x, y, op)
+			}
+		case []byte:
+			switch y := b.(type) {
+			case []byte:
+				return bytes.Compare(x, y) < 0, nil
 			default:
 				return invOp2(x, y, op)
 			}
@@ -1092,6 +1096,13 @@ func (o *binaryOperation) eval(execCtx *execCtx, ctx map[interface{}]interface{}
 			default:
 				return invOp2(x, y, op)
 			}
+		case []byte:
+			switch y := b.(type) {
+			case []byte:
+				return bytes.Compare(x, y) <= 0, nil
+			default:
+				return invOp2(x, y, op)
+			}
 		default:
 			return invOp2(a, b, op)
 		}
@@ -1240,6 +1251,13 @@ func (o *binaryOperation) eval(execCtx *execCtx, ctx map[interface{}]interface{}
 			switch y := b.(type) {
 			case time.Time:
 				return x.After(y) || x.Equal(y), nil
+			default:
+				return invOp2(x, y, op)
+			}
+		case []byte:
+			switch y := b.(type) {
+			case []byte:
+				return bytes.Compare(x, y) >= 0, nil
 			default:
 				return invOp2(x, y, op)
 			}
@@ -1414,6 +1432,13 @@ func (o *binaryOperation) eval(execCtx *execCtx, ctx map[interface{}]interface{}
 			default:
 				return invOp2(x, y, op)
 			}
+		case []byte:
+			switch y := b.(type) {
+			case []byte:
+				return !bytes.Equal(x, y), nil
+			default:
+				return invOp2(x, y, op)
+			}
 		default:
 			return invOp2(a, b, op)
 		}
@@ -1582,6 +1607,13 @@ func (o *binaryOperation) eval(execCtx *execCtx, ctx map[interface{}]interface{}
 			switch y := b.(type) {
 			case time.Time:
 				return x.Equal(y), nil
+			default:
+				return invOp2(x, y, op)
+			}
+		case []byte:
+			switch y := b.(type) {
+			case []byte:
+				return bytes.Equal(x, y), nil
 			default:
 				return invOp2(x, y, op)
 			}
@@ -1969,7 +2001,7 @@ func (o *binaryOperation) eval(execCtx *execCtx, ctx map[interface{}]interface{}
 		case uint32:
 			cnt = uint64(y)
 		case uint64:
-			cnt = uint64(y)
+			cnt = y
 		default:
 			return invOp2(a, b, op)
 		}
@@ -2068,7 +2100,7 @@ func (o *binaryOperation) eval(execCtx *execCtx, ctx map[interface{}]interface{}
 		case uint32:
 			cnt = uint64(y)
 		case uint64:
-			cnt = uint64(y)
+			cnt = y
 		default:
 			return invOp2(a, b, op)
 		}
@@ -3264,7 +3296,9 @@ func (l value) String() string {
 	case time.Duration:
 		return fmt.Sprintf("duration(%q)", l.val)
 	case time.Time:
-		return fmt.Sprintf("time(%q)", l.val)
+		y, m, d := x.Date()
+		zone, _ := x.Zone()
+		return fmt.Sprintf("date(%v, %v, %v, %v, %v, %v, %v, %v)", y, m, d, x.Hour(), x.Minute(), x.Second(), x.Nanosecond(), zone)
 	case *big.Rat:
 		return fmt.Sprintf("bigrat(%q)", l.val)
 	case *big.Int:
@@ -3393,20 +3427,6 @@ func (u *unaryOperation) String() string {
 	default:
 		return fmt.Sprintf("%s%s", iop(u.op), u.v)
 	}
-}
-
-// !ident
-func (u *unaryOperation) isNotQIdent() (bool, string, expression) {
-	if u.op != '!' {
-		return false, "", nil
-	}
-
-	id, ok := u.v.(*ident)
-	if ok && id.isQualified() {
-		return true, mustQualifier(id.s), &unaryOperation{'!', &ident{mustSelector(id.s)}}
-	}
-
-	return false, "", nil
 }
 
 func (u *unaryOperation) eval(execCtx *execCtx, ctx map[interface{}]interface{}) (r interface{}, err error) {

@@ -19,9 +19,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/camlistore/lock"
-	"github.com/cznic/exp/lldb"
+	"github.com/cznic/lldb"
 	"github.com/cznic/mathutil"
+	"github.com/cznic/ql/vendored/github.com/camlistore/go4/lock"
 )
 
 const (
@@ -89,7 +89,7 @@ func OpenFile(name string, opt *Options) (db *DB, err error) {
 		}
 	}
 
-	fi, err := newFileFromOSFile(f) // always ACID
+	fi, err := newFileFromOSFile(f, opt.Headroom) // always ACID
 	if err != nil {
 		return
 	}
@@ -100,6 +100,8 @@ func OpenFile(name string, opt *Options) (db *DB, err error) {
 			return f0, err
 		}
 	}
+
+	fi.removeEmptyWAL = opt.RemoveEmptyWAL
 
 	return newDB(fi)
 }
@@ -126,10 +128,25 @@ func OpenFile(name string, opt *Options) (db *DB, err error) {
 // interface.
 //
 // If TempFile is nil it defaults to ioutil.TempFile.
+//
+// Headroom
+//
+// Headroom selects the minimum size a WAL file will have. The "extra"
+// allocated file space serves as a headroom. Commits that fit into the
+// headroom should not fail due to 'not enough space on the volume' errors. The
+// headroom parameter is first rounded-up to a non negative multiple of the
+// size of the lldb.Allocator atom.
+//
+// RemoveEmptyWAL
+//
+// RemoveEmptyWAL controls whether empty WAL files should be deleted on
+// clean exit.
 type Options struct {
-	CanCreate bool
-	OSFile    lldb.OSFile
-	TempFile  func(dir, prefix string) (f lldb.OSFile, err error)
+	CanCreate      bool
+	OSFile         lldb.OSFile
+	TempFile       func(dir, prefix string) (f lldb.OSFile, err error)
+	Headroom       int64
+	RemoveEmptyWAL bool
 }
 
 type fileBTreeIterator struct {
@@ -258,7 +275,7 @@ func infer(from []interface{}, to *[]*col) {
 			case time.Duration:
 				c.typ = qDuration
 			case chunk:
-				vals, err := lldb.DecodeScalars([]byte(x.b))
+				vals, err := lldb.DecodeScalars(x.b)
 				if err != nil {
 					panic(err)
 				}
@@ -374,19 +391,20 @@ func (t *fileTemp) Set(k, v []interface{}) (err error) {
 }
 
 type file struct {
-	a        *lldb.Allocator
-	codec    *gobCoder
-	f        lldb.Filer
-	f0       lldb.OSFile
-	id       int64
-	lck      io.Closer
-	mu       sync.Mutex
-	name     string
-	tempFile func(dir, prefix string) (f lldb.OSFile, err error)
-	wal      *os.File
+	a              *lldb.Allocator
+	codec          *gobCoder
+	f              lldb.Filer
+	f0             lldb.OSFile
+	id             int64
+	lck            io.Closer
+	mu             sync.Mutex
+	name           string
+	tempFile       func(dir, prefix string) (f lldb.OSFile, err error)
+	wal            *os.File
+	removeEmptyWAL bool // Whether empty WAL files should be removed on close
 }
 
-func newFileFromOSFile(f lldb.OSFile) (fi *file, err error) {
+func newFileFromOSFile(f lldb.OSFile, headroom int64) (fi *file, err error) {
 	nm := lockName(f.Name())
 	lck, err := lock.Lock(nm)
 	if err != nil {
@@ -409,7 +427,7 @@ func newFileFromOSFile(f lldb.OSFile) (fi *file, err error) {
 	w, err = os.OpenFile(wn, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0666)
 	closew = true
 	defer func() {
-		if closew {
+		if w != nil && closew {
 			nm := w.Name()
 			w.Close()
 			os.Remove(nm)
@@ -434,9 +452,7 @@ func newFileFromOSFile(f lldb.OSFile) (fi *file, err error) {
 			return nil, err
 		}
 
-		if st.Size() != 0 {
-			return nil, fmt.Errorf("(file-001) non empty WAL file %s exists", wn)
-		}
+		closew = st.Size() == 0
 	}
 
 	info, err := f.Stat()
@@ -454,7 +470,7 @@ func newFileFromOSFile(f lldb.OSFile) (fi *file, err error) {
 
 		filer := lldb.Filer(lldb.NewOSFiler(f))
 		filer = lldb.NewInnerFiler(filer, 16)
-		if filer, err = lldb.NewACIDFiler(filer, w); err != nil {
+		if filer, err = lldb.NewACIDFiler(filer, w, lldb.MinWAL(headroom)); err != nil {
 			return nil, err
 		}
 
@@ -508,7 +524,7 @@ func newFileFromOSFile(f lldb.OSFile) (fi *file, err error) {
 
 		filer := lldb.Filer(lldb.NewOSFiler(f))
 		filer = lldb.NewInnerFiler(filer, 16)
-		if filer, err = lldb.NewACIDFiler(filer, w); err != nil {
+		if filer, err = lldb.NewACIDFiler(filer, w, lldb.MinWAL(headroom)); err != nil {
 			return nil, err
 		}
 
@@ -554,7 +570,7 @@ func (s *file) OpenIndex(unique bool, handle int64) (btreeIndex, error) {
 		return nil, err
 	}
 
-	return &fileIndex{s, handle, t, unique}, nil
+	return &fileIndex{s, handle, t, unique, newGobCoder()}, nil
 }
 
 func (s *file) CreateIndex(unique bool) ( /* handle */ int64, btreeIndex, error) {
@@ -563,7 +579,7 @@ func (s *file) CreateIndex(unique bool) ( /* handle */ int64, btreeIndex, error)
 		return -1, nil, err
 	}
 
-	return h, &fileIndex{s, h, t, unique}, nil
+	return h, &fileIndex{s, h, t, unique, newGobCoder()}, nil
 }
 
 func (s *file) Acid() bool { return s.wal != nil }
@@ -589,12 +605,22 @@ func (s *file) Close() (err error) {
 
 	es := s.f0.Sync()
 	ef := s.f0.Close()
-	var ew error
+	var ew, estat, eremove error
 	if s.wal != nil {
+		remove := false
+		wn := s.wal.Name()
+		if s.removeEmptyWAL {
+			var stat os.FileInfo
+			stat, estat = s.wal.Stat()
+			remove = stat.Size() == 0
+		}
 		ew = s.wal.Close()
+		if remove {
+			eremove = os.Remove(wn)
+		}
 	}
 	el := s.lck.Close()
-	return errSet(&err, es, ef, ew, el)
+	return errSet(&err, es, ef, ew, el, estat, eremove)
 }
 
 func (s *file) Name() string { return s.name }
@@ -1096,6 +1122,7 @@ type fileIndex struct {
 	h      int64
 	t      *lldb.BTree
 	unique bool
+	codec  *gobCoder
 }
 
 func (x *fileIndex) Clear() error {
@@ -1202,8 +1229,51 @@ func (x *fileIndex) Drop() error {
 	return x.f.a.Free(x.h)
 }
 
-func (x *fileIndex) Seek(indexedValues []interface{}) (indexIterator, bool, error) { //TODO(indices) blobs: +test
-	k, err := lldb.EncodeScalars(append(indexedValues, 0)...)
+// []interface{}{qltype, ...}->[]interface{}{lldb scalar type, ...}
+func (x *fileIndex) flatten(data []interface{}) (err error) {
+	for i, v := range data {
+		tag := 0
+		var b []byte
+		switch xx := v.(type) {
+		case []byte:
+			tag = qBlob
+			b = xx
+		case *big.Int:
+			tag = qBigInt
+			b, err = x.codec.encode(xx)
+		case *big.Rat:
+			tag = qBigRat
+			b, err = x.codec.encode(xx)
+		case time.Time:
+			tag = qTime
+			b, err = x.codec.encode(xx)
+		case time.Duration:
+			tag = qDuration
+			b, err = x.codec.encode(xx)
+		default:
+			continue
+		}
+		if err != nil {
+			return
+		}
+
+		var buf []byte
+		if buf, err = lldb.EncodeScalars([]interface{}{tag, b}...); err != nil {
+			return
+		}
+
+		data[i] = buf
+	}
+	return
+}
+
+func (x *fileIndex) Seek(indexedValues []interface{}) (indexIterator, bool, error) {
+	data := append(indexedValues, 0)
+	if err := x.flatten(data); err != nil {
+		return nil, false, err
+	}
+
+	k, err := lldb.EncodeScalars(data...)
 	if err != nil {
 		return nil, false, err
 	}

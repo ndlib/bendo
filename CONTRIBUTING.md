@@ -4,11 +4,11 @@
 Bendo is a go package. There are several steps you must complete before you can to compile, test, and commit to the project.
 
 ### Development Dependencies
-Bendo requires `go` and `godep` to compile.
+Bendo requires `go` to compile.
 
 ```console
 brew update
-brew install go godep
+brew install golang
 ```
 
 > These homebrew recipes are already included [DLT dotfiles](https://github.com/ndlib/dlt-dotfiles).
@@ -121,3 +121,16 @@ bendo -config-file development.config
 ```
 
 > The `bendo` command is added to your `$PATH` by [DLT-dotfiles](https://github.com/ndlib/dlt-dotfiles). If you need to call it directly use `$GOPATH/bin/bendo`.
+
+# Common Tasks
+
+## Updating vendor package
+
+This repository uses `dep` to manage dependencies.
+See the [dep homepage](https://github.com/golang/dep) for installation instructions.
+(on a Mac `brew install dep` works).
+
+Review the dependencies by running `dep status`.
+Update a specific dependency with `dep update -update github.com/some/project`.
+We are currently committing changes to `vendor` to the repository.
+When making pull requests, please do not mix updates to `vendor` with other code changes.

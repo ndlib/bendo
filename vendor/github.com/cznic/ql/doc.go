@@ -14,6 +14,38 @@
 //
 // Change list
 //
+// 2017-01-10: Release v1.1.0 fixes some bugs and adds a configurable WAL
+// headroom.
+//
+//	https://github.com/cznic/ql/issues/140
+//
+// 2016-07-29: Release v1.0.6 enables alternatively using = instead of == for
+// equality operation.
+//
+// 	https://github.com/cznic/ql/issues/131
+//
+// 2016-07-11: Release v1.0.5 undoes vendoring of lldb. QL now uses stable lldb
+// (github.com/cznic/lldb).
+//
+// 	https://github.com/cznic/ql/issues/128
+//
+// 2016-07-06: Release v1.0.4 fixes a panic when closing the WAL file.
+//
+//	https://github.com/cznic/ql/pull/127
+//
+// 2016-04-03: Release v1.0.3 fixes a data race.
+//
+//	https://github.com/cznic/ql/issues/126
+//
+// 2016-03-23: Release v1.0.2 vendors github.com/cznic/exp/lldb and
+// github.com/camlistore/go4/lock.
+//
+// 2016-03-17: Release v1.0.1 adjusts for latest goyacc. Parser error messages
+// are improved and changed, but their exact form is not considered a API
+// change.
+//
+// 2016-03-05: The current version has been tagged v1.0.0.
+//
 // 2015-06-15: To improve compatibility with other SQL implementations, the
 // count built-in aggregate function now accepts * as its argument.
 //
@@ -181,12 +213,14 @@
 //  newline        = . // the Unicode code point U+000A
 //  unicode_char   = . // an arbitrary Unicode code point except newline
 //  ascii_letter   = "a" … "z" | "A" … "Z" .
+//  unicode_letter = . // Unicode category L.
+//  unicode_digit  = . // Unocode category D.
 //
 // Letters and digits
 //
 // The underscore character _ (U+005F) is considered a letter.
 //
-//  letter        = ascii_letter | "_" .
+//  letter        = ascii_letter | unicode_letter | "_" .
 //  decimal_digit = "0" … "9" .
 //  octal_digit   = "0" … "7" .
 //  hex_digit     = "0" … "9" | "A" … "F" | "a" … "f" .
@@ -230,7 +264,7 @@
 // identifier is a sequence of one or more letters and digits. The first
 // character in an identifier must be a letter.
 //
-//  identifier = letter { letter | decimal_digit } .
+//  identifier = letter { letter | decimal_digit | unicode_digit } .
 //
 // For example
 //
@@ -252,18 +286,21 @@
 //
 // The following keywords are reserved and may not be used as identifiers.
 //
-//	ADD      COLUMN      false     int32   ORDER     uint16
-//	ALTER    complex128  float     int64   OUTER     uint32
-//	AND      complex64   float32   int8    RIGHT     uint64
-//	AS       CREATE      float64   INTO    SELECT    uint8
-//	ASC      DEFAULT     FROM      JOIN    SET       UNIQUE
-//	BETWEEN  DELETE      GROUP     LEFT    string    UPDATE
-//	bigint   DESC        IF        LIMIT   TABLE     VALUES
-//	bigrat   DISTINCT    IN        LIKE    time      WHERE
-//	blob     DROP        INDEX     NOT     true
-//	bool     duration    INSERT    NULL    OR
-//	BY       EXISTS      int       OFFSET  TRUNCATE
-//	byte     EXPLAIN     int16     ON      uint
+//	ADD	      complex128    FROM	  LEFT		string
+//	ALTER	      complex64	    FULL	  LIKE		TABLE
+//	AND	      CREATE	    GROUP	  LIMIT		time
+//	AS	      DEFAULT	    IF		  NOT		TRANSACTION
+//	ASC	      DELETE	    IN		  NULL		true
+//	BEGIN	      DESC	    INDEX	  OFFSET	TRUNCATE
+//	BETWEEN	      DISTINCT	    INSERT	  ON		uint
+//	bigint	      DROP	    int		  OR		uint16
+//	bigrat	      duration	    int16	  ORDER		uint32
+//	blob	      EXISTS	    int32	  OUTER		uint64
+//	bool	      EXPLAIN	    int64	  RIGHT		uint8
+//	BY	      false	    int8	  ROLLBACK	UNIQUE
+//	byte	      float	    INTO	  rune		UPDATE
+//	COLUMN	      float32	    IS		  SELECT	VALUES
+//	COMMIT	      float64	    JOIN	  SET		WHERE
 //
 // Keywords are not case sensitive.
 //
@@ -286,7 +323,7 @@
 //  andnot = "&^" .
 //  lsh    = "<<" .
 //  le     = "<=" .
-//  eq     = "==" .
+//  eq     = "==" | "=" .
 //  ge     = ">=" .
 //  neq    = "!=" .
 //  oror   = "||" .
@@ -787,7 +824,7 @@
 //
 //	expr1 LIKE expr2
 //
-// yeild a boolean value true if expr2, a regular expression, matches expr1
+// yield a boolean value true if expr2, a regular expression, matches expr1
 // (see also [6]).  Both expression must be of type string. If any one of the
 // expressions is NULL the result is NULL.
 //
@@ -874,7 +911,7 @@
 //
 //	expr IS NOT NULL	// case B
 //
-// yeild a boolean value true if expr does not have a specific type (case A) or
+// yield a boolean value true if expr does not have a specific type (case A) or
 // if expr has a specific type (case B). In other cases the result is a boolean
 // value false.
 //
@@ -1054,7 +1091,7 @@
 //
 // - Rational values are comparable and ordered, in the usual way.
 //
-// - String values are comparable and ordered, lexically byte-wise.
+// - String and Blob values are comparable and ordered, lexically byte-wise.
 //
 // - Time values are comparable and ordered.
 //
@@ -1703,7 +1740,7 @@
 // The result can be filtered using a WhereClause and orderd by the OrderBy
 // clause.
 //
-//  SelectStmt = "SELECT" [ "DISTINCT" ] ( "*" | FieldList ) "FROM" RecordSetList
+//  SelectStmt = "SELECT" [ "DISTINCT" ] ( "*" | FieldList ) [ "FROM" RecordSetList ]
 //  	[ JoinClause ] [ WhereClause ] [ GroupByClause ] [ OrderBy ] [ Limit ] [ Offset ].
 //
 //  JoinClause = ( "LEFT" | "RIGHT" | "FULL" ) [ "OUTER" ] "JOIN" RecordSet "ON" Expression .
@@ -1843,7 +1880,16 @@
 // It is an error if the expression evaluates to a non null value of non bool
 // type.
 //
-//  WhereClause = "WHERE" Expression .
+// Another form of the WHERE clause is an existence predicate of a
+// parenthesized select statement. The EXISTS form evaluates to true if the
+// parenthesized SELECT statement produces a non empty record set. The NOT
+// EXISTS form evaluates to true if the parenthesized SELECT statement produces
+// an empty record set. The parenthesized SELECT statement is evaluated only
+// once (TODO issue #159).
+//
+//  WhereClause = "WHERE" Expression
+//  		| "WHERE" "EXISTS" "(" SelectStmt ")"
+//  		| "WHERE" "NOT" "EXISTS" "(" SelectStmt ")" .
 //
 // Recordset grouping
 //

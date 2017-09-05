@@ -3,7 +3,7 @@ artifacts:
   files: bendo/bendo.tar.gz
 environment_variables: 
   plaintext: 
-    GOPATH: "/opt/bendo/gocode:/opt/bendo/gocode/Godeps/_workspace"
+    GOPATH: "/opt/bendo/gocode"
 phases: 
   build: 
     commands: 
