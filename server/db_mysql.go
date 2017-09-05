@@ -1,9 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"log"
+	"strings"
 	"time"
 
 	// no _ in import mysql since we need mysql.NullTime
@@ -127,6 +129,118 @@ func (ms *MsqlCache) NextFixity(cutoff time.Time) string {
 		return ""
 	}
 	return item
+}
+
+// GetFixityById
+func (ms *MsqlCache) GetFixityById(id string) *Fixity {
+	const query = `
+                SELECT  id, item, scheduled_time, status, notes
+                FROM fixity
+                WHERE id = ?
+                LIMIT 1`
+
+	var thisFixity = new(Fixity)
+	var thisWhen mysql.NullTime
+
+	err := ms.db.QueryRow(query, id).Scan(&thisFixity.Id, &thisFixity.Item, &thisWhen, &thisFixity.Status, &thisFixity.Notes)
+	if err == sql.ErrNoRows {
+		// no next record
+		return nil
+	} else if err != nil {
+		log.Println("GetFixtyByID  MySQL queryrow", err.Error())
+		return nil
+	}
+
+	// Handle for nil time value
+	if thisWhen.Valid {
+		thisFixity.Scheduled_time = thisWhen.Time
+	}
+
+	log.Println("id= ", thisFixity.Id, "scheduled_time= ", thisFixity.Scheduled_time, "status= ", thisFixity.Status, "notes= ", thisFixity.Notes)
+	return thisFixity
+}
+
+// GetFixity
+func (ms *MsqlCache) GetFixity(start string, end string, item string, status string) []*Fixity {
+	query := buildQuery(start, end, item, status)
+	log.Println("GET /fixity query= ", query)
+	var thisWhen mysql.NullTime
+	results := make([]*Fixity, 0)
+
+	rows, err := ms.db.Query(query)
+	if err == sql.ErrNoRows {
+		// no next record
+		return nil
+	} else if err != nil {
+		log.Println("GetFixity Query MySQL", err.Error())
+		return nil
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var thisFixity = new(Fixity)
+		scanErr := rows.Scan(&thisFixity.Id, &thisFixity.Item, &thisWhen, &thisFixity.Status, &thisFixity.Notes)
+		if scanErr != nil {
+			log.Println("GetFixity Scan MySQL", err.Error())
+			return nil
+		}
+		// Handle for nil time value
+		if thisWhen.Valid {
+			thisFixity.Scheduled_time = thisWhen.Time
+		}
+		log.Println("id= ", thisFixity.Id, "item =", thisFixity.Item, "scheduled_time", thisFixity.Scheduled_time, "status= ", thisFixity.Status, "notes= ", thisFixity.Notes)
+		results = append(results, thisFixity)
+	}
+
+	return results
+}
+
+// construct an return an sql query, using the parameters passed
+func buildQuery(start string, end string, item string, status string) string {
+	var query bytes.Buffer
+	query.WriteString("SELECT  id, item, scheduled_time, status, notes FROM fixity")
+
+	params := []string{"start", "end", "item", "status"}
+
+	conjunction := " WHERE "
+
+	for _, param := range params {
+
+		switch param {
+		case "start":
+			if start != "*" {
+				startQuery := []string{conjunction, "scheduled_time >= '", start, "'"}
+				query.WriteString(strings.Join(startQuery, ""))
+			} else {
+				continue
+			}
+		case "end":
+			if end != "*" {
+				endQuery := []string{conjunction, "scheduled_time <= '", end, "'"}
+				query.WriteString(strings.Join(endQuery, ""))
+			} else {
+				continue
+			}
+		case "item":
+			if item != "" {
+				itemQuery := []string{conjunction, "item = '", item, "'"}
+				query.WriteString(strings.Join(itemQuery, ""))
+			} else {
+				continue
+			}
+		case "status":
+			if status != "" {
+				statusQuery := []string{conjunction, "status = '", status, "'"}
+				query.WriteString(strings.Join(statusQuery, ""))
+			} else {
+				continue
+			}
+		}
+
+		conjunction = " AND "
+	}
+
+	return query.String()
 }
 
 // UpdateFixity updates the earliest scheduled fixity record for

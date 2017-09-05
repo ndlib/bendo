@@ -1,9 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/migration"
@@ -140,6 +142,109 @@ func (qc *QlCache) NextFixity(cutoff time.Time) string {
 		return ""
 	}
 	return item
+}
+
+// GetFixityById
+func (qc *QlCache) GetFixityById(id string) *Fixity {
+	const query = `
+		SELECT id, item, scheduled_time, status, notes
+		FROM fixity
+		WHERE id == ?1
+		LIMIT 1`
+
+	var thisFixity = new(Fixity)
+
+	err := qc.db.QueryRow(query, id).Scan(&thisFixity.Id, &thisFixity.Item, &thisFixity.Scheduled_time, &thisFixity.Status, &thisFixity.Notes)
+	if err == sql.ErrNoRows {
+		// no next record
+		log.Println("GetFixityById retruns NoRows")
+		return nil
+	} else if err != nil {
+		log.Println("nextfixity QL", err.Error())
+		return nil
+	}
+	log.Println("id= ", thisFixity.Id, "item= ", thisFixity.Item, "scheduled_time= ", thisFixity.Scheduled_time, "status= ", thisFixity.Status, "notes= ", thisFixity.Notes)
+	return thisFixity
+}
+
+// GetFixity
+func (qc *QlCache) GetFixity(start string, end string, item string, status string) []*Fixity {
+	query := buildQLQuery(start, end, item, status)
+	log.Println("GET /fixity query= ", query)
+	var fixityResults []*Fixity
+
+	rows, err := qc.db.Query(query)
+	if err == sql.ErrNoRows {
+		// no next record
+		return nil
+	} else if err != nil {
+		log.Println("GetFixity QL Query:", err.Error())
+		return nil
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var thisFixity = new(Fixity)
+		scanErr := rows.Scan(&thisFixity.Id, &thisFixity.Item, &thisFixity.Scheduled_time, &thisFixity.Status, &thisFixity.Notes)
+		if scanErr != nil {
+			log.Println("GetFixity QL Scan", err.Error())
+			return nil
+		}
+		log.Println("id= ", thisFixity.Id, "item= ", thisFixity.Item, "scheduled_time= ", thisFixity.Item, thisFixity.Scheduled_time, "status= ", thisFixity.Status, "notes= ", thisFixity.Notes)
+		fixityResults = append(fixityResults, thisFixity)
+	}
+
+	return fixityResults
+}
+
+// construct an return an sql query, using the parameters passed
+func buildQLQuery(start string, end string, item string, status string) string {
+	var query bytes.Buffer
+	query.WriteString("SELECT  id, item, scheduled_time, status, notes FROM fixity")
+
+	params := []string{"start", "end", "item", "status"}
+
+	conjunction := " WHERE "
+
+	for _, param := range params {
+
+		switch param {
+		case "start":
+			if start == "*" {
+				continue
+			} else {
+				startQuery := []string{conjunction, "scheduled_time >= \"", start, "\""}
+				query.WriteString(strings.Join(startQuery, ""))
+				continue
+			}
+
+		case "end":
+			if start == "*" {
+				continue
+			} else {
+				endQuery := []string{conjunction, "scheduled_time <= \"", end, "\""}
+				query.WriteString(strings.Join(endQuery, ""))
+			}
+		case "item":
+			if item == "" {
+				continue
+			} else {
+				itemQuery := []string{conjunction, "item == \"", item, "\""}
+				query.WriteString(strings.Join(itemQuery, ""))
+			}
+		case "status":
+			if status == "" {
+				continue
+			} else {
+				statusQuery := []string{conjunction, "status == \"", status, "\""}
+				query.WriteString(strings.Join(statusQuery, ""))
+			}
+		}
+
+		conjunction = " AND "
+	}
+
+	return query.String()
 }
 
 // UpdateFixity will update the earliest scheduled fixity record for the given item.

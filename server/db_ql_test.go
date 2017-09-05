@@ -46,6 +46,8 @@ func TestQlFixity(t *testing.T) {
 		{"NextFixity", "qwe", nowPlusHour},
 		{"LookupCheck", "qwe", nowPlusHour},
 		{"LookupCheck", "zxc", time.Time{}},
+		{"GetFixityById", "qwe", now},
+		{"GetFixity", "qwe", now},
 	}
 
 	for _, tab := range table {
@@ -73,6 +75,8 @@ func TestQlFixity(t *testing.T) {
 			} else if when != tab.when {
 				t.Errorf("Received %v, expected %v", when, tab.when)
 			}
+		case "GetFixityById":
+		case "GetFixity":
 		}
 	}
 }
