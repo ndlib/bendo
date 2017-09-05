@@ -3,6 +3,7 @@
 memo = "7b280cae4720b2e487debfd89d5853aeff0b02f44823ebdc6f7a9ab484b100ff"
 
 [[projects]]
+  branch = "master"
   name = "github.com/BurntSushi/migration"
   packages = ["."]
   revision = "c45b897f13350786ccaf2b7403b92b1c7ad85844"
@@ -16,7 +17,8 @@ memo = "7b280cae4720b2e487debfd89d5853aeff0b02f44823ebdc6f7a9ab484b100ff"
 [[projects]]
   name = "github.com/antonholmquist/jason"
   packages = ["."]
-  revision = "45d2bc81fe7570f04969728f3a941216fc565b61"
+  revision = "c23cef7eaa75a6a5b8810120e167bd590d8fd2ab"
+  version = "v1.0.0"
 
 [[projects]]
   branch = "master"
@@ -37,28 +39,28 @@ memo = "7b280cae4720b2e487debfd89d5853aeff0b02f44823ebdc6f7a9ab484b100ff"
   revision = "4ab7c5e190e49208c823ce8ec803aa39e6a4b31a"
 
 [[projects]]
-  branch = "master"
   name = "github.com/cznic/internal"
   packages = ["buffer","file","slice"]
-  revision = "6c349f9353aa71ded7ed92820816fab0bef1784b"
+  revision = "cef02a853c3a93623c42eacd574e7ea05f55531b"
+  version = "1.0.0"
 
 [[projects]]
-  branch = "master"
   name = "github.com/cznic/lldb"
   packages = ["."]
   revision = "bea8611dd5c407f3c5eab9f9c68e887a27dc6f0e"
+  version = "v1.1.0"
 
 [[projects]]
   branch = "master"
   name = "github.com/cznic/mathutil"
   packages = ["."]
-  revision = "6baf61e0317058e3207936f50e310bd500fbbdb0"
+  revision = "91af0ce59d1753e5eeaa6a3fd8f7aeeba01f1210"
 
 [[projects]]
   branch = "master"
   name = "github.com/cznic/ql"
   packages = [".","driver","vendored/github.com/camlistore/go4/lock"]
-  revision = "ba9eea98e3d20b3485b5b3d4a77775ee8bdd5387"
+  revision = "8c32ff10fdc2810e93a6e127119d95545497909e"
 
 [[projects]]
   branch = "master"
@@ -85,16 +87,19 @@ memo = "7b280cae4720b2e487debfd89d5853aeff0b02f44823ebdc6f7a9ab484b100ff"
   revision = "0bce6a6887123b67a60366d2c9fe2dfb74289d2e"
 
 [[projects]]
+  branch = "master"
   name = "github.com/facebookgo/clock"
   packages = ["."]
   revision = "600d898af40aa09a7a93ecb9265d87b0504b6f03"
 
 [[projects]]
+  branch = "master"
   name = "github.com/facebookgo/httpdown"
   packages = ["."]
-  revision = "1fa03998d20119dfe4ef73f56a638d83048052e2"
+  revision = "a3b1354551a26449fbe05f5d855937f6e7acbd71"
 
 [[projects]]
+  branch = "master"
   name = "github.com/facebookgo/stats"
   packages = ["."]
   revision = "1b76add642e42c6ffba7211ad7b3939ce654526e"
@@ -108,4 +113,5 @@ memo = "7b280cae4720b2e487debfd89d5853aeff0b02f44823ebdc6f7a9ab484b100ff"
 [[projects]]
   name = "github.com/julienschmidt/httprouter"
   packages = ["."]
-  revision = "6aacfd5ab513e34f7e64ea9627ab9670371b34e7"
+  revision = "8c199fb6259ffc1af525cc3ad52ee60ba8359669"
+  version = "v1.1"
