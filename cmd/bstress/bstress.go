@@ -22,24 +22,26 @@ import (
 	"path"
 	"sync"
 	"time"
-
-	"github.com/ndlib/bendo/util"
 )
 
 func main() {
 	flag.Parse()
 	wg := sync.WaitGroup{}
-	gate := util.NewGate(*NumGoroutines)
-	for i := 0; i < 10000; i++ {
-		id := fmt.Sprintf("id%05dx", i)
+	c := make(chan int)
+	for i := 0; i < *NumGoroutines; i++ {
 		wg.Add(1)
 		go func() {
-			gate.Enter()
-			CreateItem(id)
-			gate.Leave()
+			for v := range c {
+				id := fmt.Sprintf("id%05dx", v)
+				CreateItem(id)
+			}
 			wg.Done()
 		}()
 	}
+	for i := 0; i < 10000; i++ {
+		c <- i
+	}
+	close(c)
 	wg.Wait()
 }
 
