@@ -408,11 +408,10 @@ Metadata tracked per file:
  * `Creator` - The name of the token which created the file
  * `MD5` - The expected MD5 checksum for the entire file
  * `SHA256` - The expected SHA256 checksum for the entire file
- * `Labels` - A list of labels assigned to the file
  * `Extra` - an arbitrary string payload, for user convinence. It is not used
 by bendo.
 
-The only fields which can be altered using the `PUT` are `Labels` and `Extra`.
+The only field which can be altered using the `PUT` is `Extra`.
 (TODO(March 2016): should also be able to change `MD5` and `SHA256`.)
 
 ## BundleAccess
