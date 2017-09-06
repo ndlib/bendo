@@ -106,6 +106,7 @@ func (wr *Writer) doDeletes() error {
 			blob.DeleteNote = wr.version.Note
 			blob.Bundle = 0
 			blob.Size = 0
+			blob.MimeType = ""
 		}
 	}
 
@@ -223,6 +224,16 @@ func (wr *Writer) SetSlot(s string, id BlobID) {
 // still be around!).
 func (wr *Writer) ClearSlots() {
 	wr.version.Slots = make(map[string]BlobID)
+}
+
+// SetMimeType sets the mime type for the given blob. Nothing is changed if no
+// blob has the given id or if the blob has been deleted.
+func (wr *Writer) SetMimeType(id BlobID, mimetype string) {
+	blob := wr.item.blobByID(id)
+	if blob == nil || blob.Bundle == 0 {
+		return
+	}
+	blob.MimeType = mimetype
 }
 
 // DeleteBlob marks the given blob for removal from the underlying storage.

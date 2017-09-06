@@ -343,6 +343,7 @@ func (c command) Execute(iw *items.Writer, tx *T, cache blobcache.T) {
 			break
 		}
 		tx.BlobMap[cmd[1]] = int(bid)
+		iw.SetMimeType(bid, fstat.MimeType)
 	case "sleep":
 		// sleep for some length of time. intended to be used for testing.
 		// nothing magic about 1 sec. could be less
