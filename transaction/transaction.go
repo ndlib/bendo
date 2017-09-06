@@ -344,6 +344,14 @@ func (c command) Execute(iw *items.Writer, tx *T, cache blobcache.T) {
 		}
 		tx.BlobMap[cmd[1]] = int(bid)
 		iw.SetMimeType(bid, fstat.MimeType)
+	case "mimetype":
+		// mimetype <blob id> <new mime type>
+		bid, err := strconv.ParseInt(cmd[1], 10, 64)
+		if err != nil {
+			tx.Err = append(tx.Err, "Cannot resolve id "+cmd[2])
+			break
+		}
+		iw.SetMimeType(items.BlobID(bid), cmd[2])
 	case "sleep":
 		// sleep for some length of time. intended to be used for testing.
 		// nothing magic about 1 sec. could be less
@@ -379,6 +387,8 @@ func (c command) WellFormed() bool {
 	case cmd[0] == "add" && len(cmd) == 2:
 		return true
 	case cmd[0] == "sleep" && len(cmd) == 1:
+		return true
+	case cmd[0] == "mimetype" && len(cmd) == 3:
 		return true
 	}
 	return false
