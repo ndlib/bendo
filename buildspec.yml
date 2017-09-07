@@ -10,7 +10,7 @@ env:
 
 phases:
 
-  pre_install:
+  install:
     commands:
       - mkdir -p "$GOPATH/src" "$GOPATH/bin"
       - chmod -R 777 "$GOPATH"
