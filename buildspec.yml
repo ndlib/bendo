@@ -15,7 +15,7 @@ phases:
       - mkdir -p "$GOPATH/src" "$GOPATH/bin"
       - chmod -R 777 "$GOPATH"
       - apt-get update
-      - apt-get install -y --no-install-recommends pkg-config wget rpmbuild
+      - apt-get install -y --no-install-recommends pkg-config wget rpm
       - wget "https://storage.googleapis.com/golang/go$GOLANG_VERSION.linux-amd64.tar.gz" -O /tmp/golang.tar.gz
       - echo "$GOLANG_DOWNLOAD_SHA256 /tmp/golang.tar.gz" | sha256sum -c -
       - tar -xzf /tmp/golang.tar.gz -C /usr/local
