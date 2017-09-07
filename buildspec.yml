@@ -1,21 +1,34 @@
---- 
-artifacts: 
-  files: bendo/bendo.tar.gz
-environment_variables: 
-  plaintext: 
-    GOPATH: "/opt/bendo/gocode"
-phases: 
-  build: 
-    commands: 
-      - "cd /opt/bendo/gocode && go get github.com/ndlib/bendo/bendo"
-  install: 
-    commands: 
-      - "apt-get install git"
-  pre_build: 
-    commands: 
-      - "mkdir /opt/bendo"
-      - "mkdir -p /opt/bendo/gocode"
-      - "mkdir -p /opt/bendo/gocode/{src,pkg,bin}"
-      - "chmod -R 755 /opt/bendo"
-version: 0.1
+--- # aws/codebuild/golang:1.7.3 or aws/codebuild/ruby:2.3.1
+version: 0.2
 
+env:
+  variables:
+    GOLANG_VERSION: "1.7.3" 
+    GOLANG_DOWNLOAD_SHA256: "508028aac0654e993564b6e2014bf2d4a9751e3b286661b0b0040046cf18028e"
+    GOPATH: "/go" 
+    PATH: "$GOPATH/bin:/usr/local/go/bin:$PATH"
+
+phases:
+
+  pre_install:
+    commands:
+      - mkdir -p "$GOPATH/src" "$GOPATH/bin"
+      - chmod -R 777 "$GOPATH"
+      - apt-get update
+      - apt-get install -y --no-install-recommends pkg-config wget
+      - wget "https://storage.googleapis.com/golang/go$GOLANG_VERSION.linux-amd64.tar.gz" -O /tmp/golang.tar.gz
+      - echo "$GOLANG_DOWNLOAD_SHA256 /tmp/golang.tar.gz" | sha256sum -c -
+      - tar -xzf /tmp/golang.tar.gz -C /usr/local
+      - pip install yaml
+      - gem install fpm
+
+  build:
+    commands:
+      - mkdir -p /go/src/github.com/ndlib
+      - ln -s / /go/src/github.com/ndlib/bendo
+      - make rpm
+
+artifacts:
+  files:
+    - bendo-*rpm
+...
