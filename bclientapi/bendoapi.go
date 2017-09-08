@@ -21,7 +21,7 @@ var (
 	ErrReadFailed     = errors.New("Read Failed")
 )
 
-func (ia *itemAttributes) GetItemInfo() (*jason.Object, error) {
+func (ia *ItemAttributes) GetItemInfo() (*jason.Object, error) {
 
 	var path = ia.bendoServer + "/item/" + ia.item
 
@@ -53,7 +53,7 @@ func (ia *itemAttributes) GetItemInfo() (*jason.Object, error) {
 // get upload metadata (if it exists) . Assumes that the upload fileid is item#-filemd5sum
 // returns json of metadata if successful, error otherwise
 
-func (ia *itemAttributes) getUploadMeta(fileId string) (*jason.Object, error) {
+func (ia *ItemAttributes) getUploadMeta(fileId string) (*jason.Object, error) {
 
 	var path = ia.bendoServer + "/upload/" + fileId + "/metadata"
 
@@ -83,7 +83,7 @@ func (ia *itemAttributes) getUploadMeta(fileId string) (*jason.Object, error) {
 	return v, err
 }
 
-func (ia *itemAttributes) downLoad(fileName string, pathPrefix string) error {
+func (ia *ItemAttributes) downLoad(fileName string, pathPrefix string) error {
 	var httpPath = ia.bendoServer + "/item/" + ia.item + "/" + fileName
 
 	req, _ := http.NewRequest("GET", httpPath, nil)
@@ -133,7 +133,7 @@ func (ia *itemAttributes) downLoad(fileName string, pathPrefix string) error {
 	return err
 }
 
-func (ia *itemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []byte, fileId string) (fileid string, err error) {
+func (ia *ItemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []byte, mimetype string, fileId string) (fileid string, err error) {
 
 	var path = ia.bendoServer + "/upload/" + fileId
 
@@ -142,24 +142,24 @@ func (ia *itemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5su
 	if ia.token != "" {
 		req.Header.Add("X-Api-Key", ia.token)
 	}
+	if mimetype != "" {
+		req.Header.Add("Content-Type", mimetype)
+	}
 	resp, err := http.DefaultClient.Do(req)
 
 	if err != nil {
 		return fileId, err
 	}
-	defer resp.Body.Close()
+	resp.Body.Close()
 	if resp.StatusCode != 200 {
-
 		fmt.Printf("Received HTTP status %d for %s\n", resp.StatusCode, path)
-		return fileId, nil
 	}
-
 	return fileId, nil
 }
 
 // Not well named - sets a POST /item/:id/transaction
 
-func (ia *itemAttributes) createFileTransAction(cmdlist []byte) (string, error) {
+func (ia *ItemAttributes) CreateTransaction(cmdlist []byte) (string, error) {
 
 	var path = ia.bendoServer + "/item/" + ia.item + "/transaction"
 
@@ -184,7 +184,7 @@ func (ia *itemAttributes) createFileTransAction(cmdlist []byte) (string, error) 
 	return transaction, nil
 }
 
-func (ia *itemAttributes) getTransactionStatus(transaction string) (*jason.Object, error) {
+func (ia *ItemAttributes) getTransactionStatus(transaction string) (*jason.Object, error) {
 	var path = ia.bendoServer + "/transaction/" + transaction
 
 	req, err := http.NewRequest("GET", path, nil)

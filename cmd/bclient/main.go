@@ -14,15 +14,11 @@ import (
 
 	"github.com/antonholmquist/jason"
 	"github.com/ndlib/bendo/bclientapi"
-	"github.com/ndlib/bendo/fileutil"
 )
 
 // various command line flags, with default values
 
 var (
-	goReturnMutex sync.Mutex
-	goReturn      int = 0
-
 	fileroot     = flag.String("root", ".", "root prefix to upload files")
 	server       = flag.String("server", "http://localhost:14000", "Bendo Server to Use")
 	creator      = flag.String("bclient", "butil", "Creator name to use")
@@ -102,6 +98,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// convert chunksize from megabytes to bytes
+	*chunksize *= 1 << 20
+
 	var code int
 	switch args[0] {
 	case "upload":
@@ -152,130 +151,6 @@ func main() {
 	os.Exit(code)
 }
 
-func doUpload(item string, files string) int {
-
-	filesToSend := make(chan string)
-	var upLoadDone sync.WaitGroup
-	var sendFileDone sync.WaitGroup
-	var json *jason.Object
-	var jsonFetchErr error
-
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait, *token)
-	fileLists := fileutil.NewLists(*fileroot)
-
-	// Set up Barrier for 3 goroutines below
-	upLoadDone.Add(3)
-
-	// Fire 1!
-	go func() {
-		fileLists.CreateUploadList(files)
-		upLoadDone.Done()
-	}()
-
-	// Fire 2!
-	go func() {
-		fileLists.ComputeLocalChecksums()
-		upLoadDone.Done()
-	}()
-
-	// Fire 3!
-	go func() {
-		json, jsonFetchErr = thisItem.GetItemInfo()
-		upLoadDone.Done()
-	}()
-
-	// Wait for everyone to finish
-	upLoadDone.Wait()
-
-	if *verbose {
-		fmt.Printf("\nLocal Files:\n")
-		fileLists.PrintLocalList()
-	}
-
-	// If GetItemInfo returns ErrNotFound it's a new item- upload whole local list
-	// If GetItemInfo returns other error, bendo unvavailable for upload- abort!
-	// default: build remote filelist of returned json, diff against local list, upload remainder
-
-	switch {
-	case jsonFetchErr == bclientapi.ErrNotFound:
-		break
-	case jsonFetchErr != nil:
-		fmt.Println(jsonFetchErr)
-		return 1
-	default:
-		fileLists.BuildRemoteList(json)
-
-		if *verbose {
-			fmt.Printf("\nRemote Files:\n")
-			fileLists.PrintRemoteList()
-			fmt.Printf("\nBlobs:\n")
-			fileLists.PrintBlobList()
-			fmt.Printf("\n")
-		}
-
-		// This compares the local list with the remote list (if the item already exists)
-		// and eliminates any unnneeded duplicates
-		fileLists.CullLocalList()
-		break
-	}
-
-	// Culled list is empty, nothing to upload
-
-	if fileLists.IsLocalListEmpty() {
-		fmt.Printf("Nothing to do:\nThe vesions of All Files given for upload in item %s\nare already present on the server\n", item)
-		return 0
-	}
-
-	if *verbose {
-		fmt.Printf("\nFiles to Upload:\n")
-		fileLists.PrintLocalList()
-	}
-
-	// set up our barrier, that will wait for all the file chunks to be uploaded
-	sendFileDone.Add(*numuploaders)
-
-	//Spin off desire number of upload workers
-	for cnt := int(0); cnt < *numuploaders; cnt++ {
-		go func() {
-			err := thisItem.SendFiles(filesToSend, fileLists)
-			if err != nil {
-				goReturnMutex.Lock()
-				goReturn = 1
-				goReturnMutex.Unlock()
-			}
-			sendFileDone.Done()
-		}()
-	}
-
-	fileLists.QueueFiles(filesToSend)
-
-	// wait for all file chunks to be uploaded
-	sendFileDone.Wait()
-
-	// If a file upload failed, return an error to main
-	if goReturn == 1 {
-		return 1
-	}
-
-	// chunks uploaded- submit trnsaction to add FileIDs to item
-	transaction, transErr := thisItem.SendNewTransactionRequest()
-
-	if transErr != nil {
-		fmt.Println(transErr)
-		return 1
-	}
-
-	if *verbose {
-		fmt.Printf("\n Transaction id is %s\n", transaction)
-	}
-
-	if *wait {
-		thisItem.WaitForCommitFinish(transaction)
-	}
-
-	return 0
-}
-
 //  doGet , given only an item, returns all the files in that item.
 //  Given one or more files in the item, it returns only them
 
@@ -291,7 +166,7 @@ func doGet(item string, files []string) int {
 	// set up communication to the bendo server, and init local and remote filelists
 
 	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait, *token)
-	fileLists := fileutil.NewLists(*fileroot)
+	fileLists := NewLists(*fileroot)
 
 	// Fetch Item Info from bclientapi
 	json, jsonFetchErr = thisItem.GetItemInfo()
@@ -321,16 +196,21 @@ func doGet(item string, files []string) int {
 	// set up our barrier, that will wait for all the file chunks to be uploaded
 	getFileDone.Add(*numuploaders)
 
+	errorChan := make(chan error, 1)
+
 	//Spin off desire number of upload workers
 	for cnt := int(0); cnt < *numuploaders; cnt++ {
 		go func() {
+			defer getFileDone.Done()
 			err := thisItem.GetFiles(filesToGet, pathPrefix)
 			if err != nil {
-				goReturnMutex.Lock()
-				goReturn = 1
-				goReturnMutex.Unlock()
+				// try to send error back without blocking
+				select {
+				case errorChan <- err:
+				default:
+				}
+				return
 			}
-			getFileDone.Done()
 		}()
 	}
 
@@ -339,8 +219,10 @@ func doGet(item string, files []string) int {
 	getFileDone.Wait()
 
 	// If a file upload failed, return an error to main
-	if goReturn == 1 {
+	select {
+	case <-errorChan:
 		return 1
+	default:
 	}
 
 	return 0
@@ -379,7 +261,7 @@ func doGetStub(item string) int {
 		fmt.Println(jsonFetchErr)
 		return 1
 	default:
-		fileutil.MakeStubFromJSON(json, item, pathPrefix)
+		MakeStubFromJSON(json, item, pathPrefix)
 	}
 
 	return 0
@@ -403,7 +285,7 @@ func doHistory(item string) int {
 		fmt.Println(jsonFetchErr)
 		return 1
 	default:
-		fileutil.PrintListFromJSON(json)
+		PrintListFromJSON(json)
 	}
 
 	return 0
@@ -427,7 +309,7 @@ func doLs(item string) int {
 		fmt.Println(jsonFetchErr)
 		return 1
 	default:
-		fileutil.PrintLsFromJSON(json, *version, *longV, *blobs, item)
+		PrintLsFromJSON(json, *version, *longV, *blobs, item)
 	}
 
 	return 0
