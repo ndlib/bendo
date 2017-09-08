@@ -71,6 +71,9 @@ type FileEntry interface {
 	// its blocks).
 	SetSHA256(hash []byte)
 
+	// Set the mime-type of this file.
+	SetMimeType(mimetype string)
+
 	// Sets an opaque metadata blob which can be assigned to each file.
 	SetExtra(extra string)
 
