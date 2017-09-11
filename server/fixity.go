@@ -46,6 +46,13 @@ type FixityDB interface {
 	// Notes contains general text providing details on any problems.
 	// If there is no pending fixity check for the item, one is created.
 	UpdateFixity(id string, status string, notes string) error
+        // given item, sets scheduled time of nearest test to now. Creates test if none present.
+        // reuturns http code 200 if successfull, 500 otherwise
+	PostFixity(item string) (int,  error)
+        // Given id, sets scheduled time of its scheduled test to now. returns 404 if id not found, or not in scheduled state, 200 if successfull
+	PutFixity(id string) (int, error)
+	// Delete id record if found and status is scheduled. Error otherwise.
+	DeleteFixity(id string) error
 
 	// SetCheck takes an item id and schedules another fixity check at the
 	// given time in the future (or past).
@@ -213,6 +220,39 @@ func (s *RESTServer) GetFixityIdHandler(w http.ResponseWriter, r *http.Request, 
 
 	enc := json.NewEncoder(w)
 	enc.Encode(thisFixity)
+}
+
+// DeleteFixity handles requests to DELETE /fixty/:id
+// This deletes a scheduled fixity check for the given id . reurns 404 ff no request is found in the 'scheduled' state for the give id, 
+// 200 otherwise.
+func (s *RESTServer) DeleteFixityHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+        id := ps.ByName("id")
+        err := s.FixityDatabase.DeleteFixity(id)
+        if err != nil {
+                w.WriteHeader(500)
+                fmt.Fprintln(w, err.Error())
+        }
+}
+
+func (s *RESTServer) PutFixityHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	id := ps.ByName("id")
+	return_code, err := s.FixityDatabase.PutFixity(id)
+	w.WriteHeader(return_code)
+
+	if err != nil {
+		fmt.Fprintln(w, err.Error())
+	}
+}
+
+func (s *RESTServer) PostFixityHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+
+	item := ps.ByName("item")
+	return_code, err := s.FixityDatabase.PostFixity(item)
+	w.WriteHeader(return_code)
+
+	if err != nil {
+		fmt.Fprintln(w, err.Error())
+	}
 }
 
 // Some validation routines for GET /fixity params

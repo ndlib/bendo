@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -148,20 +150,22 @@ func (qc *QlCache) NextFixity(cutoff time.Time) string {
 // GetFixityById
 func (qc *QlCache) GetFixityById(id string) *Fixity {
 	const query = `
-		SELECT id, item, scheduled_time, status, notes
+		SELECT id(), item, scheduled_time, status, notes
 		FROM fixity
-		WHERE id == ?1
+		WHERE id() == ?1
 		LIMIT 1`
 
 	var thisFixity = new(Fixity)
 
-	err := qc.db.QueryRow(query, id).Scan(&thisFixity.Id, &thisFixity.Item, &thisFixity.Scheduled_time, &thisFixity.Status, &thisFixity.Notes)
+        intId , _ := strconv.Atoi(id) 
+
+	err := qc.db.QueryRow(query, intId).Scan(&thisFixity.Id, &thisFixity.Item, &thisFixity.Scheduled_time, &thisFixity.Status, &thisFixity.Notes)
 	if err == sql.ErrNoRows {
 		// no next record
 		log.Println("GetFixityById retruns NoRows")
 		return nil
 	} else if err != nil {
-		log.Println("nextfixity QL", err.Error())
+		log.Println("GetFixityById QL", err.Error())
 		return nil
 	}
 	log.Println("id= ", thisFixity.Id, "item= ", thisFixity.Item, "scheduled_time= ", thisFixity.Scheduled_time, "status= ", thisFixity.Status, "notes= ", thisFixity.Notes)
@@ -198,10 +202,46 @@ func (qc *QlCache) GetFixity(start string, end string, item string, status strin
 	return fixityResults
 }
 
+// POST /fixity/:item
+func (qc *QlCache) PostFixity(item string) ( int, error)  {
+	var err error
+	fixity_results := qc.GetFixity("*", "*", item, "scheduled")
+	if len(fixity_results) > 0 {
+		err = qc.DeleteFixity(fixity_results[0].Id)
+		if err != nil {
+			return 500, err
+		}
+	}
+
+	err = qc.UpdateFixity(item, "scheduled", "") 
+	if err != nil {
+ 		       return 500, err
+	}
+	return 200, nil
+}
+
+//PUT /fixity/:id
+func (qc *QlCache) PutFixity(id string) ( int, error)  {
+	fixity := qc.GetFixityById(id)
+	if  fixity == nil {
+		return 404, errors.New("No fixity check found for ID")
+	}
+	// Record Exists- Update it.
+       const query = ` UPDATE fixity SET scheduled_time = ?1 WHERE id() == ?2`
+
+	intId, _ := strconv.Atoi(id)
+        _, err := performExec(qc.db, query, time.Now(), intId)
+        if err != nil {
+                return 500, err
+        }
+		
+	return 200, nil
+}
+
 // construct an return an sql query, using the parameters passed
 func buildQLQuery(start string, end string, item string, status string) string {
 	var query bytes.Buffer
-	query.WriteString("SELECT  id, item, scheduled_time, status, notes FROM fixity")
+	query.WriteString("SELECT  id(), item, scheduled_time, status, notes FROM fixity")
 
 	params := []string{"start", "end", "item", "status"}
 
@@ -245,6 +285,7 @@ func buildQLQuery(start string, end string, item string, status string) string {
 		conjunction = " AND "
 	}
 
+	query.WriteString(" ORDER BY scheduled_time")
 	return query.String()
 }
 
@@ -277,6 +318,28 @@ func (qc *QlCache) UpdateFixity(item string, status string, notes string) error 
 		_, err = performExec(qc.db, newquery, item, time.Now(), status, notes)
 	}
 	return err
+}
+
+//
+func (qc *QlCache) DeleteFixity(id string) error {
+        const query = `
+                DELETE FROM fixity
+                WHERE id() == ?1 and status == "scheduled"`
+
+	intId, _ := strconv.Atoi(id)
+
+        result, err := performExec(qc.db, query, intId)
+        if err != nil {
+                return err
+        }
+        nrows, err := result.RowsAffected()
+        if err != nil {
+                return err
+        }
+        if nrows == 0 {
+             return errors.New("Cannot Delete Id " + id + "from fixity: NotFound") 
+        }
+        return nil
 }
 
 // SetCheck adds a new fixity record for the given item. The new
