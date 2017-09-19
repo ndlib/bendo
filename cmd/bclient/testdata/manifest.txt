@@ -1,0 +1,8 @@
+# comment line
+a|1234567890|abcdef|text/plain
+b|2345678901|bcdefa|image/png
+# lines with wrong number of fields
+wrong||||what?
+also-wrong|
+# a file with only a mime-type
+c|||application/xml
