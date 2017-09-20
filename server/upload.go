@@ -144,9 +144,18 @@ func (s *RESTServer) AppendFileHandler(w http.ResponseWriter, r *http.Request, p
 		f.Rollback()
 		return
 	}
+	// populate metadata fields
 	v := r.Header.Get("Content-Type")
 	if v != "" {
 		f.SetMimeType(v)
+	}
+	h := getHexadecimalHeader(r, "X-Content-SHA256")
+	if len(h) > 0 {
+		f.SetSHA256(h)
+	}
+	h = getHexadecimalHeader(r, "X-Content-MD5")
+	if len(h) > 0 {
+		f.SetMD5(h)
 	}
 }
 
@@ -155,9 +164,6 @@ func (s *RESTServer) AppendFileHandler(w http.ResponseWriter, r *http.Request, p
 // or is not valid hexadecimal, returns an empty slice.
 func getHexadecimalHeader(r *http.Request, header string) []byte {
 	v := r.Header.Get(header)
-	if v == "" {
-		return nil
-	}
 	result, _ := hex.DecodeString(v)
 	return result
 }

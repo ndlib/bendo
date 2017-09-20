@@ -145,6 +145,9 @@ func (ia *ItemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5su
 	if mimetype != "" {
 		req.Header.Add("Content-Type", mimetype)
 	}
+	if len(filemd5sum) > 0 {
+		req.Header.Add("X-Content-MD5", hex.EncodeToString(filemd5sum))
+	}
 	resp, err := http.DefaultClient.Do(req)
 
 	if err != nil {
