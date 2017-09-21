@@ -71,6 +71,9 @@ type FileEntry interface {
 	// its blocks).
 	SetSHA256(hash []byte)
 
+	// Set the mime-type of this file.
+	SetMimeType(mimetype string)
+
 	// Sets an opaque metadata blob which can be assigned to each file.
 	SetExtra(extra string)
 
@@ -90,6 +93,7 @@ type Stat struct {
 	Labels     []string
 	MD5        []byte // expected hash for entire file
 	SHA256     []byte // expected hash for entire file
+	MimeType   string
 	Extra      string // arbitrary user defined content
 }
 
@@ -107,6 +111,7 @@ type file struct {
 	Creator  string       // the "user" (aka API key) who created this file
 	MD5      []byte       // expected hash for entire file
 	SHA256   []byte       // expected hash for entire file
+	MimeType string       // the mime type of the file
 	Extra    string       // arbitrary user defined content
 }
 
@@ -320,6 +325,7 @@ func (f *file) Stat() Stat {
 		Labels:     f.Labels[:],
 		MD5:        f.MD5[:],
 		SHA256:     f.SHA256[:],
+		MimeType:   f.MimeType,
 		Extra:      f.Extra,
 	}
 }
@@ -506,6 +512,13 @@ func (f *file) SetSHA256(hash []byte) {
 	f.m.Lock()
 	defer f.m.Unlock()
 	f.SHA256 = hash[:]
+	f.save()
+}
+
+func (f *file) SetMimeType(mimetype string) {
+	f.m.Lock()
+	defer f.m.Unlock()
+	f.MimeType = mimetype
 	f.save()
 }
 

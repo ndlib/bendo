@@ -39,6 +39,7 @@ func readItemInfo(rc io.Reader) (*Item, error) {
 			SaveDate:   blob.SaveDate,
 			Creator:    blob.Creator,
 			Size:       blob.ByteCount,
+			MimeType:   blob.MimeType,
 			Bundle:     blob.Bundle,
 			DeleteDate: blob.DeleteDate,
 			Deleter:    blob.Deleter,
@@ -65,6 +66,7 @@ func writeItemInfo(w io.Writer, item *Item) error {
 			ByteCount:  b.Size,
 			MD5:        hex.EncodeToString(b.MD5),
 			SHA256:     hex.EncodeToString(b.SHA256),
+			MimeType:   b.MimeType,
 			SaveDate:   b.SaveDate,
 			Creator:    b.Creator,
 			DeleteDate: b.DeleteDate,
@@ -113,6 +115,7 @@ type blobTape struct {
 	ByteCount  int64
 	MD5        string
 	SHA256     string
+	MimeType   string
 	SaveDate   time.Time
 	Creator    string
 	DeleteDate time.Time

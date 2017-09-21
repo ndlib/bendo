@@ -18,9 +18,10 @@ type Blob struct {
 	Size     int64 // logical size of associated content (i.e. before compression), 0 if deleted
 
 	// following valid if blob is NOT deleted
-	Bundle int    // which bundle file this blob is stored in
-	MD5    []byte // unused if Size == 0
-	SHA256 []byte // unused if Size == 0
+	Bundle   int    // which bundle file this blob is stored in
+	MD5      []byte // unused if Size == 0
+	SHA256   []byte // unused if Size == 0
+	MimeType string // either empty or the mime type of this blob
 
 	// following valid if blob is deleted
 	DeleteDate time.Time // zero iff not deleted

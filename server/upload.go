@@ -63,6 +63,7 @@ var (
 <dt>Created</dt><dd>{{ .Created }}</dd>
 <dt>Modified</dt><dd>{{ .Modified }}</dd>
 <dt>Creator</dt><dd>{{ .Creator }}</dd>
+<dt>MimeType</dt><dd>{{ .MimeType }}</dd>
 <dt>Extra</dt><dd>{{ .Extra }}</dd>
 <dt>MD5</dt><dd>{{ .MD5 }}</dd>
 <dt>SHA256</dt><dd>{{ .SHA256 }}</dd>
@@ -75,22 +76,12 @@ var (
 
 // AppendFileHandler handles requests to both POST /upload and POST /upload/:fileid
 func (s *RESTServer) AppendFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	md5hash64 := r.Header.Get("X-Upload-Md5")
-	sha256hash64 := r.Header.Get("X-Upload-Sha256")
-	if md5hash64 == "" && sha256hash64 == "" {
+	uploadMD5 := getHexadecimalHeader(r, "X-Upload-Md5")
+	uploadSHA256 := getHexadecimalHeader(r, "X-Upload-Sha256")
+	if len(uploadMD5)+len(uploadSHA256) == 0 {
 		w.WriteHeader(400)
-		fmt.Fprintf(w, "Need at least one of X-Upload-Md5 or X-Upload-Sha256")
+		fmt.Fprintf(w, "At least one of X-Upload-Md5 or X-Upload-Sha256 must be provided")
 		return
-	}
-	var md5bytes []byte
-	var err error
-	if md5hash64 != "" {
-		md5bytes, err = hex.DecodeString(md5hash64)
-		if err != nil {
-			w.WriteHeader(400)
-			fmt.Fprintf(w, "bad MD5 string")
-			return
-		}
 	}
 	fileid := ps.ByName("fileid")
 	var f fragment.FileEntry // the file to append to
@@ -125,7 +116,7 @@ func (s *RESTServer) AppendFileHandler(w http.ResponseWriter, r *http.Request, p
 		fmt.Fprintln(w, err.Error())
 		return
 	}
-	hw := util.NewMD5Writer(wr)
+	hw := util.NewHashWriter(wr)
 	_, err = io.Copy(hw, r.Body)
 	err2 := wr.Close()
 	r.Body.Close()
@@ -140,15 +131,35 @@ func (s *RESTServer) AppendFileHandler(w http.ResponseWriter, r *http.Request, p
 		fmt.Fprintln(w, err2.Error())
 		return
 	}
-	if len(md5bytes) > 0 {
-		_, ok := hw.CheckMD5(md5bytes)
-		if !ok {
-			w.WriteHeader(412)
-			fmt.Fprintln(w, "MD5 mismatch")
-			f.Rollback()
-			return
-		}
+	var ok = true
+	if len(uploadMD5) > 0 {
+		_, ok = hw.CheckMD5(uploadMD5)
 	}
+	if ok && len(uploadSHA256) > 0 {
+		_, ok = hw.CheckSHA256(uploadSHA256)
+	}
+	if !ok {
+		w.WriteHeader(412)
+		fmt.Fprintln(w, "Checksum mismatch")
+		f.Rollback()
+		return
+	}
+	v := r.Header.Get("Content-Type")
+	if v != "" {
+		f.SetMimeType(v)
+	}
+}
+
+// getHexadecimalHeader returns the value for `header`, after first
+// translating it from hexadecimal to binary. If the header doesn't exist
+// or is not valid hexadecimal, returns an empty slice.
+func getHexadecimalHeader(r *http.Request, header string) []byte {
+	v := r.Header.Get(header)
+	if v == "" {
+		return nil
+	}
+	result, _ := hex.DecodeString(v)
+	return result
 }
 
 func randomid() string {
@@ -190,6 +201,9 @@ func (s *RESTServer) SetFileInfoHandler(w http.ResponseWriter, r *http.Request, 
 	}
 	if len(metadata.Extra) > 0 {
 		f.SetExtra(metadata.Extra)
+	}
+	if metadata.MimeType != "" {
+		f.SetMimeType(metadata.MimeType)
 	}
 }
 
