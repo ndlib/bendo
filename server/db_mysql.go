@@ -196,37 +196,28 @@ func (ms *MsqlCache) GetFixity(start string, end string, item string, status str
 	return results
 }
 
-func (ms *MsqlCache) PostFixity(item string) (int, error)  {
-        var err error
-        fixity_results := ms.GetFixity("*", "*", item, "scheduled")
-        if len(fixity_results) > 0 {
-                err = ms.DeleteFixity(fixity_results[0].Id)
-                if err != nil {
-                        return 500, err
-                }
-        }
-
-        err = ms.UpdateFixity(item, "scheduled", "")
-        if err != nil {
-                       return 500, err
-        }
-        return 200, nil
+func (ms *MsqlCache) ScheduleFixityForItem(item string) error {
+	err := ms.UpdateFixity(item, "scheduled", "", time.Now())
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (qc *MsqlCache) PutFixity(id string) ( int, error)  {
-        fixity := qc.GetFixityById(id)
-        if  fixity == nil {
-                return 404, errors.New("No fixity check found for ID")
-        }
-        // Record Exists- Update it.
-       const query = ` UPDATE fixity SET scheduled_time = ? WHERE id = ?`
+func (ms *MsqlCache) PutFixity(id string) error {
+	fixity := ms.GetFixityById(id)
+	if fixity == nil {
+		return errors.New("No fixity check found for ID")
+	}
+	// Record Exists- Update it.
+	const query = ` UPDATE fixity SET scheduled_time = ? WHERE id = ?`
 
-        _, err := performExec(qc.db, query, time.Now(), id)
-        if err != nil {
-                return 500, err
-        }
+	_, err := performExec(ms.db, query, time.Now(), id)
+	if err != nil {
+		return err
+	}
 
-        return 200, nil
+	return nil
 }
 
 // construct an return an sql query, using the parameters passed
@@ -280,14 +271,27 @@ func buildQuery(start string, end string, item string, status string) string {
 
 // UpdateFixity updates the earliest scheduled fixity record for
 // the given item. If there is no such fixity record, it will create one.
-func (ms *MsqlCache) UpdateFixity(item string, status string, notes string) error {
-	const query = `
-		UPDATE fixity
-		SET status = ?, notes = ?
-		WHERE item = ? and status = "scheduled"
+func (ms *MsqlCache) UpdateFixity(item string, status string, notes string, scheduled_time time.Time) error {
+	queryParts := []string{
+		"UPDATE fixity",
+		"SET status = ?, notes = ?, scheduled_time = ?",
+		"SET status = ?, notes = ?",
+		`WHERE item = ? and status = "scheduled"
 		ORDER BY scheduled_time
-		LIMIT 1`
-	result, err := ms.db.Exec(query, status, notes, item)
+		LIMIT 1`}
+
+	// two query forms- with or without scheduled_time
+	queryWithTime := []string{queryParts[0], queryParts[1], queryParts[3]}
+	querySansTime := []string{queryParts[0], queryParts[2], queryParts[3]}
+
+	var err error
+	var result sql.Result
+
+	if scheduled_time == time.Unix(0, 0) {
+		result, err = performExec(ms.db, strings.Join(querySansTime, " "), item, status, notes)
+	} else {
+		result, err = performExec(ms.db, strings.Join(queryWithTime, " "), item, status, notes, scheduled_time)
+	}
 	if err != nil {
 		return err
 	}
@@ -305,17 +309,17 @@ func (ms *MsqlCache) UpdateFixity(item string, status string, notes string) erro
 }
 
 func (ms *MsqlCache) DeleteFixity(id string) error {
-        const query = `DELETE FROM fixity WHERE id = ?`
+	const query = `DELETE FROM fixity WHERE id = ?`
 
-        result, err := performExec(ms.db, query, id)
-        if err != nil {
-                return err
-        }
-        _, err = result.RowsAffected()
-        if err != nil {
-                return err
-        }
-        return nil
+	result, err := performExec(ms.db, query, id)
+	if err != nil {
+		return err
+	}
+	_, err = result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // SetCheck adds a fixity record for the given item. The created fixity

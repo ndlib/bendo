@@ -157,7 +157,7 @@ func (qc *QlCache) GetFixityById(id string) *Fixity {
 
 	var thisFixity = new(Fixity)
 
-        intId , _ := strconv.Atoi(id) 
+	intId, _ := strconv.Atoi(id)
 
 	err := qc.db.QueryRow(query, intId).Scan(&thisFixity.Id, &thisFixity.Item, &thisFixity.Scheduled_time, &thisFixity.Status, &thisFixity.Notes)
 	if err == sql.ErrNoRows {
@@ -203,39 +203,30 @@ func (qc *QlCache) GetFixity(start string, end string, item string, status strin
 }
 
 // POST /fixity/:item
-func (qc *QlCache) PostFixity(item string) ( int, error)  {
-	var err error
-	fixity_results := qc.GetFixity("*", "*", item, "scheduled")
-	if len(fixity_results) > 0 {
-		err = qc.DeleteFixity(fixity_results[0].Id)
-		if err != nil {
-			return 500, err
-		}
-	}
-
-	err = qc.UpdateFixity(item, "scheduled", "") 
+func (qc *QlCache) ScheduleFixityForItem(item string) error {
+	err := qc.UpdateFixity(item, "scheduled", "", time.Now())
 	if err != nil {
- 		       return 500, err
+		return err
 	}
-	return 200, nil
+	return nil
 }
 
 //PUT /fixity/:id
-func (qc *QlCache) PutFixity(id string) ( int, error)  {
+func (qc *QlCache) PutFixity(id string) error {
 	fixity := qc.GetFixityById(id)
-	if  fixity == nil {
-		return 404, errors.New("No fixity check found for ID")
+	if fixity == nil {
+		return errors.New("No fixity check found for ID")
 	}
 	// Record Exists- Update it.
-       const query = ` UPDATE fixity SET scheduled_time = ?1 WHERE id() == ?2`
+	const query = ` UPDATE fixity SET scheduled_time = ?1 WHERE id() == ?2`
 
 	intId, _ := strconv.Atoi(id)
-        _, err := performExec(qc.db, query, time.Now(), intId)
-        if err != nil {
-                return 500, err
-        }
-		
-	return 200, nil
+	_, err := performExec(qc.db, query, time.Now(), intId)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // construct an return an sql query, using the parameters passed
@@ -291,55 +282,56 @@ func buildQLQuery(start string, end string, item string, status string) string {
 
 // UpdateFixity will update the earliest scheduled fixity record for the given item.
 // If there is no such record, one will be created.
-func (qc *QlCache) UpdateFixity(item string, status string, notes string) error {
-	const query = `
-		UPDATE fixity
-		SET status = ?2, notes = ?3
-		WHERE id() in
+func (qc *QlCache) UpdateFixity(item string, status string, notes string, scheduled_time time.Time) error {
+	queryParts := []string{"UPDATE fixity",
+		"SET status = ?2, notes = ?3, scheduled_time = ?4",
+		"SET status = ?2, notes = ?3",
+		`WHERE id() in
 			(SELECT id from
 				(SELECT id() as id, scheduled_time
 				FROM fixity
 				WHERE item == ?1 and status == "scheduled"
 				ORDER BY scheduled_time
-				LIMIT 1))`
+				LIMIT 1))`}
 
-	result, err := performExec(qc.db, query, item, status, notes)
+	queryWithTime := []string{queryParts[0], queryParts[1], queryParts[3]}
+	querySansTime := []string{queryParts[0], queryParts[2], queryParts[3]}
+
+	var err error
+	var result sql.Result
+
+	if scheduled_time == time.Unix(0, 0) {
+		result, err = performExec(qc.db, strings.Join(querySansTime, " "), item, status, notes)
+	} else {
+		result, err = performExec(qc.db, strings.Join(queryWithTime, " "), item, status, notes, scheduled_time)
+	}
+
 	if err != nil {
 		return err
 	}
 	nrows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
 	if nrows == 0 {
 		// record didn't exist. create it
 		const newquery = `INSERT INTO fixity (item, scheduled_time, status, notes) VALUES (?1,?2,?3,?4)`
 
 		_, err = performExec(qc.db, newquery, item, time.Now(), status, notes)
 	}
-	return err
+	return nil
 }
 
 //
 func (qc *QlCache) DeleteFixity(id string) error {
-        const query = `
+	const query = `
                 DELETE FROM fixity
                 WHERE id() == ?1 and status == "scheduled"`
 
 	intId, _ := strconv.Atoi(id)
 
-        result, err := performExec(qc.db, query, intId)
-        if err != nil {
-                return err
-        }
-        nrows, err := result.RowsAffected()
-        if err != nil {
-                return err
-        }
-        if nrows == 0 {
-             return errors.New("Cannot Delete Id " + id + "from fixity: NotFound") 
-        }
-        return nil
+	_, err := performExec(qc.db, query, intId)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // SetCheck adds a new fixity record for the given item. The new
