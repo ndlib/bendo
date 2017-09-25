@@ -132,7 +132,7 @@ func (bw *BundleWriter) WriteBlob(blob *Blob, r io.Reader) error {
 func testhash(h []byte, target *[]byte, name string) error {
 	if *target == nil {
 		*target = h
-	} else if bytes.Compare(*target, h) != 0 {
+	} else if !bytes.Equal(*target, h) {
 		return fmt.Errorf("commit (%s), got %s, expected %s",
 			name,
 			hex.EncodeToString(h),

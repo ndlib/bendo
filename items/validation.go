@@ -102,10 +102,10 @@ func (s *Store) Validate(id string) (nb int64, problems []string, err error) {
 			}
 			checksum := bag.Checksum(fmt.Sprintf("blob/%d", blob.ID))
 			_ = bag.Close()
-			if bytes.Compare(blob.MD5, checksum.MD5) != 0 {
+			if !bytes.Equal(blob.MD5, checksum.MD5) {
 				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has MD5 mismatch", id, blob.ID))
 			}
-			if bytes.Compare(blob.SHA256, checksum.SHA256) != 0 {
+			if !bytes.Equal(blob.SHA256, checksum.SHA256) {
 				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has SHA-256 mismatch", id, blob.ID))
 			}
 
