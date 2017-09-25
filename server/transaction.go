@@ -41,6 +41,8 @@ func (s *RESTServer) TxInfoHandler(w http.ResponseWriter, r *http.Request, ps ht
 		fmt.Fprintln(w, "cannot find transaction")
 		return
 	}
+	tx.M.RLock()
+	defer tx.M.RUnlock()
 	writeHTMLorJSON(w, r, txInfoTemplate, tx)
 }
 

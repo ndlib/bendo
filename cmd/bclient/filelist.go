@@ -1,13 +1,11 @@
 // This package manages a list of files, and their checksums
 
-package fileutil
+package main
 
 import (
-	"crypto/md5"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"os"
 	"path"
 	"sort"
@@ -20,9 +18,31 @@ import (
 // Blobs id used only for lists built from server data
 
 type FileList struct {
-	Root  string
-	Files map[string]map[int64][]byte
+	// root of file tree in file system
+	Root string
+
+	// mapping of path to info record for each file
+	Files map[string]File
+
+	// mapping of md5 sum (as hex) to blob id.
+	// also mapping of file path to blob id.
 	Blobs map[string]int64
+}
+
+// A File represents information for both local and remote files,
+// although the meaning of the fields is slightly different
+// for the two cases.
+// For local files, MD5 is the hash of the complete file.
+// The BlobID is either 0, if unassigned, >0 if this file is
+// the same as a remote blob, and <0 if this file is a new blob that has to be
+// uploaded to the server.
+type File struct {
+	Name     string // relative path for the file
+	AbsPath  string // (local only) absolute path to file
+	MD5      []byte
+	SHA256   []byte
+	MimeType string
+	BlobID   int64 // 0 if nothing has been assigned yet
 }
 
 // Create an empty FileList
@@ -30,44 +50,35 @@ type FileList struct {
 func New(root string) *FileList {
 	fl := new(FileList)
 	fl.Root = root
-	fl.Files = make(map[string]map[int64][]byte)
+	fl.Files = make(map[string]File)
 	fl.Blobs = make(map[string]int64)
 
 	return fl
 }
 
-// Construct a FileList from a channel of filenames - open local file, and compute checksums
-
-func (f *FileList) BuildListFromChan(filePipe <-chan string) {
-
-	for fileName := range filePipe {
-		// Open the local file
-		fReader, ferr := os.Open(path.Join(f.Root, fileName))
-
-		if ferr != nil {
-			fmt.Println(ferr)
-			continue
+// AddFiles reads `File` structures in on a channel and merges them
+// with the files already in the list. New files are added. Other files
+// are merged with the new file winning. Only fields that are not zero are
+// merged.
+func (fl *FileList) AddFiles(in <-chan File) {
+	for f := range in {
+		info := fl.Files[f.Name]
+		if f.AbsPath != "" {
+			info.AbsPath = f.AbsPath
 		}
-
-		md5w := md5.New()
-
-		// Copy from the Reader into the Writer (this will compute the CheckSums)
-
-		io.Copy(md5w, fReader)
-
-		// Get the Checksums
-
-		md5Sum := md5w.Sum(nil)
-
-		innerMap, ok := f.Files[fileName]
-
-		if !ok {
-			innerMap = make(map[int64][]byte)
-			f.Files[fileName] = innerMap
+		if len(f.MD5) > 0 {
+			info.MD5 = f.MD5
 		}
-
-		f.Files[fileName][1] = md5Sum
-
+		if len(f.SHA256) > 0 {
+			info.SHA256 = f.SHA256
+		}
+		if len(f.MimeType) > 0 {
+			info.MimeType = f.MimeType
+		}
+		if f.BlobID != 0 {
+			info.BlobID = f.BlobID
+		}
+		fl.Files[f.Name] = info
 	}
 }
 
@@ -85,7 +96,6 @@ func (f *FileList) AddToSendQueue(sendQueue chan string) {
 // Construct a FileList from a JSON return by the Bendo API
 
 func (f *FileList) BuildListFromJSON(json *jason.Object) {
-
 	blobArray, _ := json.GetObjectArray("Blobs")
 	versionArray, _ := json.GetObjectArray("Versions")
 
@@ -97,30 +107,26 @@ func (f *FileList) BuildListFromJSON(json *jason.Object) {
 		f.Blobs[hex.EncodeToString(DecodedMD5)] = blobID
 	}
 
-	for _, version := range versionArray {
-		versionID, _ := version.GetInt64("ID")
-		slotMap, _ := version.GetObject("Slots")
+	if len(versionArray) == 0 {
+		// huh? why is this zero?
+		return
+	}
+	// only care about the file mappings in the newest version
+	version := versionArray[len(versionArray)-1]
+	slotMap, _ := version.GetObject("Slots")
 
-		for key, value := range slotMap.Map() {
+	for key, value := range slotMap.Map() {
+		blobID, _ := value.Int64()
+		md5Sum, _ := blobArray[blobID-1].GetString("MD5")
+		DecodedMD5, _ := base64.StdEncoding.DecodeString(md5Sum)
 
-			blobID, _ := value.Int64()
-			md5Sum, _ := blobArray[blobID-1].GetString("MD5")
-			DecodedMD5, _ := base64.StdEncoding.DecodeString(md5Sum)
+		info := f.Files[key]
+		info.BlobID = blobID
+		info.MD5 = DecodedMD5
+		info.MimeType, _ = blobArray[blobID-1].GetString("MimeType")
+		f.Files[key] = info
 
-			innerMap, ok := f.Files[key]
-
-			if !ok {
-				innerMap = make(map[int64][]byte)
-				f.Files[key] = innerMap
-			}
-
-			f.Files[key][blobID] = DecodedMD5
-
-			// maps files in latest version to their blobs
-			if versionID == int64(len(versionArray)) {
-				f.Blobs[key] = blobID
-			}
-		}
+		f.Blobs[key] = blobID
 	}
 }
 
@@ -188,21 +194,16 @@ func PrintLsFromJSON(json *jason.Object, version int, long bool, blobs bool, ite
 }
 
 func MakeStubFromJSON(json *jason.Object, item string, pathPrefix string) {
-
 	versionArray, _ := json.GetObjectArray("Versions")
-
 	thisVersion := len(versionArray)
 
 	// Find the version in the JSON, and its subtending slot map
-
-	versionElement := versionArray[thisVersion-1]
-	slotMap, _ := versionElement.GetObject("Slots")
+	slotMap, _ := versionArray[thisVersion-1].GetObject("Slots")
 
 	for key, _ := range slotMap.Map() {
 		targetFile := path.Join(pathPrefix, key)
 
 		// create target directory, return on error
-
 		targetDir, _ := path.Split(targetFile)
 
 		err := os.MkdirAll(targetDir, 0755)

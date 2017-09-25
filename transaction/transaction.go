@@ -77,11 +77,11 @@ func (r *Store) Create(itemid string) (*T, error) {
 	defer r.m.Unlock()
 	// is there currently a open transaction for the item?
 	for _, tx := range r.txs {
-		tx.m.RLock()
+		tx.M.RLock()
 		var inprocess = tx.ItemID == itemid &&
 			tx.Status != StatusFinished &&
 			tx.Status != StatusError
-		tx.m.RUnlock()
+		tx.M.RUnlock()
 		if inprocess {
 			return nil, ErrExistingTransaction
 		}
@@ -144,7 +144,7 @@ func (r *Store) Delete(id string) error {
 type T struct {
 	txstore  *fragment.JSONStore // where this structure is stored
 	files    *fragment.Store     // Where files are stored
-	m        sync.RWMutex        // protects everything below
+	M        sync.RWMutex        // protects everything below
 	ID       string              // the id of this transaction
 	Status   Status              // one of Status*
 	Started  time.Time           // time tx was created
@@ -182,8 +182,8 @@ func (tx *T) AddCommandList(cmds [][]string) error {
 			return ErrBadCommand
 		}
 	}
-	tx.m.Lock()
-	defer tx.m.Unlock()
+	tx.M.Lock()
+	defer tx.M.Unlock()
 	for _, cmd := range cmds {
 		tx.Commands = append(tx.Commands, command(cmd))
 	}
@@ -193,8 +193,8 @@ func (tx *T) AddCommandList(cmds [][]string) error {
 
 // SetStatus updates the status of this transaction to s.
 func (tx *T) SetStatus(s Status) {
-	tx.m.Lock()
-	defer tx.m.Unlock()
+	tx.M.Lock()
+	defer tx.M.Unlock()
 	tx.Status = s
 	tx.save()
 }
@@ -206,8 +206,8 @@ func (tx *T) SetStatus(s Status) {
 func (tx *T) Commit(s items.Store, files *fragment.Store, cache blobcache.T) {
 	// we hold the lock on tx for the duration of the commit.
 	// That might be for a very long time.
-	tx.m.Lock()
-	defer tx.m.Unlock()
+	tx.M.Lock()
+	defer tx.M.Unlock()
 	tx.Status = StatusIngest
 	iw, err := s.Open(tx.ItemID, tx.Creator)
 	if err != nil {
@@ -234,8 +234,8 @@ func (tx *T) Commit(s items.Store, files *fragment.Store, cache blobcache.T) {
 // ReferencedFiles returns a list of all the upload file ids associated with
 // this transaction. That is, all the files referenced by an "add" command.
 func (tx *T) ReferencedFiles() []string {
-	tx.m.RLock()
-	defer tx.m.RUnlock()
+	tx.M.RLock()
+	defer tx.M.RUnlock()
 	var result []string
 	for _, cmd := range tx.Commands {
 		if cmd[0] == "add" && len(cmd) == 2 {
@@ -265,12 +265,12 @@ func (tx *T) VerifyFiles(files *fragment.Store) {
 // AppendError appends the given error string to this transaction.
 // It will acquire the write lock on tx.
 func (tx *T) AppendError(e string) {
-	tx.m.Lock()
+	tx.M.Lock()
 	tx.Err = append(tx.Err, e)
-	tx.m.Unlock()
+	tx.M.Unlock()
 }
 
-// must hold lock tx.m to call this
+// must hold lock tx.M to call this
 func (tx *T) save() {
 	if tx.txstore != nil {
 		tx.Modified = time.Now()
@@ -332,24 +332,32 @@ func (c command) Execute(iw *items.Writer, tx *T, cache blobcache.T) {
 			tx.Err = append(tx.Err, "Cannot find "+cmd[1])
 			break
 		}
-		tx.m.Unlock()
+		tx.M.Unlock()
 		reader := f.Open()
 		fstat := f.Stat()
 		bid, err := iw.WriteBlob(reader, fstat.Size, fstat.MD5, fstat.SHA256)
 		reader.Close()
-		tx.m.Lock()
+		tx.M.Lock()
 		if err != nil {
 			tx.Err = append(tx.Err, err.Error())
 			break
 		}
 		tx.BlobMap[cmd[1]] = int(bid)
 		iw.SetMimeType(bid, fstat.MimeType)
+	case "mimetype":
+		// mimetype <blob id> <new mime type>
+		bid, err := strconv.ParseInt(cmd[1], 10, 64)
+		if err != nil {
+			tx.Err = append(tx.Err, "Cannot resolve id "+cmd[2])
+			break
+		}
+		iw.SetMimeType(items.BlobID(bid), cmd[2])
 	case "sleep":
 		// sleep for some length of time. intended to be used for testing.
 		// nothing magic about 1 sec. could be less
-		tx.m.Unlock()
+		tx.M.Unlock()
 		time.Sleep(1 * time.Second)
-		tx.m.Lock()
+		tx.M.Lock()
 	default:
 		tx.Err = append(tx.Err, "Bad command "+cmd[0])
 	}
@@ -379,6 +387,8 @@ func (c command) WellFormed() bool {
 	case cmd[0] == "add" && len(cmd) == 2:
 		return true
 	case cmd[0] == "sleep" && len(cmd) == 1:
+		return true
+	case cmd[0] == "mimetype" && len(cmd) == 3:
 		return true
 	}
 	return false
