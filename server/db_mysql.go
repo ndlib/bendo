@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
 	"strings"
 	"time"
@@ -195,6 +196,39 @@ func (ms *MsqlCache) GetFixity(start string, end string, item string, status str
 	return results
 }
 
+func (ms *MsqlCache) PostFixity(item string) (int, error)  {
+        var err error
+        fixity_results := ms.GetFixity("*", "*", item, "scheduled")
+        if len(fixity_results) > 0 {
+                err = ms.DeleteFixity(fixity_results[0].Id)
+                if err != nil {
+                        return 500, err
+                }
+        }
+
+        err = ms.UpdateFixity(item, "scheduled", "")
+        if err != nil {
+                       return 500, err
+        }
+        return 200, nil
+}
+
+func (qc *MsqlCache) PutFixity(id string) ( int, error)  {
+        fixity := qc.GetFixityById(id)
+        if  fixity == nil {
+                return 404, errors.New("No fixity check found for ID")
+        }
+        // Record Exists- Update it.
+       const query = ` UPDATE fixity SET scheduled_time = ? WHERE id = ?`
+
+        _, err := performExec(qc.db, query, time.Now(), id)
+        if err != nil {
+                return 500, err
+        }
+
+        return 200, nil
+}
+
 // construct an return an sql query, using the parameters passed
 func buildQuery(start string, end string, item string, status string) string {
 	var query bytes.Buffer
@@ -240,6 +274,7 @@ func buildQuery(start string, end string, item string, status string) string {
 		conjunction = " AND "
 	}
 
+	query.WriteString(" ORDER BY scheduled_time")
 	return query.String()
 }
 
@@ -267,6 +302,20 @@ func (ms *MsqlCache) UpdateFixity(item string, status string, notes string) erro
 		_, err = ms.db.Exec(newquery, item, time.Now(), status, notes)
 	}
 	return err
+}
+
+func (ms *MsqlCache) DeleteFixity(id string) error {
+        const query = `DELETE FROM fixity WHERE id = ?`
+
+        result, err := performExec(ms.db, query, id)
+        if err != nil {
+                return err
+        }
+        _, err = result.RowsAffected()
+        if err != nil {
+                return err
+        }
+        return nil
 }
 
 // SetCheck adds a fixity record for the given item. The created fixity
