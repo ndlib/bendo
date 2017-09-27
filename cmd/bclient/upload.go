@@ -87,7 +87,11 @@ func doUpload(item string, file string) int {
 	}
 
 	if *wait {
-		thisItem.WaitForCommitFinish(transaction)
+		err = thisItem.WaitForCommitFinish(transaction)
+		if err != nil {
+			fmt.Println(err)
+			return 1
+		}
 	}
 
 	return 0
