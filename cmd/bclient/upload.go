@@ -292,7 +292,7 @@ func ResolveLocalBlobs(local, remote *FileList) []Action {
 			// is this blob on remote server?
 			remoteinfo := remote.Files[localfile]
 			if len(remoteinfo.MD5) != 0 &&
-				bytes.Compare(localinfo.MD5, remoteinfo.MD5) == 0 {
+				bytes.Equal(localinfo.MD5, remoteinfo.MD5) {
 				// this file's contents have not changed.
 				// See if mime type needs to be updated.
 				if localinfo.MimeType != "" &&

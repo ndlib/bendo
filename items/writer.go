@@ -189,8 +189,8 @@ func (wr *Writer) findBlobByHash(size int64, md5, sha256 []byte) BlobID {
 	}
 	for _, blob := range wr.item.Blobs {
 		if blob.Size == size &&
-			(len(md5) == 0 || bytes.Compare(md5, blob.MD5) == 0) &&
-			(len(sha256) == 0 || bytes.Compare(sha256, blob.SHA256) == 0) {
+			(len(md5) == 0 || bytes.Equal(md5, blob.MD5)) &&
+			(len(sha256) == 0 || bytes.Equal(sha256, blob.SHA256)) {
 			return blob.ID
 		}
 	}

@@ -79,7 +79,7 @@ func (hw *HashWriter) CheckMD5(goal []byte) ([]byte, bool) {
 	if hw.md5 != nil {
 		computed = hw.md5.Sum(nil)
 	}
-	ok := len(goal) == 0 || bytes.Compare(goal, computed) == 0
+	ok := len(goal) == 0 || bytes.Equal(goal, computed)
 	return computed, ok
 }
 
@@ -92,6 +92,6 @@ func (hw *HashWriter) CheckSHA256(goal []byte) ([]byte, bool) {
 	if hw.sha256 != nil {
 		computed = hw.sha256.Sum(nil)
 	}
-	ok := len(goal) == 0 || bytes.Compare(goal, computed) == 0
+	ok := len(goal) == 0 || bytes.Equal(goal, computed)
 	return computed, ok
 }

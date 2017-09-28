@@ -258,7 +258,7 @@ checksum:
 	h, _ := w.CheckSHA256(nil)
 
 	for _, blob := range item.Blobs {
-		if bytes.Compare(h, blob.SHA256) == 0 {
+		if bytes.Equal(h, blob.SHA256) {
 			return blob.ID
 		}
 	}
