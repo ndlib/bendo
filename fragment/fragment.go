@@ -8,7 +8,6 @@ package fragment
 import (
 	"fmt"
 	"io"
-	"sort"
 	"sync"
 	"time"
 
@@ -24,7 +23,6 @@ type Store struct {
 	fstore store.Store  // for the file fragments
 	m      sync.RWMutex // protects everything below
 	files  map[string]*file
-	labels map[string][]string
 }
 
 const (
@@ -56,10 +54,6 @@ type FileEntry interface {
 	// segment of data which was Appended)
 	Rollback() error
 
-	// Set the label metadata for this file. The given label list will
-	// completely replace the current label list.
-	SetLabels(labels []string)
-
 	// Set the creator name for this file.
 	SetCreator(name string)
 
@@ -90,7 +84,6 @@ type Stat struct {
 	Created    time.Time
 	Modified   time.Time
 	Creator    string
-	Labels     []string
 	MD5        []byte // expected hash for entire file
 	SHA256     []byte // expected hash for entire file
 	MimeType   string
@@ -107,7 +100,6 @@ type file struct {
 	Children []*fragment  // Children ids, in the order to read them.
 	Created  time.Time    // time this record was created
 	Modified time.Time    // last time this record was modified
-	Labels   []string     // list of labels for this file
 	Creator  string       // the "user" (aka API key) who created this file
 	MD5      []byte       // expected hash for entire file
 	SHA256   []byte       // expected hash for entire file
@@ -128,7 +120,6 @@ func New(s store.Store) *Store {
 		meta:   NewJSON(store.NewWithPrefix(s, fileKeyPrefix)),
 		fstore: store.NewWithPrefix(s, fragmentKeyPrefix),
 		files:  make(map[string]*file),
-		labels: make(map[string][]string),
 	}
 }
 
@@ -151,30 +142,8 @@ func (s *Store) Load() error {
 		}
 		f.parent = s
 		s.files[f.ID] = f
-		s.indexRecord(f)
 	}
 	return nil
-}
-
-// index the labels for f
-// locks must be held on both s AND f to call this.
-func (s *Store) indexRecord(f *file) {
-	for _, label := range f.Labels {
-		s.labels[label] = append(s.labels[label], f.ID)
-		sort.Strings(s.labels[label])
-	}
-}
-
-// remove a record from our label indices
-// locks must be held on both s and f to call this
-func (s *Store) unindexRecord(f *file) {
-	for _, label := range f.Labels {
-		list := s.labels[label]
-		i := sort.SearchStrings(list, f.ID)
-		if list[i] == f.ID {
-			s.labels[label] = append(list[:i], list[i+1:]...)
-		}
-	}
 }
 
 // List returns the names of all the stored files.
@@ -187,69 +156,6 @@ func (s *Store) List() []string {
 		result = append(result, k)
 	}
 	return result
-}
-
-// ListFiltered returns a list of the file ids matching a given set of labels.
-// If the list of labels provided is empty, a list of every item is returned.
-// The items in the returned list are in alphabetical order.
-func (s *Store) ListFiltered(labels []string) []string {
-	if len(labels) == 0 {
-		result := s.List()
-		sort.Sort(sort.StringSlice(result))
-		return result
-	}
-	s.m.RLock()
-	defer s.m.RUnlock()
-	var lists [][]string
-	for _, label := range labels {
-		lists = append(lists, s.labels[label])
-	}
-	return combineCommon(lists)
-}
-
-// return the common elements from a sequence of lists. Each list must be
-// in sorted order already.
-func combineCommon(lists [][]string) []string {
-	if len(lists) == 0 {
-		return nil
-	}
-	var idxs = make([]int, len(lists))
-	var result []string
-	// this is similar to an n-way merge sort
-	// first set bar to the maximum of what we need to scan for
-	var bar string
-	var currentList int
-	var nEqual int
-	for {
-		// advance currentList until it is >= bar
-		list := lists[currentList]
-		for {
-			// exit if we come to the end of this list
-			if idxs[currentList] >= len(list) {
-				return result
-			}
-			// if current list is == bar, see if other lists agree
-			if list[idxs[currentList]] == bar {
-				nEqual++
-				if nEqual < len(lists) {
-					break
-				}
-				// a match across every list!
-				result = append(result, bar)
-				nEqual = 0
-			} else if list[idxs[currentList]] > bar {
-				bar = list[idxs[currentList]]
-				nEqual = 0
-				break
-			}
-			idxs[currentList]++
-		}
-		// go to the next list, wrapping around if necessary
-		currentList++
-		if currentList >= len(lists) {
-			currentList = 0
-		}
-	}
 }
 
 // New creates a new file with the given name and return a pointer to it.
@@ -292,9 +198,6 @@ func (s *Store) Delete(id string) error {
 	s.m.Lock()
 	f := s.files[id]
 	delete(s.files, id)
-	if f != nil {
-		s.unindexRecord(f)
-	}
 	s.m.Unlock()
 
 	if f == nil {
@@ -322,7 +225,6 @@ func (f *file) Stat() Stat {
 		Created:    f.Created,
 		Modified:   f.Modified,
 		Creator:    f.Creator,
-		Labels:     f.Labels[:],
 		MD5:        f.MD5[:],
 		SHA256:     f.SHA256[:],
 		MimeType:   f.MimeType,
@@ -464,34 +366,6 @@ func (f *file) Verify() bool {
 	defer r.Close()
 	ok, _ := util.VerifyStreamHash(r, f.MD5, f.SHA256)
 	return ok
-}
-
-// set the labels on the given file to those passed in.
-// We overwrite the list of labels currently applied to the file.
-func (f *file) SetLabels(labels []string) {
-	dedup := make([]string, len(labels))
-	for i := range labels {
-		dedup[i] = labels[i]
-	}
-	sort.Sort(sort.StringSlice(dedup))
-	// only run loop until the next-to-last element in the array
-	for i := 0; i < len(dedup)-1; {
-		if dedup[i] == dedup[i+1] {
-			dedup = append(dedup[:i], dedup[i+1:]...)
-		} else {
-			i++
-		}
-	}
-	// we do this locking dance to maintain the lock order of locking the
-	// store before the file
-	f.parent.m.Lock()
-	defer f.parent.m.Unlock()
-	f.m.Lock()
-	defer f.m.Unlock()
-	f.parent.unindexRecord(f)
-	f.Labels = dedup
-	f.parent.indexRecord(f)
-	f.save()
 }
 
 func (f *file) SetCreator(name string) {

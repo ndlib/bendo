@@ -18,12 +18,7 @@ import (
 
 // ListFileHandler handles requests to GET /upload
 func (s *RESTServer) ListFileHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	q := r.URL.Query()
-	if len(q["label"]) > 0 {
-		writeHTMLorJSON(w, r, listFileTemplate, s.FileStore.ListFiltered(q["label"]))
-	} else {
-		writeHTMLorJSON(w, r, listFileTemplate, s.FileStore.List())
-	}
+	writeHTMLorJSON(w, r, listFileTemplate, s.FileStore.List())
 }
 
 var (
@@ -67,7 +62,6 @@ var (
 <dt>Extra</dt><dd>{{ .Extra }}</dd>
 <dt>MD5</dt><dd>{{ .MD5 }}</dd>
 <dt>SHA256</dt><dd>{{ .SHA256 }}</dd>
-<dt>Labels</dt><dd>{{ range .Labels }}{{ . }}<br/>{{ end }}</dd>
 </dl>
 <a href="/upload/{{ $fileid }}">View content</a></br>
 <a href="/upload">Back</a>
@@ -201,9 +195,6 @@ func (s *RESTServer) SetFileInfoHandler(w http.ResponseWriter, r *http.Request, 
 		w.WriteHeader(400)
 		fmt.Fprintln(w, err.Error())
 		return
-	}
-	if len(metadata.Labels) > 0 {
-		f.SetLabels(metadata.Labels)
 	}
 	if len(metadata.Extra) > 0 {
 		f.SetExtra(metadata.Extra)
