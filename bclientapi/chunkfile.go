@@ -3,11 +3,9 @@ package bclientapi
 import (
 	"crypto/md5"
 	"encoding/hex"
-	"fmt"
 	"io"
 	"os"
 	"path"
-	"time"
 )
 
 func (ia *ItemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, mimetype string) (string, error) {
@@ -32,42 +30,26 @@ func (ia *ItemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, mime
 		return "", err
 	}
 
-	// Get the file size from the file status
-	fileInfo, err := sourceFile.Stat()
-	if err != nil {
-		return "", err
-	}
-
-	fileSize := fileInfo.Size()
 	chunk := make([]byte, ia.chunkSize)
-	start := time.Now()
-
-	fmt.Printf("Start Upload of %s/%s at offset %d, size %d, at %s\n", fileID, srcFile, offset, fileSize, start.String())
 
 	// upload the chunk
 	for {
-		bytesRead, readErr := sourceFile.Read(chunk)
+		var n int
+		n, err = sourceFile.Read(chunk)
 
-		if bytesRead > 0 {
-			chMd5 := md5.Sum(chunk[:bytesRead])
-
-			fileID, err = ia.PostUpload(chunk[:bytesRead], chMd5[:], srcFileMd5, mimetype, fileID)
-			if err != nil {
-				fmt.Println(err)
-			}
-			continue
+		if err != nil && err != io.EOF {
+			break
 		}
-
-		if readErr != nil && readErr != io.EOF {
-			return fileID, readErr
+		err = nil // if there was an error, it was io.EOF
+		if n == 0 {
+			break
 		}
-
-		// byteRead =0 && err is nill or EOF
-		break
+		chMd5 := md5.Sum(chunk[:n])
+		fileID, err = ia.PostUpload(chunk[:n], chMd5[:], srcFileMd5, mimetype, fileID)
+		if err != nil {
+			break
+		}
 	}
 
-	end := time.Since(start)
-	fmt.Printf("Finished Upload of %s/%s in %v seconds\n", ia.item, srcFile, end.Seconds())
-
-	return path.Base(fileID), nil
+	return path.Base(fileID), err
 }
