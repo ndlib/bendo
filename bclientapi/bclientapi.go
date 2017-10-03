@@ -67,42 +67,47 @@ func (ia *ItemAttributes) UploadFile(filename string, uploadMd5 []byte, mimetype
 
 }
 
-func (ia *ItemAttributes) WaitForCommitFinish(tx string) error {
-	delay := 5 * time.Second
-	txid := path.Base(tx)
+var (
+	ErrTransaction = errors.New("error processing transaction")
+	ErrTimeout     = errors.New("timeout processing transaction")
+)
 
-	fmt.Printf("Waiting on %s:", txid)
+// WaitForCommitFinish waits for the given transaction to finish.
+// It will return an error if the transaction had an error.
+// It will poll the server for up to 12 hours, and then return
+// a timeout error.
+func (ia *ItemAttributes) WaitForCommitFinish(txpath string) error {
+	txid := path.Base(txpath)
 
-	// This gives bendo about 12 hours to finish this transaction
-	// length of time in seconds = 5 * (131) * (131+1) / 2
-	for i := 0; i < 131; i++ {
+	fmt.Printf("Waiting on transaction %s:", txid)
+
+	// loop for at most 12 hours
+	const delay = 5 * time.Second
+	for i := 0; i < int(12*time.Hour/delay); i++ {
 		var status int64
 
 		fmt.Printf(".")
 		time.Sleep(delay)
 
 		v, err := ia.getTransactionStatus(txid)
-
 		if err == nil {
 			status, err = v.GetInt64("Status")
 		}
-
 		if err != nil {
-			fmt.Println(err.Error())
 			return err
 		}
 
 		switch transaction.Status(status) {
 		case transaction.StatusFinished:
-			fmt.Printf("\nFinished\n")
 			return nil
 		case transaction.StatusError:
-			fmt.Printf("\nError\n")
-			return errors.New("StatusError returned")
+			fmt.Println("Error")
+			errlist, _ := v.GetStringArray("Err")
+			for _, e := range errlist {
+				fmt.Println(e)
+			}
+			return ErrTransaction
 		}
-
-		delay += 5 * time.Second
 	}
-	fmt.Printf("\nTimeout\n")
-	return errors.New("timeout")
+	return ErrTimeout
 }
