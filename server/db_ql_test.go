@@ -39,14 +39,12 @@ func TestQlFixity(t *testing.T) {
 		{"SetCheck", "qwe", nowPlusHour},
 		{"LookupCheck", "qwe", now},
 		{"LookupCheck", "zxc", time.Time{}},
-		{"UpdateFixity", "qwe", now},
-		{"LookupCheck", "qwe", nowPlusHour},
+		{"LookupCheck", "qwe", now},
 		{"UpdateFixity", "zxc", now},
-		{"NextFixity", "", now},
 		{"NextFixity", "qwe", nowPlusHour},
-		{"LookupCheck", "qwe", nowPlusHour},
 		{"LookupCheck", "zxc", time.Time{}},
 		{"FixityTests", "qwe", now},
+		{"UpdateFixity", "qwe", now},
 		{"PostAndPutFixity", "zzb", nowPlusHour},
 	}
 
@@ -59,16 +57,16 @@ func TestQlFixity(t *testing.T) {
 				t.Errorf("Received %s, expected %s", id, tab.id)
 			}
 		case "PostAndPutFixity":
-			_, err := qc.PostFixity(tab.id)
+			err := qc.ScheduleFixityForItem(tab.id)
 			if err != nil {
-				t.Errorf("PostFixity QL returned error")
+				t.Errorf("ScheduleFixityForItem QL returned error")
 				continue
 			}
-			postedRecord := qc.GetFixity("*","*",tab.id,"scheduled")
+			postedRecord := qc.GetFixity("*", "*", tab.id, "scheduled")
 			if len(postedRecord) == 0 {
 				t.Errorf("PostAndPutFixity:GetFixity QL returned 0 length")
 			}
-			_, err = qc.PutFixity(postedRecord[0].Id)
+			err = qc.PutFixity(postedRecord[0].Id)
 			if err != nil {
 				t.Errorf("PutFixity QL returned error", err.Error())
 				continue
@@ -79,7 +77,11 @@ func TestQlFixity(t *testing.T) {
 				t.Errorf("error %s", err.Error())
 			}
 		case "UpdateFixity":
-			err := qc.UpdateFixity(tab.id, "ok", "")
+			err := qc.UpdateFixity(tab.id, "ok", "", nowPlusHour)
+			if err != nil {
+				t.Errorf("error %s", err.Error())
+			}
+			err = qc.UpdateFixity(tab.id, "ok", "", time.Unix(0, 0))
 			if err != nil {
 				t.Errorf("error %s", err.Error())
 			}
@@ -91,7 +93,7 @@ func TestQlFixity(t *testing.T) {
 				t.Errorf("Received %v, expected %v", when, tab.when)
 			}
 		case "FixityTests":
-			record := qc.GetFixity("*","*",tab.id,"scheduled")
+			record := qc.GetFixity("*", "*", tab.id, "scheduled")
 			if len(record) == 0 {
 				t.Errorf("GetFixity QL returned 0 length")
 			}
@@ -102,7 +104,7 @@ func TestQlFixity(t *testing.T) {
 			} else if recordById.Id != record[0].Id {
 				t.Errorf("GetFixityById QL id mismatch ")
 			}
-                        err := qc.DeleteFixity(record[0].Id)
+			err := qc.DeleteFixity(record[0].Id)
 			if err != nil {
 				t.Errorf("DeleteFixity QL returned error")
 			}

@@ -45,12 +45,11 @@ type FixityDB interface {
 	// fixity check for that item to have the given status and notes.
 	// Notes contains general text providing details on any problems.
 	// If there is no pending fixity check for the item, one is created.
-	UpdateFixity(id string, status string, notes string) error
-        // given item, sets scheduled time of nearest test to now. Creates test if none present.
-        // reuturns http code 200 if successfull, 500 otherwise
-	PostFixity(item string) (int,  error)
-        // Given id, sets scheduled time of its scheduled test to now. returns 404 if id not found, or not in scheduled state, 200 if successfull
-	PutFixity(id string) (int, error)
+	UpdateFixity(id string, status string, notes string, scheduled_time time.Time) error
+	// given item, sets scheduled time of nearest test to now. Creates test if none present.
+	ScheduleFixityForItem(item string) error
+	// Given id, sets scheduled time of its scheduled test to now. 
+	PutFixity(id string) error
 	// Delete id record if found and status is scheduled. Error otherwise.
 	DeleteFixity(id string) error
 
@@ -127,7 +126,7 @@ func (s *RESTServer) fixity() {
 		}
 		d := time.Now().Sub(starttime)
 		log.Println("Fixity for", id, "is", status, "duration = ", d)
-		err = s.FixityDatabase.UpdateFixity(id, status, notes)
+		err = s.FixityDatabase.UpdateFixity(id, status, notes, time.Time{})
 
 		xFixityItemsChecked.Add(1)
 		xFixityBytesChecked.Add(nbytes)
@@ -223,34 +222,35 @@ func (s *RESTServer) GetFixityIdHandler(w http.ResponseWriter, r *http.Request, 
 }
 
 // DeleteFixity handles requests to DELETE /fixty/:id
-// This deletes a scheduled fixity check for the given id . reurns 404 ff no request is found in the 'scheduled' state for the give id, 
+// This deletes a scheduled fixity check for the given id . reurns 404 ff no request is found in the 'scheduled' state for the give id,
 // 200 otherwise.
 func (s *RESTServer) DeleteFixityHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-        id := ps.ByName("id")
-        err := s.FixityDatabase.DeleteFixity(id)
-        if err != nil {
-                w.WriteHeader(500)
-                fmt.Fprintln(w, err.Error())
-        }
-}
-
-func (s *RESTServer) PutFixityHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
-	return_code, err := s.FixityDatabase.PutFixity(id)
-	w.WriteHeader(return_code)
-
+	err := s.FixityDatabase.DeleteFixity(id)
 	if err != nil {
+		w.WriteHeader(500)
 		fmt.Fprintln(w, err.Error())
 	}
 }
 
+func (s *RESTServer) PutFixityHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	id := ps.ByName("id")
+	err := s.FixityDatabase.PutFixity(id)
+
+	if err != nil {
+		w.WriteHeader(500)
+		fmt.Fprintln(w, err.Error())
+	}
+}
+
+// DeleteFixity handles requests to POST /fixty/:item
 func (s *RESTServer) PostFixityHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 
 	item := ps.ByName("item")
-	return_code, err := s.FixityDatabase.PostFixity(item)
-	w.WriteHeader(return_code)
+	err := s.FixityDatabase.ScheduleFixityForItem(item)
 
 	if err != nil {
+		w.WriteHeader(500)
 		fmt.Fprintln(w, err.Error())
 	}
 }
