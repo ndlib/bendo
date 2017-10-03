@@ -287,7 +287,7 @@ func (ms *MsqlCache) UpdateFixity(item string, status string, notes string, sche
 	var err error
 	var result sql.Result
 
-	if scheduled_time == time.Unix(0, 0) {
+	if scheduled_time.IsZero() {
 		result, err = performExec(ms.db, strings.Join(querySansTime, " "), item, status, notes)
 	} else {
 		result, err = performExec(ms.db, strings.Join(queryWithTime, " "), item, status, notes, scheduled_time)

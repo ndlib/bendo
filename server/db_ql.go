@@ -316,7 +316,7 @@ func (qc *QlCache) UpdateFixity(item string, status string, notes string, schedu
 
 		_, err = performExec(qc.db, newquery, item, time.Now(), status, notes)
 	}
-	return nil
+	return err
 }
 
 //

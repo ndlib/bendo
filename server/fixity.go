@@ -47,9 +47,8 @@ type FixityDB interface {
 	// If there is no pending fixity check for the item, one is created.
 	UpdateFixity(id string, status string, notes string, scheduled_time time.Time) error
 	// given item, sets scheduled time of nearest test to now. Creates test if none present.
-	// reuturns http code 200 if successfull, 500 otherwise
 	ScheduleFixityForItem(item string) error
-	// Given id, sets scheduled time of its scheduled test to now. returns 404 if id not found, or not in scheduled state, 200 if successfull
+	// Given id, sets scheduled time of its scheduled test to now. 
 	PutFixity(id string) error
 	// Delete id record if found and status is scheduled. Error otherwise.
 	DeleteFixity(id string) error
@@ -127,7 +126,7 @@ func (s *RESTServer) fixity() {
 		}
 		d := time.Now().Sub(starttime)
 		log.Println("Fixity for", id, "is", status, "duration = ", d)
-		err = s.FixityDatabase.UpdateFixity(id, status, notes, time.Unix(0, 0))
+		err = s.FixityDatabase.UpdateFixity(id, status, notes, time.Time{})
 
 		xFixityItemsChecked.Add(1)
 		xFixityBytesChecked.Add(nbytes)
@@ -254,7 +253,6 @@ func (s *RESTServer) PostFixityHandler(w http.ResponseWriter, r *http.Request, p
 		w.WriteHeader(500)
 		fmt.Fprintln(w, err.Error())
 	}
-	w.WriteHeader(200)
 }
 
 // Some validation routines for GET /fixity params
