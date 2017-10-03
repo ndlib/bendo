@@ -48,7 +48,7 @@ type FixityDB interface {
 	UpdateFixity(id string, status string, notes string, scheduled_time time.Time) error
 	// given item, sets scheduled time of nearest test to now. Creates test if none present.
 	ScheduleFixityForItem(item string) error
-	// Given id, sets scheduled time of its scheduled test to now. 
+	// Given id, sets scheduled time of its scheduled test to now.
 	PutFixity(id string) error
 	// Delete id record if found and status is scheduled. Error otherwise.
 	DeleteFixity(id string) error
@@ -295,7 +295,7 @@ func itemValidate(param string) (string, error) {
 
 func statusValidate(param string) (string, error) {
 	switch param {
-	case "scheduled", "error", "mismatches", "":
+	case "scheduled", "error", "mismatches", "ok", "":
 		return param, nil
 	}
 
