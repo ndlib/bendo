@@ -60,8 +60,8 @@ var (
 <dt>Creator</dt><dd>{{ .Creator }}</dd>
 <dt>MimeType</dt><dd>{{ .MimeType }}</dd>
 <dt>Extra</dt><dd>{{ .Extra }}</dd>
-<dt>MD5</dt><dd>{{ .MD5 }}</dd>
-<dt>SHA256</dt><dd>{{ .SHA256 }}</dd>
+<dt>MD5</dt><dd>{{ .MD5 | printf "%x" }}</dd>
+<dt>SHA256</dt><dd>{{ .SHA256 | printf "%x" }}</dd>
 </dl>
 <a href="/upload/{{ $fileid }}">View content</a></br>
 <a href="/upload">Back</a>
