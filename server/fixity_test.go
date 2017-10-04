@@ -6,7 +6,7 @@ import (
 
 func TestValidtion(t *testing.T) {
 
-	validStats := []string{"ok", "scheduled", "error", "mismatches"}
+	validStats := []string{"ok", "scheduled", "error", "mismatch"}
 
 	// test for https://github.com/ndlib/bendo/issues/164
 	t.Log("testing fixity validation routines")

@@ -39,7 +39,7 @@ type FixityDB interface {
 	// GetFixtyById retuens the fixity record(s) associated with the parameters provided as arguments
 	// It returns a nil if no such records were found, or if an error was encountered in the DB Query
 	// start and end are expected to be RFC339-compilant time/date strings, or *
-	// status can be 'schedules', 'error', or 'mismatches'
+	// status can be 'schedules', 'error', or 'mismatch'
 	GetFixity(start string, end string, item string, status string) []*Fixity
 	// UpdateItem takes the id of an item and adjusts the earliest pending
 	// fixity check for that item to have the given status and notes.
@@ -295,7 +295,7 @@ func itemValidate(param string) (string, error) {
 
 func statusValidate(param string) (string, error) {
 	switch param {
-	case "scheduled", "error", "mismatches", "ok", "":
+	case "scheduled", "error", "mismatch", "ok", "":
 		return param, nil
 	}
 
