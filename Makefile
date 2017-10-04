@@ -12,7 +12,7 @@ test:
 
 # use the command line flag -mysql to set the correct dial command
 test-integration:
-	$(GOCMD) test -v -tags=integration $(PACKAGES)
+	$(GOCMD) test -tags=integration $(PACKAGES)
 
 clean:
 	rm -rf ./bin

@@ -3,18 +3,26 @@
 package server
 
 import (
-	"flag"
 	"math"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/ndlib/bendo/items"
 )
 
-var dialmysql = flag.String("mysql", "/test", "Dial for mysql")
+var dialmysql string
+
+func init() {
+	// check for external config for mysql, default to /test
+	dialmysql = os.Getenv("MYSQL_CONNECTION")
+	if dialmysql == "" {
+		dialmysql = "/test"
+	}
+}
 
 func TestMySQLItemCache(t *testing.T) {
-	qc, err := NewMysqlCache(*dialmysql)
+	qc, err := NewMysqlCache(dialmysql)
 	if err != nil {
 		t.Fatalf("Received %s", err.Error())
 	}
@@ -33,7 +41,7 @@ func TestMySQLItemCache(t *testing.T) {
 }
 
 func TestMySQLFixity(t *testing.T) {
-	qc, err := NewMysqlCache(*dialmysql)
+	qc, err := NewMysqlCache(dialmysql)
 	if err != nil {
 		t.Fatalf("Received %s", err.Error())
 	}
