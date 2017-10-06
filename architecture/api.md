@@ -427,6 +427,112 @@ the copy-on-write interface, where a second bendo server can mirror content
 out of this one. They require a token with the Reader role.
 
 
+## ListFixity
+
+Route:
+
+    GET  /fixity
+
+Parameters:
+
+    start
+    end
+    item
+    status
+
+Each fixity check either in the past or scheduled for the future has a unique
+id. This endpoint provide a way to query for a list of checks. There are four
+query parameters. Use `start` and `end` to limit to checks in a given time
+period. The time provided should be in the form `YYYY-MM-DD`, or
+`YYYY-MM-DDTHH:MM:SS`, or the wildcard `*`. If omitted, the default value is
+`*` which will match any time. Use `item` to restrict to fixity checks on a
+particular item. Use `status` to restrict to fixity checks with a particular
+status. Possible statuses are `scheduled`, which is a pending check; `ok`,
+which is a successful check; `error`, which means an error happened while
+performing the check; and `mismatch`, which means there was a fixity mismatch.
+
+Returns the results in JSON, either a list of fixity objects or `null`.
+
+The provided API key needs Read access.
+
+Headers:
+
+    X-Api-Key
+
+
+## GetFixity
+
+Route:
+
+    GET  /fixity/:id
+
+Returns the given fixity record. A fixity record is a JSON object with the
+following fields:
+
+    ID:             the id of this record
+    Item:           the item (to be) checked
+    Status:         the status of this fixity check
+    Scheduled_time: the time this check happened, or is scheduled to happen
+
+The API key needs Read access.
+
+Headers:
+
+    X-Api-Key
+
+## CreateFixity
+
+Route:
+
+    POST /fixity
+
+Parameters:
+
+    item
+    scheduled_time
+
+Creates a new fixity record. The parameter `item` gives the item to check. If
+not provided, `scheduled_time` defaults to now. Since the background fixity
+scanner only checks for more checks once an hour, it may take that long before
+the check is finished.
+
+The ID of the new check is returned in the response body.
+
+The API key needs write access to call this endpoint.
+
+Request Headers:
+
+    X-Api-Key
+
+
+
+## UpdateFixity
+
+Route:
+
+    PUT  /fixity/:id
+
+Parameters:
+
+    item
+    scheduled_time
+
+Updates the given fixity check, provided the record in the database has the
+status `scheduled`. Fixity records with other status are immutable.
+
+## DeleteFixity
+
+Route:
+
+    DELETE  /fixity/:id
+
+This will remove the given fixity check, provided the record has status
+`scheduled`. Records with other status cannot be deleted. One should be aware
+that there is a background process that runs once a day to make sure every item
+on tape has at least one pending fixity check. This makes it impossible to remove
+all fixity checks for an item for more than 24 hours.
+
+
 ## WelcomePage
 
 Route:
