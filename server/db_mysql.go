@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"log"
-	"strings"
 	"time"
 
 	// no _ in import mysql since we need mysql.NullTime
@@ -111,230 +109,157 @@ func (ms *MsqlCache) Set(id string, thisItem *items.Item) {
 
 // NextFixity returns the earliest scheduled fixity record
 // that is before the cutoff time. If there is no such record
-// it returns the empty string.
-func (ms *MsqlCache) NextFixity(cutoff time.Time) string {
+// it returns 0
+func (mc *MsqlCache) NextFixity(cutoff time.Time) int64 {
 	const query = `
-		SELECT item
+		SELECT id
 		FROM fixity
 		WHERE status = "scheduled" AND scheduled_time <= ?
 		ORDER BY scheduled_time
 		LIMIT 1`
 
-	var item string
-	err := ms.db.QueryRow(query, cutoff).Scan(&item)
+	var id int64
+	err := mc.db.QueryRow(query, cutoff).Scan(&id)
 	if err == sql.ErrNoRows {
-		// no next record
-		return ""
+		return 0
 	} else if err != nil {
-		log.Println("nextfixity", err.Error())
-		return ""
+		log.Println("nextfixity", err)
+		return 0
 	}
-	return item
-}
-
-// GetFixityById
-func (ms *MsqlCache) GetFixityById(id string) *Fixity {
-	const query = `
-                SELECT  id, item, scheduled_time, status, notes
-                FROM fixity
-                WHERE id = ?
-                LIMIT 1`
-
-	var thisFixity = new(Fixity)
-	var thisWhen mysql.NullTime
-
-	err := ms.db.QueryRow(query, id).Scan(&thisFixity.Id, &thisFixity.Item, &thisWhen, &thisFixity.Status, &thisFixity.Notes)
-	if err == sql.ErrNoRows {
-		// no next record
-		return nil
-	} else if err != nil {
-		log.Println("GetFixtyByID  MySQL queryrow", err.Error())
-		return nil
-	}
-
-	// Handle for nil time value
-	if thisWhen.Valid {
-		thisFixity.Scheduled_time = thisWhen.Time
-	}
-
-	log.Println("id= ", thisFixity.Id, "scheduled_time= ", thisFixity.Scheduled_time, "status= ", thisFixity.Status, "notes= ", thisFixity.Notes)
-	return thisFixity
+	return id
 }
 
 // GetFixity
-func (ms *MsqlCache) GetFixity(start string, end string, item string, status string) []*Fixity {
-	query := buildQuery(start, end, item, status)
-	log.Println("GET /fixity query= ", query)
-	var thisWhen mysql.NullTime
-	results := make([]*Fixity, 0)
+func (mc *MsqlCache) GetFixity(id int64) *Fixity {
+	const query = `
+		SELECT id, item, scheduled_time, status, notes
+		FROM fixity
+		WHERE id = ?
+		LIMIT 1`
 
-	rows, err := ms.db.Query(query)
+	var rec Fixity
+	var when mysql.NullTime
+
+	err := mc.db.QueryRow(query, id).Scan(&rec.ID, &rec.Item, &when, &rec.Status, &rec.Notes)
+	if err == sql.ErrNoRows {
+		return nil
+	} else if err != nil {
+		log.Println("GetFixtyByID  MySQL queryrow", err)
+		return nil
+	}
+	// Handle for null time value
+	if when.Valid {
+		rec.ScheduledTime = when.Time
+	}
+	return &rec
+}
+
+// SearchFixity
+func (mc *MsqlCache) SearchFixity(start, end time.Time, item string, status string) []*Fixity {
+	query, args := buildQuery(start, end, item, status)
+	var results []*Fixity
+
+	rows, err := mc.db.Query(query, args...)
 	if err == sql.ErrNoRows {
 		// no next record
 		return nil
 	} else if err != nil {
-		log.Println("GetFixity Query MySQL", err.Error())
+		log.Println("GetFixity Query MySQL", err)
 		return nil
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var thisFixity = new(Fixity)
-		scanErr := rows.Scan(&thisFixity.Id, &thisFixity.Item, &thisWhen, &thisFixity.Status, &thisFixity.Notes)
-		if scanErr != nil {
-			log.Println("GetFixity Scan MySQL", err.Error())
-			return nil
+		var rec = new(Fixity)
+		var when mysql.NullTime
+		err = rows.Scan(&rec.ID, &rec.Item, &when, &rec.Status, &rec.Notes)
+		if err != nil {
+			log.Println("GetFixity Scan MySQL", err)
+			continue
 		}
-		// Handle for nil time value
-		if thisWhen.Valid {
-			thisFixity.Scheduled_time = thisWhen.Time
+		if when.Valid {
+			rec.ScheduledTime = when.Time
 		}
-		log.Println("id= ", thisFixity.Id, "item =", thisFixity.Item, "scheduled_time", thisFixity.Scheduled_time, "status= ", thisFixity.Status, "notes= ", thisFixity.Notes)
-		results = append(results, thisFixity)
+		results = append(results, rec)
 	}
-
 	return results
 }
 
-func (ms *MsqlCache) ScheduleFixityForItem(item string) error {
-	err := ms.UpdateFixity(item, "scheduled", "", time.Now())
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (ms *MsqlCache) PutFixity(id string) error {
-	fixity := ms.GetFixityById(id)
-	if fixity == nil {
-		return errors.New("No fixity check found for ID")
-	}
-	// Record Exists- Update it.
-	const query = ` UPDATE fixity SET scheduled_time = ? WHERE id = ?`
-
-	_, err := performExec(ms.db, query, time.Now(), id)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// construct an return an sql query, using the parameters passed
-func buildQuery(start string, end string, item string, status string) string {
+// construct an return an sql query and parameter list, using the parameters passed
+func buildQuery(start, end time.Time, item string, status string) (string, []interface{}) {
 	var query bytes.Buffer
-	query.WriteString("SELECT  id, item, scheduled_time, status, notes FROM fixity")
-
-	params := []string{"start", "end", "item", "status"}
+	// The mysql driver does not have positional parameters, so we build the
+	// parameter list in parallel to the query.
+	var args []interface{}
+	query.WriteString("SELECT id, item, scheduled_time, status, notes FROM fixity")
 
 	conjunction := " WHERE "
 
-	for _, param := range params {
-
-		switch param {
-		case "start":
-			if start != "*" {
-				startQuery := []string{conjunction, "scheduled_time >= '", start, "'"}
-				query.WriteString(strings.Join(startQuery, ""))
-			} else {
-				continue
-			}
-		case "end":
-			if end != "*" {
-				endQuery := []string{conjunction, "scheduled_time <= '", end, "'"}
-				query.WriteString(strings.Join(endQuery, ""))
-			} else {
-				continue
-			}
-		case "item":
-			if item != "" {
-				itemQuery := []string{conjunction, "item = '", item, "'"}
-				query.WriteString(strings.Join(itemQuery, ""))
-			} else {
-				continue
-			}
-		case "status":
-			if status != "" {
-				statusQuery := []string{conjunction, "status = '", status, "'"}
-				query.WriteString(strings.Join(statusQuery, ""))
-			} else {
-				continue
-			}
-		}
-
+	if !start.IsZero() {
+		query.WriteString(conjunction + "scheduled_time >= ?")
 		conjunction = " AND "
+		args = append(args, start)
 	}
-
+	if !end.IsZero() {
+		query.WriteString(conjunction + "scheduled_time <= ?")
+		conjunction = " AND "
+		args = append(args, end)
+	}
+	if item != "" {
+		query.WriteString(conjunction + "item = ?")
+		conjunction = " AND "
+		args = append(args, item)
+	}
+	if status != "" {
+		query.WriteString(conjunction + "status = ?")
+		args = append(args, status)
+	}
 	query.WriteString(" ORDER BY scheduled_time")
-	return query.String()
+	return query.String(), args
 }
 
-// UpdateFixity updates the earliest scheduled fixity record for
-// the given item. If there is no such fixity record, it will create one.
-func (ms *MsqlCache) UpdateFixity(item string, status string, notes string, scheduled_time time.Time) error {
-	queryParts := []string{
-		"UPDATE fixity",
-		"SET status = ?, notes = ?, scheduled_time = ?",
-		"SET status = ?, notes = ?",
-		`WHERE item = ? and status = "scheduled"
-		ORDER BY scheduled_time
-		LIMIT 1`}
-
-	// two query forms- with or without scheduled_time
-	queryWithTime := []string{queryParts[0], queryParts[1], queryParts[3]}
-	querySansTime := []string{queryParts[0], queryParts[2], queryParts[3]}
-
-	var err error
-	var result sql.Result
-
-	if scheduled_time.IsZero() {
-		result, err = performExec(ms.db, strings.Join(querySansTime, " "), item, status, notes)
-	} else {
-		result, err = performExec(ms.db, strings.Join(queryWithTime, " "), item, status, notes, scheduled_time)
+// UpdateFixity updates or creates the given fixity record. The record is created if
+// ID is == 0. Otherwise the given record is updated so long as
+// the record in the database has status "scheduled".
+// The ID of the new or updated record is returned.
+func (mc *MsqlCache) UpdateFixity(record Fixity) (int64, error) {
+	if record.Status == "" {
+		record.Status = "scheduled"
 	}
-	if err != nil {
-		return err
-	}
-	nrows, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if nrows == 0 {
-		// record didn't exist. create it
-		const newquery = `INSERT INTO fixity ( item, scheduled_time, status, notes) VALUES (?,?,?,?)`
 
-		_, err = ms.db.Exec(newquery, item, time.Now(), status, notes)
+	if record.ID == 0 {
+		// new record
+		const stmt = `INSERT INTO fixity (item, scheduled_time, status, notes) VALUES (?,?,?,?)`
+
+		result, err := mc.db.Exec(stmt, record.Item, record.ScheduledTime, record.Status, record.Notes)
+		var id int64
+		if err == nil {
+			id, _ = result.LastInsertId()
+		}
+		return id, err
 	}
-	return err
+
+	// update existing record
+	const stmt = `
+		UPDATE fixity
+		SET item = ?, status = ?, notes = ?, scheduled_time = ?
+		WHERE id = ? and status = "scheduled"
+		LIMIT 1`
+
+	_, err := mc.db.Exec(stmt, record.Item, record.Status, record.Notes, record.ScheduledTime, record.ID)
+	return record.ID, err
 }
 
-func (ms *MsqlCache) DeleteFixity(id string) error {
-	const query = `DELETE FROM fixity WHERE id = ?`
-
-	result, err := performExec(ms.db, query, id)
-	if err != nil {
-		return err
-	}
-	_, err = result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// SetCheck adds a fixity record for the given item. The created fixity
-// record will have the status of "scheduled".
-func (ms *MsqlCache) SetCheck(item string, when time.Time) error {
-	const query = `INSERT INTO fixity (item, scheduled_time, status, notes) VALUES (?,?,?,?)`
-
-	_, err := ms.db.Exec(query, item, when, "scheduled", "")
+func (mc *MsqlCache) DeleteFixity(id int64) error {
+	const stmt = `DELETE FROM fixity WHERE id = ? AND status = "scheduled"`
+	_, err := mc.db.Exec(stmt, id)
 	return err
 }
 
 // LookupCheck will return the time of the earliest scheduled fixity
 // check for the given item. If there is no pending fixity check for
 // the item, it returns the zero time.
-func (ms *MsqlCache) LookupCheck(item string) (time.Time, error) {
+func (mc *MsqlCache) LookupCheck(item string) (time.Time, error) {
 	const query = `
 		SELECT scheduled_time
 		FROM fixity
@@ -343,7 +268,7 @@ func (ms *MsqlCache) LookupCheck(item string) (time.Time, error) {
 		LIMIT 1`
 
 	var when mysql.NullTime
-	err := ms.db.QueryRow(query, item).Scan(&when)
+	err := mc.db.QueryRow(query, item).Scan(&when)
 	if err == sql.ErrNoRows {
 		err = nil
 	}

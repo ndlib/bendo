@@ -8,59 +8,59 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
 )
 
-// Strcture for fixity records
+// A Fixity represents a single past or future fixity check.
 type Fixity struct {
-	Id             string
-	Item           string
-	Scheduled_time time.Time
-	Status         string
-	Notes          string
+	ID            int64     // id of this record
+	Item          string    // the item being verified
+	ScheduledTime time.Time `json:"Scheduled_time"` // scheduled time
+	Status        string    // "scheduled", "mismatch", "ok", "error"
+	Notes         string    // mostly only used in case of an error
 }
 
-// A Finformation the fixity service needs to know what
+// A FixityDB tracks the information the fixity service needs to know what
 // items have been checked, what needs to be checked, and any fixity errors
 // found. It is presumed to be backed by a database, but that is not assumed.
 // Methods should be safe to be called by multiple goroutines.
+//
+// The fixity records in the "scheduled" state are free to be modified. But
+// records in other states should be considered immutable.
 type FixityDB interface {
-	// NextItem returns the item id of the item having the earliest pending
-	// checksum that is before the cutoff time. If no items satisfy this
-	// the empty string is returned. It will also not return anything in an
-	// "error" state.
-	NextFixity(cutoff time.Time) string
-	// GetFixtyById retuens the fixity record associated with the id provided as an argument
-	// It returns a nil if no such record was found, or if an error was encountered in the DB Query
-	GetFixityById(id string) *Fixity
-	// GetFixtyById retuens the fixity record(s) associated with the parameters provided as arguments
-	// It returns a nil if no such records were found, or if an error was encountered in the DB Query
-	// start and end are expected to be RFC339-compilant time/date strings, or *
-	// status can be 'scheduled', 'error', 'ok', or 'mismatch'
-	GetFixity(start string, end string, item string, status string) []*Fixity
-	// UpdateItem takes the id of an item and adjusts the earliest pending
-	// fixity check for that item to have the given status and notes.
-	// Notes contains general text providing details on any problems.
-	// If there is no pending fixity check for the item, one is created.
-	UpdateFixity(id string, status string, notes string, scheduled_time time.Time) error
-	// given item, sets scheduled time of nearest test to now. Creates test if none present.
-	ScheduleFixityForItem(item string) error
-	// Given id, sets scheduled time of its scheduled test to now.
-	PutFixity(id string) error
-	// Delete id record if found and status is scheduled. Error otherwise.
-	DeleteFixity(id string) error
+	// NextItem returns the fixity record id of the earliest pending record
+	// that is before the cutoff time. If there are no such records 0 is returned.
+	NextFixity(cutoff time.Time) int64
 
-	// SetCheck takes an item id and schedules another fixity check at the
-	// given time in the future (or past).
-	SetCheck(id string, when time.Time) error
+	// GetFixty retuens the fixity record with the given id.
+	// Returns nil if no such record was found, or on error.
+	GetFixity(id int64) *Fixity
+
+	// SearchFixty returns the fixity records matching the provided arguments.
+	// It returns an empty slice if there are no matching records or on error.
+	// Status can be 'scheduled', 'error', 'ok', or 'mismatch'
+	// Use the zero value for a parameter to represent a wildcard.
+	SearchFixity(start time.Time, end time.Time, item string, status string) []*Fixity
+
+	// UpdateItem will either update a fixity record or create a new one. If
+	// the ID field is empty (i.e. = 0) then a new fixity record is created. If
+	// an ID was passed, and the status of the record in the database is
+	// "scheduled", then the database is updated to match the passed in record.
+	// The id of the created/updated record is returned. If record has an empty
+	// status, it will default to "scheduled".
+	UpdateFixity(record Fixity) (int64, error)
+
+	// Delete fixity record id, only if the status is "scheduled". Error otherwise.
+	DeleteFixity(id int64) error
 
 	// LookupCheck takes an item id and returns the time of earliest pending
 	// fixity check for that item. If no fixity check is pending, returns
 	// the zero time.
-	LookupCheck(id string) (time.Time, error)
+	LookupCheck(item string) (time.Time, error)
 }
 
 var (
@@ -103,39 +103,49 @@ func (s *RESTServer) fixity() {
 	log.Println("Starting fixity loop")
 	for {
 		id := s.FixityDatabase.NextFixity(time.Now())
-		if id == "" || !s.useTape {
+		if id == 0 || !s.useTape {
 			// sleep if there are no ids available.
 			// an hour is arbitrary.
 			time.Sleep(time.Hour)
 			continue
 		}
-		log.Println("begin fixity check for", id)
+		fx := s.FixityDatabase.GetFixity(id)
+		if fx == nil {
+			log.Println("fixity received bad id", id)
+			continue
+		}
+		log.Println("begin fixity check for", fx.Item)
 		starttime := time.Now()
-		nbytes, problems, err := s.Items.Validate(id)
-		var status = "ok"
-		var notes string
+		nbytes, problems, err := s.Items.Validate(fx.Item)
+		fx.Status = "ok"
 		if err != nil {
-			log.Println("fixity validate error", err.Error())
-			status = "error"
-			notes = err.Error()
+			log.Println("fixity validate error", err)
+			fx.Status = "error"
+			fx.Notes = err.Error()
 			xFixityError.Add(1)
 		} else if len(problems) > 0 {
-			status = "mismatch"
-			notes = strings.Join(problems, "\n")
+			fx.Status = "mismatch"
+			fx.Notes = strings.Join(problems, "\n")
 			xFixityMismatch.Add(1)
 		}
 		d := time.Now().Sub(starttime)
-		log.Println("Fixity for", id, "is", status, "duration = ", d)
-		err = s.FixityDatabase.UpdateFixity(id, status, notes, time.Time{})
+		log.Println("Fixity for", fx.Item, "is", fx.Status, "duration = ", d)
+		_, err = s.FixityDatabase.UpdateFixity(*fx)
+		if err != nil {
+			log.Println("fixity:", err)
+		}
 
 		xFixityItemsChecked.Add(1)
 		xFixityBytesChecked.Add(nbytes)
 		xFixityDuration.Add(d.Seconds())
 
 		// schedule the next check unless one is already scheduled
-		when, _ := s.FixityDatabase.LookupCheck(id)
+		when, _ := s.FixityDatabase.LookupCheck(fx.Item)
 		if when.IsZero() {
-			s.FixityDatabase.SetCheck(id, time.Now().Add(nextFixityDuration))
+			s.FixityDatabase.UpdateFixity(Fixity{
+				Item:          fx.Item,
+				ScheduledTime: time.Now().Add(nextFixityDuration),
+			})
 		}
 	}
 }
@@ -163,7 +173,10 @@ func (s *RESTServer) scanfixity() {
 		// schedule something for some random period into the future
 		log.Println("scanfixity adding", id)
 		jitter := rand.Int63n(int64(nextFixityDuration))
-		s.FixityDatabase.SetCheck(id, time.Now().Add(time.Duration(jitter)))
+		s.FixityDatabase.UpdateFixity(Fixity{
+			Item:          id,
+			ScheduledTime: time.Now().Add(time.Duration(jitter)),
+		})
 	}
 	log.Println("Ending scanfixity. duration = ", time.Now().Sub(starttime))
 }
@@ -175,31 +188,28 @@ func (s *RESTServer) GetFixityHandler(w http.ResponseWriter, r *http.Request, ps
 	end := r.FormValue("end")
 	status := r.FormValue("status")
 
-	startValue, startErr := startValidate(start)
-	if startErr != nil {
+	startValue, err := timeValidate(start)
+	if err != nil {
 		w.WriteHeader(400)
-		fmt.Fprintln(w, startErr.Error())
+		fmt.Fprintln(w, err)
 		return
 	}
 
-	endValue, endErr := endValidate(end)
-	if endErr != nil {
+	endValue, err := timeValidate(end)
+	if err != nil {
 		w.WriteHeader(400)
-		fmt.Fprintln(w, endErr.Error())
+		fmt.Fprintln(w, err)
 		return
 	}
 
-	statusValue, statusErr := statusValidate(status)
-	if statusErr != nil {
+	statusValue, err := statusValidate(status)
+	if err != nil {
 		w.WriteHeader(400)
-		fmt.Fprintln(w, statusErr.Error())
+		fmt.Fprintln(w, err)
 		return
 	}
 
-	fixityResults := s.FixityDatabase.GetFixity(startValue, endValue, item, statusValue)
-	if fixityResults == nil {
-		log.Println("GetFixityHandler start =", startValue, "end= ", endValue, "item =", item, "status = ", statusValue, " Returns nil")
-	}
+	fixityResults := s.FixityDatabase.SearchFixity(startValue, endValue, item, statusValue)
 
 	//Return results
 	enc := json.NewEncoder(w)
@@ -208,17 +218,21 @@ func (s *RESTServer) GetFixityHandler(w http.ResponseWriter, r *http.Request, ps
 
 func (s *RESTServer) GetFixityIdHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
-	log.Println("GetFixityIdHandler passed id =", id)
-	thisFixity := s.FixityDatabase.GetFixityById(id)
+	id0, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		w.WriteHeader(404)
+		return
+	}
+	result := s.FixityDatabase.GetFixity(id0)
 
-	if thisFixity == nil {
+	if result == nil {
 		w.WriteHeader(404)
 		fmt.Fprintln(w, "GET /fixity/", id, " Not Found")
 		return
 	}
 
 	enc := json.NewEncoder(w)
-	enc.Encode(thisFixity)
+	enc.Encode(result)
 }
 
 // DeleteFixity handles requests to DELETE /fixty/:id
@@ -226,28 +240,47 @@ func (s *RESTServer) GetFixityIdHandler(w http.ResponseWriter, r *http.Request, 
 // 200 otherwise.
 func (s *RESTServer) DeleteFixityHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
-	err := s.FixityDatabase.DeleteFixity(id)
+	id0, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		w.WriteHeader(404)
+		return
+	}
+	err = s.FixityDatabase.DeleteFixity(id0)
 	if err != nil {
 		w.WriteHeader(500)
-		fmt.Fprintln(w, err.Error())
+		fmt.Fprintln(w, err)
 	}
 }
 
 func (s *RESTServer) PutFixityHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
-	err := s.FixityDatabase.PutFixity(id)
+	id0, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		w.WriteHeader(404)
+		return
+	}
+	record := s.FixityDatabase.GetFixity(id0)
+	if record == nil {
+		w.WriteHeader(404)
+		return
+	}
+	record.ScheduledTime = time.Now()
+	_, err = s.FixityDatabase.UpdateFixity(*record)
 
 	if err != nil {
 		w.WriteHeader(500)
-		fmt.Fprintln(w, err.Error())
+		fmt.Fprintln(w, err)
 	}
 }
 
-// DeleteFixity handles requests to POST /fixty/:item
+// PostFixityHandler handles requests to POST /fixty/:item
 func (s *RESTServer) PostFixityHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 
 	item := ps.ByName("item")
-	err := s.FixityDatabase.ScheduleFixityForItem(item)
+	_, err := s.FixityDatabase.UpdateFixity(Fixity{
+		Item:          item,
+		ScheduledTime: time.Now(),
+	})
 
 	if err != nil {
 		w.WriteHeader(500)
@@ -257,40 +290,15 @@ func (s *RESTServer) PostFixityHandler(w http.ResponseWriter, r *http.Request, p
 
 // Some validation routines for GET /fixity params
 
-func startValidate(param string) (string, error) {
-	if param == "" {
-		time_midnight := time.Now().Truncate(86400 * time.Second)
-		return time_midnight.Format(time.RFC3339), nil
+func timeValidate(s string) (time.Time, error) {
+	if s == "" || s == "*" {
+		return time.Time{}, nil
 	}
-	if param == "*" {
-		return "*", nil
-	}
-	time_formatted, terr := time.Parse(time.RFC3339, param)
-	if terr != nil {
-		return "", terr
-	}
-	return time_formatted.Format(time.RFC3339), nil
-}
-
-func endValidate(param string) (string, error) {
-	if param == "" {
-		next_midnight := time.Now().Truncate(86400*time.Second).Unix() + 86400
-		time_next := time.Unix(next_midnight, 0)
-		return time_next.Format(time.RFC3339), nil
-	}
-	if param == "*" {
-		return "*", nil
-	}
-	time_formatted, err := time.Parse(time.RFC3339, param)
+	t, err := time.Parse(time.RFC3339, s)
 	if err != nil {
-		return "", err
+		t, err = time.Parse("2006-01-02", s)
 	}
-	return time_formatted.Format(time.RFC3339), nil
-}
-
-func itemValidate(param string) (string, error) {
-
-	return param, nil
+	return t, err
 }
 
 func statusValidate(param string) (string, error) {

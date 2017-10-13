@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"log"
-	"strconv"
 	"strings"
 	"time"
 
@@ -45,12 +43,14 @@ var qlVersioning = dbVersion{
 }
 
 // NewQlCache makes a QL database cache. filename is
-// the name of the file to save the database to. The filname "memory" means to keep everything in memory.
+// the name of the file to save the database to. The filname beginning with
+// "mem--" means to keep everything in memory.
 func NewQlCache(filename string) (*QlCache, error) {
 	var driver = "ql"
-	if filename == "memory" {
+	if strings.HasPrefix(filename, "mem--") {
 		driver = "ql-mem"
-		filename = "mem.db"
+		// ql-mem uses filename to distinugish databases in memory.
+		// so pass it through unchanged.
 	}
 	db, err := migration.OpenWith(
 		driver,
@@ -124,222 +124,135 @@ func (qc *QlCache) Set(item string, thisItem *items.Item) {
 }
 
 // NextFixity will return the item id of the earliest scheduled fixity check
-// that is before the cutoff time. If there is no such record, the
-// empty string is returned.
-func (qc *QlCache) NextFixity(cutoff time.Time) string {
+// that is before the cutoff time. If there is no such record 0 is returned.
+func (qc *QlCache) NextFixity(cutoff time.Time) int64 {
 	const query = `
-		SELECT item, scheduled_time
+		SELECT id(), scheduled_time
 		FROM fixity
 		WHERE status == "scheduled" AND scheduled_time <= ?1
 		ORDER BY scheduled_time
 		LIMIT 1`
 
-	var item string
+	var id int64
 	var when time.Time
-	err := qc.db.QueryRow(query, cutoff).Scan(&item, &when)
-	if err == sql.ErrNoRows {
-		// no next record
-		return ""
-	} else if err != nil {
+	err := qc.db.QueryRow(query, cutoff).Scan(&id, &when)
+	if err != nil && err != sql.ErrNoRows {
 		log.Println("nextfixity QL", err.Error())
-		return ""
 	}
-	return item
+	return id
 }
 
 // GetFixityById
-func (qc *QlCache) GetFixityById(id string) *Fixity {
+func (qc *QlCache) GetFixity(id int64) *Fixity {
 	const query = `
 		SELECT id(), item, scheduled_time, status, notes
 		FROM fixity
 		WHERE id() == ?1
 		LIMIT 1`
 
-	var thisFixity = new(Fixity)
-
-	intId, _ := strconv.Atoi(id)
-
-	err := qc.db.QueryRow(query, intId).Scan(&thisFixity.Id, &thisFixity.Item, &thisFixity.Scheduled_time, &thisFixity.Status, &thisFixity.Notes)
+	var record Fixity
+	err := qc.db.QueryRow(query, id).Scan(&record.ID, &record.Item, &record.ScheduledTime, &record.Status, &record.Notes)
 	if err == sql.ErrNoRows {
 		// no next record
-		log.Println("GetFixityById retruns NoRows")
 		return nil
 	} else if err != nil {
-		log.Println("GetFixityById QL", err.Error())
+		log.Println("GetFixity", err)
 		return nil
 	}
-	log.Println("id= ", thisFixity.Id, "item= ", thisFixity.Item, "scheduled_time= ", thisFixity.Scheduled_time, "status= ", thisFixity.Status, "notes= ", thisFixity.Notes)
-	return thisFixity
+	return &record
 }
 
-// GetFixity
-func (qc *QlCache) GetFixity(start string, end string, item string, status string) []*Fixity {
+// SearchFixity
+func (qc *QlCache) SearchFixity(start, end time.Time, item string, status string) []*Fixity {
 	query := buildQLQuery(start, end, item, status)
-	log.Println("GET /fixity query= ", query)
-	var fixityResults []*Fixity
+	var result []*Fixity
 
-	rows, err := qc.db.Query(query)
+	rows, err := qc.db.Query(query, start, end, item, status)
 	if err == sql.ErrNoRows {
-		// no next record
 		return nil
 	} else if err != nil {
-		log.Println("GetFixity QL Query:", err.Error())
+		log.Println("GetFixity QL Query:", err)
 		return nil
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var thisFixity = new(Fixity)
-		scanErr := rows.Scan(&thisFixity.Id, &thisFixity.Item, &thisFixity.Scheduled_time, &thisFixity.Status, &thisFixity.Notes)
+		var record = new(Fixity)
+		scanErr := rows.Scan(&record.ID, &record.Item, &record.ScheduledTime, &record.Status, &record.Notes)
 		if scanErr != nil {
-			log.Println("GetFixity QL Scan", err.Error())
-			return nil
+			log.Println("GetFixity QL Scan", err)
+			continue
 		}
-		log.Println("id= ", thisFixity.Id, "item= ", thisFixity.Item, "scheduled_time= ", thisFixity.Item, thisFixity.Scheduled_time, "status= ", thisFixity.Status, "notes= ", thisFixity.Notes)
-		fixityResults = append(fixityResults, thisFixity)
+		result = append(result, record)
 	}
-
-	return fixityResults
-}
-
-// POST /fixity/:item
-func (qc *QlCache) ScheduleFixityForItem(item string) error {
-	err := qc.UpdateFixity(item, "scheduled", "", time.Now())
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-//PUT /fixity/:id
-func (qc *QlCache) PutFixity(id string) error {
-	fixity := qc.GetFixityById(id)
-	if fixity == nil {
-		return errors.New("No fixity check found for ID")
-	}
-	// Record Exists- Update it.
-	const query = ` UPDATE fixity SET scheduled_time = ?1 WHERE id() == ?2`
-
-	intId, _ := strconv.Atoi(id)
-	_, err := performExec(qc.db, query, time.Now(), intId)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return result
 }
 
 // construct an return an sql query, using the parameters passed
-func buildQLQuery(start string, end string, item string, status string) string {
+func buildQLQuery(start, end time.Time, item string, status string) string {
 	var query bytes.Buffer
-	query.WriteString("SELECT  id(), item, scheduled_time, status, notes FROM fixity")
-
-	params := []string{"start", "end", "item", "status"}
+	// the ql driver has positional parameters, so we build the query and the exec
+	// will pass every parameter. Then the driver can choose the ones it needs.
+	query.WriteString("SELECT id(), item, scheduled_time, status, notes FROM fixity")
 
 	conjunction := " WHERE "
 
-	for _, param := range params {
-
-		switch param {
-		case "start":
-			if start == "*" {
-				continue
-			} else {
-				startQuery := []string{conjunction, "scheduled_time >= \"", start, "\""}
-				query.WriteString(strings.Join(startQuery, ""))
-				continue
-			}
-
-		case "end":
-			if start == "*" {
-				continue
-			} else {
-				endQuery := []string{conjunction, "scheduled_time <= \"", end, "\""}
-				query.WriteString(strings.Join(endQuery, ""))
-			}
-		case "item":
-			if item == "" {
-				continue
-			} else {
-				itemQuery := []string{conjunction, "item == \"", item, "\""}
-				query.WriteString(strings.Join(itemQuery, ""))
-			}
-		case "status":
-			if status == "" {
-				continue
-			} else {
-				statusQuery := []string{conjunction, "status == \"", status, "\""}
-				query.WriteString(strings.Join(statusQuery, ""))
-			}
-		}
-
+	if !start.IsZero() {
+		query.WriteString(conjunction + "scheduled_time >= ?1")
 		conjunction = " AND "
 	}
-
+	if !end.IsZero() {
+		query.WriteString(conjunction + "scheduled_time <= ?2")
+		conjunction = " AND "
+	}
+	if item != "" {
+		query.WriteString(conjunction + "item = ?3")
+		conjunction = " AND "
+	}
+	if status != "" {
+		query.WriteString(conjunction + "status = ?4")
+	}
 	query.WriteString(" ORDER BY scheduled_time")
 	return query.String()
 }
 
-// UpdateFixity will update the earliest scheduled fixity record for the given item.
-// If there is no such record, one will be created.
-func (qc *QlCache) UpdateFixity(item string, status string, notes string, scheduled_time time.Time) error {
-	queryParts := []string{"UPDATE fixity",
-		"SET status = ?2, notes = ?3, scheduled_time = ?4",
-		"SET status = ?2, notes = ?3",
-		`WHERE id() in
-			(SELECT id from
-				(SELECT id() as id, scheduled_time
-				FROM fixity
-				WHERE item == ?1 and status == "scheduled"
-				ORDER BY scheduled_time
-				LIMIT 1))`}
-
-	queryWithTime := []string{queryParts[0], queryParts[1], queryParts[3]}
-	querySansTime := []string{queryParts[0], queryParts[2], queryParts[3]}
-
-	var err error
-	var result sql.Result
-
-	if scheduled_time == time.Unix(0, 0) {
-		result, err = performExec(qc.db, strings.Join(querySansTime, " "), item, status, notes)
-	} else {
-		result, err = performExec(qc.db, strings.Join(queryWithTime, " "), item, status, notes, scheduled_time)
+// UpdateFixity updates or creates the given fixity record. The record is created if
+// ID is == 0. Otherwise the given record is updated so long as
+// the record in the database has status "scheduled".
+func (qc *QlCache) UpdateFixity(record Fixity) (int64, error) {
+	if record.Status == "" {
+		record.Status = "scheduled"
 	}
 
-	if err != nil {
-		return err
-	}
-	nrows, err := result.RowsAffected()
-	if nrows == 0 {
-		// record didn't exist. create it
-		const newquery = `INSERT INTO fixity (item, scheduled_time, status, notes) VALUES (?1,?2,?3,?4)`
+	if record.ID == 0 {
+		// new record
+		const command = `INSERT INTO fixity (item, scheduled_time, status, notes) VALUES (?1,?2,?3,?4)`
 
-		_, err = performExec(qc.db, newquery, item, time.Now(), status, notes)
+		result, err := performExec(qc.db, command, record.Item, record.ScheduledTime, record.Status, record.Notes)
+		var id int64
+		if err == nil {
+			id, _ = result.LastInsertId()
+		}
+		return id, err
 	}
-	return err
+
+	// try to update existing record
+	const command = `
+		UPDATE fixity
+		SET item = ?2, scheduled_time = ?3, status = ?4, notes = ?5
+		WHERE id() == ?1 AND status == "scheduled"`
+
+	_, err := performExec(qc.db, command, record.ID, record.Item, record.ScheduledTime, record.Status, record.Notes)
+	return record.ID, err
 }
 
 //
-func (qc *QlCache) DeleteFixity(id string) error {
+func (qc *QlCache) DeleteFixity(id int64) error {
 	const query = `
-                DELETE FROM fixity
-                WHERE id() == ?1 and status == "scheduled"`
+		DELETE FROM fixity
+		WHERE id() == ?1 and status == "scheduled"`
 
-	intId, _ := strconv.Atoi(id)
-
-	_, err := performExec(qc.db, query, intId)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// SetCheck adds a new fixity record for the given item. The new
-// record will have the status of "scheduled".
-func (qc *QlCache) SetCheck(item string, when time.Time) error {
-	const query = `INSERT INTO fixity (item, scheduled_time, status, notes) VALUES (?1,?2,?3,?4)`
-
-	_, err := performExec(qc.db, query, item, when, "scheduled", "")
+	_, err := performExec(qc.db, query, id)
 	return err
 }
 
