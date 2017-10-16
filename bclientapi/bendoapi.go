@@ -22,65 +22,14 @@ var (
 )
 
 func (ia *ItemAttributes) GetItemInfo() (*jason.Object, error) {
-
-	var path = ia.bendoServer + "/item/" + ia.item
-
-	req, _ := http.NewRequest("GET", path, nil)
-	if ia.token != "" {
-		req.Header.Add("X-Api-Key", ia.token)
-	}
-	r, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer r.Body.Close()
-	if r.StatusCode != 200 {
-		switch r.StatusCode {
-		case 404:
-			return nil, ErrNotFound
-		case 401:
-			return nil, ErrNotAuthorized
-		default:
-			return nil, fmt.Errorf("Received status %d from Bendo", r.StatusCode)
-		}
-	}
-
-	v, err := jason.NewObjectFromReader(r.Body)
-
-	return v, err
+	return ia.doJasonGet("/item/" + ia.item)
 }
 
 // get upload metadata (if it exists) . Assumes that the upload fileid is item#-filemd5sum
 // returns json of metadata if successful, error otherwise
 
 func (ia *ItemAttributes) getUploadMeta(fileId string) (*jason.Object, error) {
-
-	var path = ia.bendoServer + "/upload/" + fileId + "/metadata"
-
-	req, _ := http.NewRequest("GET", path, nil)
-	if ia.token != "" {
-		req.Header.Add("X-Api-Key", ia.token)
-	}
-	req.Header.Add("Accept-Encoding", "application/json")
-	r, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer r.Body.Close()
-	if r.StatusCode != 200 {
-		switch r.StatusCode {
-		case 404:
-			return nil, ErrNotFound
-		case 401:
-			return nil, ErrNotAuthorized
-		default:
-			return nil, fmt.Errorf("Received status %d from Bendo", r.StatusCode)
-		}
-	}
-
-	v, err := jason.NewObjectFromReader(r.Body)
-
-	return v, err
+	return ia.doJasonGet("/upload/" + fileId + "/metadata")
 }
 
 func (ia *ItemAttributes) downLoad(fileName string, pathPrefix string) error {
@@ -188,7 +137,11 @@ func (ia *ItemAttributes) CreateTransaction(cmdlist []byte) (string, error) {
 }
 
 func (ia *ItemAttributes) getTransactionStatus(transaction string) (*jason.Object, error) {
-	var path = ia.bendoServer + "/transaction/" + transaction
+	return ia.doJasonGet("/transaction/" + transaction)
+}
+
+func (ia *ItemAttributes) doJasonGet(path string) (*jason.Object, error) {
+	path = ia.bendoServer + path
 
 	req, err := http.NewRequest("GET", path, nil)
 
@@ -218,8 +171,5 @@ func (ia *ItemAttributes) getTransactionStatus(transaction string) (*jason.Objec
 			return nil, fmt.Errorf("Received status %d from Bendo", resp.StatusCode)
 		}
 	}
-
-	v, err := jason.NewObjectFromReader(resp.Body)
-
-	return v, err
+	return jason.NewObjectFromReader(resp.Body)
 }

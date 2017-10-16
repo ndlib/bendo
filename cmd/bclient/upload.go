@@ -29,6 +29,8 @@ func doUpload(item string, file string) int {
 	var localfiles *FileList
 	var remotefiles *FileList
 
+	fmt.Println("Scanning", path.Join(root, file))
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -37,6 +39,7 @@ func doUpload(item string, file string) int {
 	}()
 
 	// While checksums are going, try to get remote tree
+	fmt.Println("Looking up item", item, "on remote server")
 	json, err := thisItem.GetItemInfo()
 	if err == nil {
 		remotefiles = New(root)
@@ -55,6 +58,7 @@ func doUpload(item string, file string) int {
 
 	// This compares the local list with the remote list (if the item already exists)
 	// and eliminates any unneeded duplicates
+	fmt.Println("Resolving differences")
 	todo := ResolveLocalBlobs(localfiles, remotefiles)
 
 	if len(todo) == 0 {
@@ -68,6 +72,7 @@ func doUpload(item string, file string) int {
 		}
 	}
 	// Upload Any blobs
+	fmt.Println("Uploading files")
 	err = UploadBlobs(thisItem, todo)
 	if err != nil {
 		fmt.Println("error:", err)

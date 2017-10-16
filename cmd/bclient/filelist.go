@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -60,17 +61,27 @@ func New(root string) *FileList {
 // with the files already in the list. New files are added. Other files
 // are merged with the new file winning. Only fields that are not zero are
 // merged.
-func (fl *FileList) AddFiles(in <-chan File) {
-	for f := range in {
+func (fl *FileList) AddFiles(c <-chan File) {
+	for f := range c {
 		info := fl.Files[f.Name]
 		if f.AbsPath != "" {
 			info.AbsPath = f.AbsPath
 		}
 		if len(f.MD5) > 0 {
-			info.MD5 = f.MD5
+			if len(info.MD5) > 0 && !bytes.Equal(info.MD5, f.MD5) {
+				fmt.Printf("ERROR: conflicting MD5 hashes for %s\n", f.Name)
+				fmt.Printf("Had %x\nAnd %x\n", info.MD5, f.MD5)
+			} else {
+				info.MD5 = f.MD5
+			}
 		}
 		if len(f.SHA256) > 0 {
-			info.SHA256 = f.SHA256
+			if len(info.SHA256) > 0 && !bytes.Equal(info.SHA256, f.SHA256) {
+				fmt.Printf("ERROR: conflicting SHA256 hashes for %s\n", f.Name)
+				fmt.Printf("Had %x\nAnd %x\n", info.SHA256, f.SHA256)
+			} else {
+				info.SHA256 = f.SHA256
+			}
 		}
 		if len(f.MimeType) > 0 {
 			info.MimeType = f.MimeType
