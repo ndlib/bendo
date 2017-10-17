@@ -2,12 +2,13 @@ package server
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"expvar"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"net/http"
+	"reflect"
 	"strconv"
 
 	"github.com/julienschmidt/httprouter"
@@ -197,7 +198,62 @@ func (s *RESTServer) ItemHandler(w http.ResponseWriter, r *http.Request, ps http
 	}
 	vid := item.Versions[len(item.Versions)-1].ID
 	w.Header().Set("ETag", fmt.Sprintf(`"%d"`, vid))
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	enc := json.NewEncoder(w)
-	enc.Encode(item)
+	writeHTMLorJSON(w, r, itemTemplate, item)
 }
+
+func minus1(a reflect.Value) int {
+	// when this takes an integer argument, it doesn't work in the template
+	// so make a have interface{}, and reflect to get the right value
+	var x = 1 // so default return is 0
+	switch a.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		x = int(a.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		x = int(a.Uint())
+	}
+	return x - 1
+}
+
+var (
+	itemfns = template.FuncMap{
+		"minus1": minus1,
+	}
+
+	itemTemplate = template.Must(template.New("items").Funcs(itemfns).Parse(`<html>
+<h1>Item {{ .ID }}</h1>
+MaxBundle: {{ .MaxBundle }}<br/>
+{{ $blobs := .Blobs }}
+{{ $id := .ID }}
+{{ with index .Versions (len .Versions | minus1) }}
+	Version: {{ .ID }}<br/>
+	SaveDate: {{ .SaveDate }}<br/>
+	Creator: {{ .Creator }}<br/>
+	Note: {{ .Note }}<br/>
+	<table><thead><tr>
+		<th>Bundle</th>
+		<th>Blob</th>
+		<th>Size</th>
+		<th>Date</th>
+		<th>MimeType</th>
+		<th>MD5</th>
+		<th>SHA256</th>
+		<th>Filename</th>
+	</tr></thead><tbody>
+	{{ range $key, $value := .Slots }}
+		<tr>
+		{{ with index $blobs ($value | minus1) }}
+			<td>{{.Bundle}}</td>
+			<td><a href="/item/{{ $id }}/@blob/{{ $value }}">{{ $value }}</a></td>
+			<td>{{.Size}}</td>
+			<td>{{.SaveDate}}</td>
+			<td>{{.MimeType}}</td>
+			<td>{{ printf "%x" .MD5 }}</td>
+			<td>{{ printf "%x" .SHA256 }}</td>
+		{{ end }}
+		<td><a href="/item/{{ $id }}/{{ $key }}">{{ $key }}</a></td>
+		</tr>
+	{{ end }}
+	</tbody></table>
+{{ end }}
+</html>`))
+)

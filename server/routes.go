@@ -339,7 +339,8 @@ func writeHTMLorJSON(w http.ResponseWriter,
 	tmpl *template.Template,
 	val interface{}) {
 
-	if r.Header.Get("Accept-Encoding") == "application/json" {
+	if r.Header.Get("Accept-Encoding") == "application/json" ||
+		r.FormValue("format") == "json" {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		json.NewEncoder(w).Encode(val)
 		return
