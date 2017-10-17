@@ -75,7 +75,7 @@ func TestTransactionCommands(t *testing.T) {
 	// tx is processed async from the commit above.
 	waitTransaction(t, txpath)
 	checkStatus(t, "GET", "/item/"+itemid, 200)
-	text := getbody(t, "GET", "/blob/"+itemid+"/2", 200)
+	text := getbody(t, "GET", "/item/"+itemid+"/@blob/2", 200)
 	if text != "delete me" {
 		t.Errorf("Received %#v, expected %#v", text, "delete me")
 	}
@@ -84,11 +84,11 @@ func TestTransactionCommands(t *testing.T) {
 		[][]string{{"delete", "2"}}, 202)
 	t.Log("got tx path", txpath)
 	waitTransaction(t, txpath)
-	text = getbody(t, "GET", "/blob/"+itemid+"/1", 200)
+	text = getbody(t, "GET", "/item/"+itemid+"/@blob/1", 200)
 	if text != "hello world" {
 		t.Errorf("Received %#v, expected %#v", text, "hello world")
 	}
-	text = getbody(t, "GET", "/blob/"+itemid+"/2", 404)
+	text = getbody(t, "GET", "/item/"+itemid+"/@blob/2", 404)
 	if text != "Blob has been deleted\n" {
 		t.Errorf("Received %#v, expected %#v", text, "Blob has been deleted\n")
 	}
