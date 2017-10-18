@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"reflect"
 	"strconv"
 
 	"github.com/julienschmidt/httprouter"
@@ -201,17 +200,16 @@ func (s *RESTServer) ItemHandler(w http.ResponseWriter, r *http.Request, ps http
 	writeHTMLorJSON(w, r, itemTemplate, item)
 }
 
-func minus1(a reflect.Value) int {
-	// when this takes an integer argument, it doesn't work in the template
-	// so make a have interface{}, and reflect to get the right value
-	var x = 1 // so default return is 0
-	switch a.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		x = int(a.Int())
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		x = int(a.Uint())
+func minus1(a interface{}) int {
+	// the template calls this with something having type BlobID, so we make a
+	// have type interface{}, and type switch to get the right value
+	switch v := a.(type) {
+	case int:
+		return v - 1
+	case items.BlobID:
+		return int(v) - 1
 	}
-	return x - 1
+	return 0
 }
 
 var (
@@ -219,16 +217,24 @@ var (
 		"minus1": minus1,
 	}
 
-	itemTemplate = template.Must(template.New("items").Funcs(itemfns).Parse(`<html>
+	itemTemplate = template.Must(template.New("items").Funcs(itemfns).Parse(`
+<html><head><style>
+tbody tr:nth-child(even) { background-color: #eeeeee; }
+</style></head><body>
 <h1>Item {{ .ID }}</h1>
-MaxBundle: {{ .MaxBundle }}<br/>
+<dl>
+<dt>Created</dt><dd>{{ (index .Versions 0).SaveDate }}</dd>
+<dt>MaxBundle</dt><dd>{{ .MaxBundle }}</dd>
+</dl>
 {{ $blobs := .Blobs }}
 {{ $id := .ID }}
 {{ with index .Versions (len .Versions | minus1) }}
-	Version: {{ .ID }}<br/>
-	SaveDate: {{ .SaveDate }}<br/>
-	Creator: {{ .Creator }}<br/>
-	Note: {{ .Note }}<br/>
+	<h2>Version {{ .ID }}</h2>
+	<dl>
+	<dt>SaveDate</dt><dd>{{ .SaveDate }}</dd>
+	<dt>Creator</dt><dd>{{ .Creator }}</dd>
+	<dt>Note</dt><dd>{{ .Note }}</dd>
+	</dl>
 	<table><thead><tr>
 		<th>Bundle</th>
 		<th>Blob</th>
@@ -242,11 +248,11 @@ MaxBundle: {{ .MaxBundle }}<br/>
 	{{ range $key, $value := .Slots }}
 		<tr>
 		{{ with index $blobs ($value | minus1) }}
-			<td>{{.Bundle}}</td>
+			<td>{{ .Bundle }}</td>
 			<td><a href="/item/{{ $id }}/@blob/{{ $value }}">{{ $value }}</a></td>
-			<td>{{.Size}}</td>
-			<td>{{.SaveDate}}</td>
-			<td>{{.MimeType}}</td>
+			<td>{{ .Size }}</td>
+			<td>{{ .SaveDate }}</td>
+			<td>{{ .MimeType }}</td>
 			<td>{{ printf "%x" .MD5 }}</td>
 			<td>{{ printf "%x" .SHA256 }}</td>
 		{{ end }}
@@ -255,5 +261,5 @@ MaxBundle: {{ .MaxBundle }}<br/>
 	{{ end }}
 	</tbody></table>
 {{ end }}
-</html>`))
+</body></html>`))
 )
