@@ -345,7 +345,10 @@ func writeHTMLorJSON(w http.ResponseWriter,
 		json.NewEncoder(w).Encode(val)
 		return
 	}
-	tmpl.Execute(w, val)
+	err := tmpl.Execute(w, val)
+	if err != nil {
+		log.Println(err)
+	}
 }
 
 // authzWrapper returns a Handler which will first verify the user token as
