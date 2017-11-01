@@ -1,6 +1,7 @@
 ---
 version: 0.2
 
+
 phases:
 
   install:
@@ -16,7 +17,9 @@ phases:
     commands:
       - mkdir -p /go/src/github.com/ndlib
       - ln -s / /go/src/github.com/ndlib/bendo
+      - export PATH="/go/bin:/usr/local/go/bin:$PATH"
       - make rpm
+
 
 artifacts:
   files:

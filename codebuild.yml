@@ -58,7 +58,7 @@ Resources:
       Name: bendo
       Description: 'bendo from GitHub to S3 using centos:6'
       ServiceRole: !ImportValue 'codebuild:role'
-      TimeoutInMinutes: 5
+      TimeoutInMinutes: 10
       Source: {Type: GITHUB, Location: 'https://github.com/ndlib/bendo.git'}
       Artifacts:
         Type: S3
@@ -69,7 +69,7 @@ Resources:
         Location: !Ref TargetBucket
       Environment:
         Type: LINUX_CONTAINER
-        ComputeType: BUILD_GENERAL1_SMALL
+        ComputeType: BUILD_GENERAL1_MEDIUM
         Image: centos:6
         EnvironmentVariables:
           - {Name: TARGET_BUCKET, Value: !Ref TargetBucket}
