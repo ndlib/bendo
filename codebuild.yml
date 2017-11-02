@@ -1,0 +1,77 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+
+
+Description: 'CodeBuild bendo from GitHub to S3 using centos:6'
+
+
+Metadata:
+
+  AWS::CloudFormation::Interface:
+    ParameterLabels:
+      TargetBucket: {default: Artifact Target S3 Bucket}
+      LogRetention: {default: Build Log Retention}
+    ParameterGroups:
+      - Label: {default: CodeBuild Settings}
+        Parameters:
+          - TargetBucket
+          - LogRetention
+
+
+Outputs:
+
+  BuildLogsURL:
+    Value: !Sub https://console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#logStream:group=${LogGroup}
+
+  CodeBuildURL:
+    Value: !Sub https://console.aws.amazon.com/codebuild/home?region=${AWS::Region}#/projects/${Project}/view
+
+  RepoURL:
+    Value: https://github.com/ndlib/bendo.git
+
+
+Parameters:
+
+  TargetBucket:
+    Type: String
+    Description: versioned S3 bucket name
+    Default: testlibnd-cf
+
+  LogRetention:
+    Type: Number
+    Description: days
+    Default: 400
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653]
+
+
+Resources:
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/codebuild/${Project}
+      RetentionInDays: !Ref LogRetention
+
+  Project:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: bendo
+      Description: 'bendo from GitHub to S3 using centos:6'
+      ServiceRole: !ImportValue 'codebuild:role'
+      TimeoutInMinutes: 10
+      Source: {Type: GITHUB, Location: 'https://github.com/ndlib/bendo.git'}
+      Artifacts:
+        Type: S3
+        Packaging: NONE
+        NamespaceType: BUILD_ID
+        Name: build
+        Path: bendo
+        Location: !Ref TargetBucket
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        Image: centos:6
+        EnvironmentVariables:
+          - {Name: TARGET_BUCKET, Value: !Ref TargetBucket}
+          - {Name: APPLICATION_NAME, Value: bendo}
+...

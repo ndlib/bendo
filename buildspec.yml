@@ -1,21 +1,27 @@
---- 
-artifacts: 
-  files: bendo/bendo.tar.gz
-environment_variables: 
-  plaintext: 
-    GOPATH: "/opt/bendo/gocode"
-phases: 
-  build: 
-    commands: 
-      - "cd /opt/bendo/gocode && go get github.com/ndlib/bendo/bendo"
-  install: 
-    commands: 
-      - "apt-get install git"
-  pre_build: 
-    commands: 
-      - "mkdir /opt/bendo"
-      - "mkdir -p /opt/bendo/gocode"
-      - "mkdir -p /opt/bendo/gocode/{src,pkg,bin}"
-      - "chmod -R 755 /opt/bendo"
-version: 0.1
+---
+version: 0.2
 
+
+phases:
+
+  install:
+    commands:
+      - yum -y groupinstall "Development tools"
+      - yum -y install libxslt-devel libyaml-devel libxml2-devel gdbm-devel libffi-devel zlib-devel openssl-devel libyaml-devel readline-devel curl-devel openssl-devel pcre-devel git memcached-devel valgrind-devel mysql-devel ImageMagick-devel ImageMagick
+      - ./install-go.sh
+      - yum remove -y ruby
+      - ./install-ruby.sh
+      - gem install fpm
+
+  build:
+    commands:
+      - mkdir -p /go/src/github.com/ndlib
+      - ln -s / /go/src/github.com/ndlib/bendo
+      - export PATH="/go/bin:/usr/local/go/bin:$PATH"
+      - make rpm
+
+
+artifacts:
+  files:
+    - bendo-*rpm
+...
