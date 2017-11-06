@@ -2,7 +2,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 
 
-Description: 'CodePipeline bendo from GitHub commit to S3 rpm using CodeBuild centos:6'
+Description: 'CodePipeline from GitHub commit to S3 using CodeBuild'
 
 
 Metadata:
