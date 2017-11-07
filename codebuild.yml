@@ -9,11 +9,13 @@ Metadata:
 
   AWS::CloudFormation::Interface:
     ParameterLabels:
+      CodeBuildRole: {default: CodeBuild Role}
       TargetBucket: {default: Artifact Target S3 Bucket}
       LogRetention: {default: Build Log Retention}
     ParameterGroups:
       - Label: {default: CodeBuild Settings}
         Parameters:
+          - CodeBuildRole
           - TargetBucket
           - LogRetention
 
@@ -32,6 +34,11 @@ Outputs:
 
 Parameters:
 
+  CodeBuildRole:
+    Type: String
+    Description: IAM role
+    Default: ''
+
   TargetBucket:
     Type: String
     Description: S3 bucket name
@@ -47,6 +54,7 @@ Parameters:
 Conditions:
 
   NoBucket: !Equals ['', !Ref TargetBucket]
+  NoCodeBuildRole: !Equals ['', !Ref CodeBuildRole]
 
 
 Resources:
@@ -65,7 +73,7 @@ Resources:
     Type: Custom::GitHubWebhook
     Version: '1.0'
     Properties:
-      ServiceToken: '!ImportValue Custom::GitHubWebhook'
+      ServiceToken: !ImportValue Custom::GitHubWebhook
       Name: !Ref Project
 
   Project:
@@ -73,7 +81,7 @@ Resources:
     Properties:
       Name: bendo
       Description: 'bendo from GitHub to S3 rpm'
-      ServiceRole: !ImportValue 'codebuild:role'
+      ServiceRole: !If [NoCodeBuildRole, !ImportValue 'codebuild:role', !Ref CodeBuildRole]
       TimeoutInMinutes: 5
       Source: {Type: GITHUB, Location: 'https://github.com/ndlib/bendo.git'}
       Artifacts:
