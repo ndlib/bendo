@@ -10,7 +10,8 @@ RUN yum -y groupinstall "Development tools" \
 
 COPY install-ruby.sh /
 ARG RUBY_VERSION=2.4.1
-RUN /install-ruby.sh ${RUBY_VERSION}
+ARG RUBY_GEMS_VERSION=2.6.12
+RUN /install-ruby.sh ${RUBY_VERSION} ${RUBY_GEMS_VERSION}
 RUN gem install fpm
 
 COPY install-go.sh /

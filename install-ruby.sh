@@ -11,7 +11,7 @@ make
 make install
 
 # ruby-gems
-version=2.6.12
+version=${2:-"2.6.12"}
 cd ..
 curl -sO https://rubygems.org/rubygems/rubygems-$version.tgz
 tar zxvf rubygems-$version.tgz
