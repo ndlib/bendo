@@ -4,17 +4,6 @@ version: 0.2
 
 phases:
 
-  install:
-    commands:
-      - yum -y groupinstall "Development tools"
-      - yum -y install libxslt-devel libyaml-devel libxml2-devel gdbm-devel libffi-devel zlib-devel openssl-devel libyaml-devel readline-devel curl-devel openssl-devel pcre-devel git memcached-devel valgrind-devel mysql-devel ImageMagick-devel ImageMagick
-      - chmod a+rx install-go.sh
-      - ./install-go.sh
-      - yum remove -y ruby
-      - chmod a+rx install-ruby.sh
-      - ./install-ruby.sh
-      - gem install fpm
-
   build:
     commands:
       - mkdir -p /go/src/github.com/ndlib

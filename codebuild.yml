@@ -2,7 +2,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 
 
-Description: 'CodeBuild bendo from GitHub to S3 using centos:6'
+Description: 'CodeBuild bendo from GitHub to S3 using hesburghlibraries/bendo-buildimage'
 
 
 Metadata:
@@ -34,8 +34,8 @@ Parameters:
 
   TargetBucket:
     Type: String
-    Description: versioned S3 bucket name
-    Default: testlibnd-cf
+    Description: S3 bucket name
+    Default: ''
 
   LogRetention:
     Type: Number
@@ -44,7 +44,16 @@ Parameters:
     AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653]
 
 
+Conditions:
+
+  NoBucket: !Equals ['', !Ref TargetBucket]
+
+
 Resources:
+
+  Bucket:
+    Condition: NoBucket
+    Type: AWS::S3::Bucket
 
   LogGroup:
     Type: AWS::Logs::LogGroup
@@ -52,26 +61,30 @@ Resources:
       LogGroupName: !Sub /aws/codebuild/${Project}
       RetentionInDays: !Ref LogRetention
 
+  GitHubWebhook:
+    Type: Custom::GitHubWebhook
+    Version: '1.0'
+    Properties:
+      ServiceToken: '!ImportValue Custom::GitHubWebhook'
+      Name: !Ref Project
+
   Project:
     Type: AWS::CodeBuild::Project
     Properties:
       Name: bendo
-      Description: 'bendo from GitHub to S3 using centos:6'
+      Description: 'bendo from GitHub to S3 rpm'
       ServiceRole: !ImportValue 'codebuild:role'
-      TimeoutInMinutes: 10
+      TimeoutInMinutes: 5
       Source: {Type: GITHUB, Location: 'https://github.com/ndlib/bendo.git'}
       Artifacts:
         Type: S3
         Packaging: NONE
-        NamespaceType: BUILD_ID
-        Name: build
+        NamespaceType: NONE
         Path: bendo
-        Location: !Ref TargetBucket
+        Name: rpms
+        Location: !If [NoBucket, !Ref Bucket, !Ref TargetBucket]
       Environment:
         Type: LINUX_CONTAINER
-        ComputeType: BUILD_GENERAL1_MEDIUM
-        Image: centos:6
-        EnvironmentVariables:
-          - {Name: TARGET_BUCKET, Value: !Ref TargetBucket}
-          - {Name: APPLICATION_NAME, Value: bendo}
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: hesburghlibraries/bendo-buildimage
 ...
