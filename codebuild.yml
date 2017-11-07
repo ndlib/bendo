@@ -62,6 +62,25 @@ Resources:
   Bucket:
     Condition: NoBucket
     Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: PublicRead
+
+  BucketPolicy:
+    Condition: NoBucket
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref Bucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Id: PublicRead
+        Statement:
+        - Sid: PublicReadForGetBucketObjects
+          Effect: Allow
+          Principal: '*'
+          Action: 's3:GetObject'
+          Resource:
+          - !GetAtt Bucket.Arn
+          - !Sub '${Bucket.Arn}/*'
 
   LogGroup:
     Type: AWS::Logs::LogGroup
