@@ -25,6 +25,7 @@ func (ia *ItemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, mime
 	}
 	defer sourceFile.Close()
 
+	// start upload where we left off, in case we were interrupted
 	_, err = sourceFile.Seek(offset, io.SeekStart)
 	if err != nil {
 		return "", err
@@ -32,7 +33,13 @@ func (ia *ItemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, mime
 
 	chunk := make([]byte, ia.chunkSize)
 
-	// upload the chunk
+	// upload the file in chunks
+
+	// we need to special case zero-length files to force an empty body to be
+	// sent. How do we know if a file is zero length? We don't. We make sure to
+	// send a (possibly empty) chunk the first time through the loop, with an
+	// optimization that files we are resuming are not empty.
+	needSendEmptyChunk := offset == 0
 	for {
 		var n int
 		n, err = sourceFile.Read(chunk)
@@ -41,9 +48,11 @@ func (ia *ItemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, mime
 			break
 		}
 		err = nil // if there was an error, it was io.EOF
-		if n == 0 {
+		// need flag so loop will exit the second time through
+		if n == 0 && !needSendEmptyChunk {
 			break
 		}
+		needSendEmptyChunk = false
 		chMd5 := md5.Sum(chunk[:n])
 		fileID, err = ia.PostUpload(chunk[:n], chMd5[:], srcFileMd5, mimetype, fileID)
 		if err != nil {
