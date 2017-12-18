@@ -209,11 +209,13 @@ func (s *RESTServer) GetFixityHandler(w http.ResponseWriter, r *http.Request, ps
 		return
 	}
 
-	fixityResults := s.FixityDatabase.SearchFixity(startValue, endValue, item, statusValue)
-
-	//Return results
+	result := s.FixityDatabase.SearchFixity(startValue, endValue, item, statusValue)
+	if result == nil {
+		fmt.Fprintln(w, "[]")
+		return
+	}
 	enc := json.NewEncoder(w)
-	enc.Encode(fixityResults)
+	enc.Encode(result)
 }
 
 func (s *RESTServer) GetFixityIdHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {

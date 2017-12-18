@@ -201,6 +201,14 @@ func TestHeadCacheSHA(t *testing.T) {
 	}
 }
 
+func TestFixityHandler(t *testing.T) {
+	// DLTP-1199: does empty fixity search return "[]" and not "null"?
+	body := getbody(t, "GET", "/fixity?start=2018-12-18&end=2018-12-17", 200)
+	if body != "[]\n" {
+		t.Errorf("Received %q, expected %q", body, "[]\n")
+	}
+}
+
 //
 // Test Helpers
 //
@@ -315,13 +323,15 @@ func waitTransaction(t *testing.T, txpath string) {
 var testServer *httptest.Server
 
 func init() {
+	db, _ := NewQlCache("memory--server")
 	server := &RESTServer{
-		Validator: NobodyValidator{},
-		Items:     items.NewWithCache(store.NewMemory(), items.NewMemoryCache()),
-		TxStore:   transaction.New(store.NewMemory()),
-		FileStore: fragment.New(store.NewMemory()),
-		Cache:     blobcache.NewLRU(store.NewMemory(), 400),
-		useTape:   true,
+		Validator:      NobodyValidator{},
+		Items:          items.NewWithCache(store.NewMemory(), items.NewMemoryCache()),
+		TxStore:        transaction.New(store.NewMemory()),
+		FileStore:      fragment.New(store.NewMemory()),
+		Cache:          blobcache.NewLRU(store.NewMemory(), 400),
+		FixityDatabase: db,
+		useTape:        true,
 	}
 	server.txqueue = make(chan string)
 	server.txcancel = make(chan struct{})
