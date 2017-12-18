@@ -136,10 +136,10 @@ func (s *RESTServer) Run() error {
 	s.EnableTapeUse()
 
 	// init fixity
+	if s.FixityDatabase == nil {
+		s.FixityDatabase = db
+	}
 	if !s.DisableFixity {
-		if s.FixityDatabase == nil {
-			s.FixityDatabase = db
-		}
 		s.StartFixity()
 	}
 
