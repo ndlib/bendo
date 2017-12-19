@@ -188,14 +188,18 @@ func (s *RESTServer) GetFixityHandler(w http.ResponseWriter, r *http.Request, ps
 	end := r.FormValue("end")
 	status := r.FormValue("status")
 
-	startValue, err := timeValidate(start)
+	now := time.Now()
+	lastnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	tonight := lastnight.Add(24 * time.Hour)
+
+	startValue, err := timeValidate(start, lastnight)
 	if err != nil {
 		w.WriteHeader(400)
 		fmt.Fprintln(w, err)
 		return
 	}
 
-	endValue, err := timeValidate(end)
+	endValue, err := timeValidate(end, tonight)
 	if err != nil {
 		w.WriteHeader(400)
 		fmt.Fprintln(w, err)
@@ -292,8 +296,10 @@ func (s *RESTServer) PostFixityHandler(w http.ResponseWriter, r *http.Request, p
 
 // Some validation routines for GET /fixity params
 
-func timeValidate(s string) (time.Time, error) {
-	if s == "" || s == "*" {
+func timeValidate(s string, missing time.Time) (time.Time, error) {
+	if s == "" {
+		return missing, nil
+	} else if s == "*" {
 		return time.Time{}, nil
 	}
 	t, err := time.Parse(time.RFC3339, s)
