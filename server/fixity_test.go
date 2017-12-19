@@ -49,7 +49,7 @@ func TestFixityTimeValidation(t *testing.T) {
 	}
 
 	for _, tab := range table {
-		got, err := timeValidate(tab.input)
+		got, err := timeValidate(tab.input, time.Time{})
 		if !tab.valid && err == nil {
 			t.Errorf("For %s expected error", tab.input)
 		}
