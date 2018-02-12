@@ -356,7 +356,17 @@ func writeHTMLorJSON(w http.ResponseWriter,
 // "username".
 func (s *RESTServer) authzWrapper(handler httprouter.Handle, leastRole Role) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+		// the token may be passed in either the X-Api-Key header, or as the username
+		// or the password in basic auth (to support human use)
 		token := r.Header.Get("X-Api-Key")
+		if token == "" {
+			// token in username field?
+			token, _, _ = r.BasicAuth()
+		}
+		if token == "" {
+			// token in password field?
+			_, token, _ = r.BasicAuth()
+		}
 		user, role, err := s.Validator.TokenValid(token)
 		if err != nil {
 			w.WriteHeader(500)
@@ -366,10 +376,13 @@ func (s *RESTServer) authzWrapper(handler httprouter.Handle, leastRole Role) htt
 
 		// is role valid?
 		if role < leastRole {
+			w.Header().Set("WWW-Authenticate", "Basic") // tell web browsers to display password box
 			w.WriteHeader(401)
 			fmt.Fprintln(w, "Forbidden")
 			return
 		}
+
+		log.Println("User", user)
 
 		// remove any previous username
 		for i := range ps {

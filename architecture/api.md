@@ -33,6 +33,8 @@ The API key is passed in using the header `X-Api-Key`. An error of 401
 Unauthorized is returned if no header is present and one is needed.
 An error of 403 is returned if the key provided does not have
 permission to perform the given task, is not valid, or has expired.
+To facilitate human use, the api token can also be passed using Basic auth as either the username or the password.
+(So as the header `Authorization` with the value of `Basic XXXX` where XXXX is a Base64 encoded value of either "token:" or ":token".)
 
 # Checksums
 
