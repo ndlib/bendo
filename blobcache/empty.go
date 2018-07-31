@@ -36,6 +36,11 @@ func (EmptyCache) Size() int64 {
 	return 0
 }
 
+// MaxSize will return 0 (which means the cache size is infinite).
+func (EmptyCache) MaxSize() int64 {
+	return 0
+}
+
 type nopCloser struct {
 	io.Writer
 }
