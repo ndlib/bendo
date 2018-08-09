@@ -46,6 +46,50 @@ func TODO(...interface{}) string {
 
 func use(...interface{}) {}
 
+func init() {
+	use(caller, TODO)
+}
+
+func intPtr(a int) *int {
+	return &a
+}
+
+func uIntPtr(a uint) *uint {
+	return &a
+}
+
+func bytePtr(a byte) *byte {
+	return &a
+}
+
+func int8Ptr(a int8) *int8 {
+	return &a
+}
+
+func int16Ptr(a int16) *int16 {
+	return &a
+}
+
+func uInt16Ptr(a uint16) *uint16 {
+	return &a
+}
+
+func int32Ptr(a int32) *int32 {
+	return &a
+}
+
+func uInt32Ptr(a uint32) *uint32 {
+	return &a
+}
+
+func int64Ptr(a int64) *int64 {
+	return &a
+}
+
+func uInt64Ptr(a uint64) *uint64 {
+	return &a
+}
+
 // ============================================================================
 
 func r32() *FC32 {
@@ -60,7 +104,6 @@ func r32() *FC32 {
 var (
 	r64lo          = big.NewInt(math.MinInt64)
 	r64hi          = big.NewInt(math.MaxInt64)
-	_3             = big.NewInt(3)
 	MinIntM1       = MinInt
 	MaxIntP1       = MaxInt
 	MaxUintP1 uint = MaxUint
@@ -148,8 +191,8 @@ func Test1(t *testing.T) {
 				}
 				r.Seed(int64(seed))
 				m := map[int]bool{}
-				v := make([]int, period, period)
-				p := make([]int64, period, period)
+				v := make([]int, period)
+				p := make([]int64, period)
 				for i := lo; i <= hi; i++ {
 					x := r.Next()
 					p[i-lo] = r.Pos()
@@ -209,8 +252,8 @@ func Test2(t *testing.T) {
 				}
 				r.Seed(int64(seed))
 				m := map[int]bool{}
-				v := make([]int, period, period)
-				p := make([]int64, period, period)
+				v := make([]int, period)
+				p := make([]int64, period)
 				for i := lo; i <= hi; i++ {
 					x := r.Prev()
 					p[i-lo] = r.Pos()
@@ -378,8 +421,8 @@ func TestBig1(t *testing.T) {
 				}
 				r.Seed(int64(seed))
 				m := map[int64]bool{}
-				v := make([]int64, period, period)
-				p := make([]int64, period, period)
+				v := make([]int64, period)
+				p := make([]int64, period)
 				for i := lo64; i <= hi64; i++ {
 					x := r.Next().Int64()
 					p[i-lo64] = r.Pos().Int64()
@@ -444,8 +487,8 @@ func TestBig2(t *testing.T) {
 				}
 				r.Seed(int64(seed))
 				m := map[int64]bool{}
-				v := make([]int64, period, period)
-				p := make([]int64, period, period)
+				v := make([]int64, period)
+				p := make([]int64, period)
 				for i := lo64; i <= hi64; i++ {
 					x := r.Prev().Int64()
 					p[i-lo64] = r.Pos().Int64()
@@ -789,7 +832,7 @@ func TestFactorInt(t *testing.T) {
 
 		x := uint64(1)
 		for _, v := range f {
-			if p := v.Prime; p < 0 || !IsPrime(uint32(v.Prime)) {
+			if p := v.Prime; p < 0 || !IsPrime(v.Prime) {
 				return false
 			}
 
@@ -2230,7 +2273,7 @@ func BenchmarkProbablyPrimeBigInt64(b *testing.B) {
 		for a <= 1 {
 			a = uint64(r.Next().Int64())
 		}
-		data[i] = t{big.NewInt(0).SetUint64(n), big.NewInt(0).SetUint64(uint64(a))}
+		data[i] = t{big.NewInt(0).SetUint64(n), big.NewInt(0).SetUint64(a)}
 	}
 	runtime.GC()
 	b.StartTimer()
@@ -2930,6 +2973,209 @@ func TestMin(t *testing.T) {
 	}
 }
 
+func TestMaxPtr(t *testing.T) {
+	tests := []struct{ a, b, e *int }{
+		{intPtr(MinInt), intPtr(MinIntM1), intPtr(MaxInt)},
+		{intPtr(MinIntM1), intPtr(MinInt), intPtr(MaxInt)},
+		{intPtr(MinIntM1), intPtr(MinIntM1), intPtr(MaxInt)},
+		{nil, intPtr(MinIntM1), intPtr(MaxInt)},
+
+		{intPtr(MinInt), intPtr(MinInt), intPtr(MinInt)},
+		{intPtr(MinInt + 1), intPtr(MinInt), intPtr(MinInt + 1)},
+		{intPtr(MinInt), intPtr(MinInt + 1), intPtr(MinInt + 1)},
+		{nil, intPtr(MinInt + 1), intPtr(MinInt + 1)},
+
+		{intPtr(-1), intPtr(-1), intPtr(-1)},
+		{intPtr(-1), intPtr(0), intPtr(0)},
+		{intPtr(-1), intPtr(1), intPtr(1)},
+		{intPtr(-1), nil, intPtr(-1)},
+
+		{intPtr(0), intPtr(-1), intPtr(0)},
+		{intPtr(0), intPtr(0), intPtr(0)},
+		{intPtr(0), intPtr(1), intPtr(1)},
+		{intPtr(0), nil, intPtr(0)},
+
+		{intPtr(1), intPtr(-1), intPtr(1)},
+		{intPtr(1), intPtr(0), intPtr(1)},
+		{intPtr(1), intPtr(1), intPtr(1)},
+		{nil, nil, nil},
+
+		{intPtr(MaxInt), intPtr(MaxInt), intPtr(MaxInt)},
+		{intPtr(MaxInt - 1), intPtr(MaxInt), intPtr(MaxInt)},
+		{intPtr(MaxInt), intPtr(MaxInt - 1), intPtr(MaxInt)},
+		{intPtr(MaxInt), nil, intPtr(MaxInt)},
+
+		{intPtr(MaxIntP1), intPtr(MaxInt), intPtr(MaxInt)},
+		{intPtr(MaxInt), intPtr(MaxIntP1), intPtr(MaxInt)},
+		{intPtr(MaxIntP1), intPtr(MaxIntP1), intPtr(MinInt)},
+		{nil, intPtr(MaxIntP1), intPtr(MinInt)},
+	}
+
+	for c, test := range tests {
+		g, e := MaxPtr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestMinPtr(t *testing.T) {
+	tests := []struct{ a, b, e *int }{
+		{intPtr(MinIntM1), intPtr(MinInt), intPtr(MinInt)},
+		{intPtr(MinInt), intPtr(MinIntM1), intPtr(MinInt)},
+		{intPtr(MinIntM1), intPtr(MinIntM1), intPtr(MaxInt)},
+		{nil, intPtr(MinIntM1), intPtr(MinIntM1)},
+
+		{intPtr(MinInt), intPtr(MinInt), intPtr(MinInt)},
+		{intPtr(MinInt + 1), intPtr(MinInt), intPtr(MinInt)},
+		{intPtr(MinInt), intPtr(MinInt + 1), intPtr(MinInt)},
+		{nil, intPtr(MinInt + 1), intPtr(MinInt + 1)},
+
+		{intPtr(-1), intPtr(-1), intPtr(-1)},
+		{intPtr(-1), intPtr(0), intPtr(-1)},
+		{intPtr(-1), intPtr(1), intPtr(-1)},
+		{intPtr(-1), nil, intPtr(-1)},
+
+		{intPtr(0), intPtr(-1), intPtr(-1)},
+		{intPtr(0), intPtr(0), intPtr(0)},
+		{intPtr(0), intPtr(1), intPtr(0)},
+		{intPtr(0), nil, intPtr(0)},
+
+		{intPtr(1), intPtr(-1), intPtr(-1)},
+		{intPtr(1), intPtr(0), intPtr(0)},
+		{intPtr(1), intPtr(1), intPtr(1)},
+		{nil, nil, nil},
+
+		{intPtr(MaxInt), intPtr(MaxInt), intPtr(MaxInt)},
+		{intPtr(MaxInt - 1), intPtr(MaxInt), intPtr(MaxInt - 1)},
+		{intPtr(MaxInt), intPtr(MaxInt - 1), intPtr(MaxInt - 1)},
+		{intPtr(MaxInt), nil, intPtr(MaxInt)},
+
+		{intPtr(MaxIntP1), intPtr(MaxInt), intPtr(MinInt)},
+		{intPtr(MaxInt), intPtr(MaxIntP1), intPtr(MinInt)},
+		{intPtr(MaxIntP1), intPtr(MaxIntP1), intPtr(MinInt)},
+		{nil, intPtr(MaxIntP1), intPtr(MinInt)},
+	}
+
+	for c, test := range tests {
+		g, e := MinPtr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestMaxVal(t *testing.T) {
+	tests := []struct{ a, b, c, e int }{
+		{MinInt, MinInt, MinIntM1, MaxInt},
+		{MinIntM1, MinIntM1, MinInt, MaxInt},
+		{MinIntM1, MinIntM1, MinIntM1, MaxInt},
+
+		{MinInt, MinInt, MinInt, MinInt},
+		{MinInt + 1, MinInt + 1, MinInt, MinInt + 1},
+		{MinInt, MinInt, MinInt + 1, MinInt + 1},
+
+		{-1, -1, -1, -1},
+		{-1, -1, 0, 0},
+		{-1, -1, 1, 1},
+
+		{0, 0, -1, 0},
+		{0, 0, 0, 0},
+		{0, 0, 1, 1},
+
+		{1, 1, -1, 1},
+		{1, 1, 0, 1},
+		{1, 1, 1, 1},
+
+		{MaxInt, MaxInt, MaxInt, MaxInt},
+		{MaxInt - 1, MaxInt - 1, MaxInt, MaxInt},
+		{MaxInt, MaxInt, MaxInt - 1, MaxInt},
+
+		{MaxIntP1, MaxIntP1, MaxInt, MaxInt},
+		{MaxInt, MaxInt, MaxIntP1, MaxInt},
+		{MaxIntP1, MaxIntP1, MaxIntP1, MinInt},
+	}
+
+	for i, test := range tests {
+		if g, e := MaxVal(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := MaxVal(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestMinVal(t *testing.T) {
+	tests := []struct{ a, b, c, e int }{
+		{MinIntM1, MinIntM1, MinInt, MinInt},
+		{MinInt, MinInt, MinIntM1, MinInt},
+		{MinIntM1, MinIntM1, MinIntM1, MaxInt},
+
+		{MinInt, MinInt, MinInt, MinInt},
+		{MinInt + 1, MinInt + 1, MinInt, MinInt},
+		{MinInt, MinInt, MinInt + 1, MinInt},
+
+		{-1, -1, -1, -1},
+		{-1, -1, 0, -1},
+		{-1, -1, 1, -1},
+
+		{0, 0, -1, -1},
+		{0, 0, 0, 0},
+		{0, 0, 1, 0},
+
+		{1, 1, -1, -1},
+		{1, 1, 0, 0},
+		{1, 1, 1, 1},
+
+		{MaxInt, MaxInt, MaxInt, MaxInt},
+		{MaxInt - 1, MaxInt - 1, MaxInt, MaxInt - 1},
+		{MaxInt, MaxInt, MaxInt - 1, MaxInt - 1},
+
+		{MaxIntP1, MaxIntP1, MaxInt, MinInt},
+		{MaxInt, MaxInt, MaxIntP1, MinInt},
+		{MaxIntP1, MaxIntP1, MaxIntP1, MinInt},
+	}
+
+	for i, test := range tests {
+		if g, e := MinVal(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := MinVal(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestClamp(t *testing.T) {
+	tests := []struct{ v, lo, hi, e int }{
+		{0, 0, 0, 0},
+		{5, 10, 20, 10},
+		{10, 10, 20, 10},
+		{15, 10, 20, 15},
+		{20, 10, 20, 20},
+		{25, 10, 20, 20},
+	}
+
+	for _, test := range tests {
+		if g, e := Clamp(test.v, test.lo, test.hi), test.e; g != e {
+			t.Fatal(test.v, test.lo, test.hi, g, e)
+		}
+	}
+}
+
 func TestUMax(t *testing.T) {
 	tests := []struct{ a, b, e uint }{
 		{0, 0, 0},
@@ -2986,6 +3232,165 @@ func TestUMin(t *testing.T) {
 	}
 }
 
+func TestUMaxPtr(t *testing.T) {
+	tests := []struct{ a, b, e *uint }{
+		{uIntPtr(0), uIntPtr(0), uIntPtr(0)},
+		{uIntPtr(0), uIntPtr(1), uIntPtr(1)},
+		{uIntPtr(1), uIntPtr(0), uIntPtr(1)},
+		{nil, uIntPtr(1), uIntPtr(1)},
+		{nil, uIntPtr(0), uIntPtr(0)},
+
+		{uIntPtr(10), uIntPtr(10), uIntPtr(10)},
+		{uIntPtr(10), uIntPtr(11), uIntPtr(11)},
+		{uIntPtr(11), uIntPtr(10), uIntPtr(11)},
+		{uIntPtr(11), uIntPtr(11), uIntPtr(11)},
+		{nil, nil, nil},
+
+		{uIntPtr(MaxUint), uIntPtr(MaxUint), uIntPtr(MaxUint)},
+		{uIntPtr(MaxUint), uIntPtr(MaxUint - 1), uIntPtr(MaxUint)},
+		{uIntPtr(MaxUint - 1), nil, uIntPtr(MaxUint - 1)},
+		{nil, uIntPtr(MaxUint - 1), uIntPtr(MaxUint - 1)},
+		{uIntPtr(MaxUint - 1), nil, uIntPtr(MaxUint - 1)},
+
+		{uIntPtr(MaxUint), uIntPtr(MaxUintP1), uIntPtr(MaxUint)},
+		{uIntPtr(MaxUintP1), uIntPtr(MaxUint), uIntPtr(MaxUint)},
+		{uIntPtr(MaxUintP1), uIntPtr(MaxUintP1), uIntPtr(0)},
+		{uIntPtr(MaxUintP1), nil, uIntPtr(0)},
+	}
+
+	for c, test := range tests {
+		g, e := UMaxPtr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestUMinPtr(t *testing.T) {
+	tests := []struct{ a, b, e *uint }{
+		{uIntPtr(0), uIntPtr(0), uIntPtr(0)},
+		{uIntPtr(0), uIntPtr(1), uIntPtr(0)},
+		{uIntPtr(1), uIntPtr(0), uIntPtr(0)},
+		{nil, uIntPtr(1), uIntPtr(1)},
+		{nil, uIntPtr(0), uIntPtr(0)},
+
+		{uIntPtr(10), uIntPtr(10), uIntPtr(10)},
+		{uIntPtr(10), uIntPtr(11), uIntPtr(10)},
+		{uIntPtr(11), uIntPtr(10), uIntPtr(10)},
+		{uIntPtr(11), uIntPtr(11), uIntPtr(11)},
+		{nil, nil, nil},
+
+		{uIntPtr(MaxUint), uIntPtr(MaxUint), uIntPtr(MaxUint)},
+		{uIntPtr(MaxUint), uIntPtr(MaxUint - 1), uIntPtr(MaxUint - 1)},
+		{uIntPtr(MaxUint - 1), nil, uIntPtr(MaxUint - 1)},
+		{nil, uIntPtr(MaxUint - 1), uIntPtr(MaxUint - 1)},
+		{uIntPtr(MaxUint - 1), nil, uIntPtr(MaxUint - 1)},
+
+		{uIntPtr(MaxUint), uIntPtr(MaxUintP1), uIntPtr(0)},
+		{uIntPtr(MaxUintP1), uIntPtr(MaxUint), uIntPtr(0)},
+		{uIntPtr(MaxUintP1), uIntPtr(MaxUintP1), uIntPtr(0)},
+		{uIntPtr(MaxUintP1), nil, uIntPtr(0)},
+	}
+
+	for c, test := range tests {
+		g, e := UMinPtr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestUMaxVal(t *testing.T) {
+	tests := []struct{ a, b, c, e uint }{
+		{0, 0, 0, 0},
+		{0, 0, 1, 1},
+		{1, 1, 0, 1},
+
+		{10, 10, 10, 10},
+		{10, 10, 11, 11},
+		{11, 11, 10, 11},
+		{11, 11, 11, 11},
+
+		{MaxUint, MaxUint, MaxUint, MaxUint},
+		{MaxUint, MaxUint, MaxUint - 1, MaxUint},
+		{MaxUint - 1, MaxUint - 1, MaxUint, MaxUint},
+		{MaxUint - 1, MaxUint - 1, MaxUint - 1, MaxUint - 1},
+
+		{MaxUint, MaxUint, MaxUintP1, MaxUint},
+		{MaxUintP1, MaxUintP1, MaxUint, MaxUint},
+		{MaxUintP1, MaxUintP1, MaxUintP1, 0},
+	}
+
+	for i, test := range tests {
+		if g, e := UMaxVal(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := UMaxVal(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestUMinVal(t *testing.T) {
+	tests := []struct{ a, b, c, e uint }{
+		{0, 0, 0, 0},
+		{0, 0, 1, 0},
+		{1, 1, 0, 0},
+
+		{10, 10, 10, 10},
+		{10, 10, 11, 10},
+		{11, 11, 10, 10},
+		{11, 11, 11, 11},
+
+		{MaxUint, MaxUint, MaxUint, MaxUint},
+		{MaxUint, MaxUint, MaxUint - 1, MaxUint - 1},
+		{MaxUint - 1, MaxUint - 1, MaxUint, MaxUint - 1},
+		{MaxUint - 1, MaxUint - 1, MaxUint - 1, MaxUint - 1},
+
+		{MaxUint, MaxUint, MaxUintP1, 0},
+		{MaxUintP1, MaxUintP1, MaxUint, 0},
+		{MaxUintP1, MaxUintP1, MaxUintP1, 0},
+	}
+
+	for i, test := range tests {
+		if g, e := UMinVal(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := UMinVal(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestUClamp(t *testing.T) {
+	tests := []struct{ v, lo, hi, e uint }{
+		{0, 0, 0, 0},
+		{5, 10, 20, 10},
+		{10, 10, 20, 10},
+		{15, 10, 20, 15},
+		{20, 10, 20, 20},
+		{25, 10, 20, 20},
+	}
+
+	for _, test := range tests {
+		if g, e := UClamp(test.v, test.lo, test.hi), test.e; g != e {
+			t.Fatal(test.v, test.lo, test.hi, g, e)
+		}
+	}
+}
+
 func TestMaxByte(t *testing.T) {
 	tests := []struct{ a, b, e byte }{
 		{0, 0, 0},
@@ -3030,6 +3435,149 @@ func TestMinByte(t *testing.T) {
 	for _, test := range tests {
 		if g, e := MinByte(test.a, test.b), test.e; g != e {
 			t.Fatal(test.a, test.b, g, e)
+		}
+	}
+}
+
+func TestMaxBytePtr(t *testing.T) {
+	tests := []struct{ a, b, e *byte }{
+		{bytePtr(0), bytePtr(0), bytePtr(0)},
+		{bytePtr(0), bytePtr(1), bytePtr(1)},
+		{bytePtr(1), bytePtr(0), bytePtr(1)},
+		{nil, bytePtr(0), bytePtr(0)},
+		{bytePtr(1), nil, bytePtr(1)},
+
+		{bytePtr(10), bytePtr(10), bytePtr(10)},
+		{bytePtr(10), bytePtr(11), bytePtr(11)},
+		{bytePtr(11), bytePtr(10), bytePtr(11)},
+		{bytePtr(11), bytePtr(11), bytePtr(11)},
+		{nil, nil, nil},
+
+		{bytePtr(math.MaxUint8), bytePtr(math.MaxUint8), bytePtr(math.MaxUint8)},
+		{bytePtr(math.MaxUint8), bytePtr(math.MaxUint8 - 1), bytePtr(math.MaxUint8)},
+		{bytePtr(math.MaxUint8 - 1), bytePtr(math.MaxUint8), bytePtr(math.MaxUint8)},
+		{bytePtr(math.MaxUint8 - 1), bytePtr(math.MaxUint8 - 1), bytePtr(math.MaxUint8 - 1)},
+		{nil, bytePtr(math.MaxUint8 - 1), bytePtr(math.MaxUint8 - 1)},
+		{bytePtr(math.MaxUint8), nil, bytePtr(math.MaxUint8)},
+	}
+
+	for c, test := range tests {
+		g, e := MaxBytePtr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestMinBytePtr(t *testing.T) {
+	tests := []struct{ a, b, e *byte }{
+		{bytePtr(0), bytePtr(0), bytePtr(0)},
+		{bytePtr(0), bytePtr(1), bytePtr(0)},
+		{bytePtr(1), bytePtr(0), bytePtr(0)},
+		{nil, bytePtr(0), bytePtr(0)},
+		{bytePtr(1), nil, bytePtr(1)},
+
+		{bytePtr(10), bytePtr(10), bytePtr(10)},
+		{bytePtr(10), bytePtr(11), bytePtr(10)},
+		{bytePtr(11), bytePtr(10), bytePtr(10)},
+		{bytePtr(11), bytePtr(11), bytePtr(11)},
+		{nil, nil, nil},
+
+		{bytePtr(math.MaxUint8), bytePtr(math.MaxUint8), bytePtr(math.MaxUint8)},
+		{bytePtr(math.MaxUint8), bytePtr(math.MaxUint8 - 1), bytePtr(math.MaxUint8 - 1)},
+		{bytePtr(math.MaxUint8 - 1), bytePtr(math.MaxUint8), bytePtr(math.MaxUint8 - 1)},
+		{bytePtr(math.MaxUint8 - 1), bytePtr(math.MaxUint8 - 1), bytePtr(math.MaxUint8 - 1)},
+		{nil, bytePtr(math.MaxUint8 - 1), bytePtr(math.MaxUint8 - 1)},
+		{bytePtr(math.MaxUint8), nil, bytePtr(math.MaxUint8)},
+	}
+
+	for c, test := range tests {
+		g, e := MinBytePtr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestMaxByteVal(t *testing.T) {
+	tests := []struct{ a, b, c, e byte }{
+		{0, 0, 0, 0},
+		{0, 0, 1, 1},
+		{1, 1, 0, 1},
+
+		{10, 10, 10, 10},
+		{10, 10, 11, 11},
+		{11, 11, 10, 11},
+		{11, 11, 11, 11},
+
+		{math.MaxUint8, math.MaxUint8, math.MaxUint8, math.MaxUint8},
+		{math.MaxUint8, math.MaxUint8, math.MaxUint8 - 1, math.MaxUint8},
+		{math.MaxUint8 - 1, math.MaxUint8 - 1, math.MaxUint8, math.MaxUint8},
+		{math.MaxUint8 - 1, math.MaxUint8 - 1, math.MaxUint8 - 1, math.MaxUint8 - 1},
+	}
+
+	for i, test := range tests {
+		if g, e := MaxByteVal(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := MaxByteVal(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestMinByteVal(t *testing.T) {
+	tests := []struct{ a, b, c, e byte }{
+		{0, 0, 0, 0},
+		{0, 0, 1, 0},
+		{1, 1, 0, 0},
+
+		{10, 10, 10, 10},
+		{10, 10, 11, 10},
+		{11, 11, 10, 10},
+		{11, 11, 11, 11},
+
+		{math.MaxUint8, math.MaxUint8, math.MaxUint8, math.MaxUint8},
+		{math.MaxUint8, math.MaxUint8, math.MaxUint8 - 1, math.MaxUint8 - 1},
+		{math.MaxUint8 - 1, math.MaxUint8 - 1, math.MaxUint8, math.MaxUint8 - 1},
+		{math.MaxUint8 - 1, math.MaxUint8 - 1, math.MaxUint8 - 1, math.MaxUint8 - 1},
+	}
+
+	for i, test := range tests {
+		if g, e := MinByteVal(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := MinByteVal(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestClampByte(t *testing.T) {
+	tests := []struct{ v, lo, hi, e byte }{
+		{0, 0, 0, 0},
+		{5, 10, 20, 10},
+		{10, 10, 20, 10},
+		{15, 10, 20, 15},
+		{20, 10, 20, 20},
+		{25, 10, 20, 20},
+	}
+
+	for _, test := range tests {
+		if g, e := ClampByte(test.v, test.lo, test.hi), test.e; g != e {
+			t.Fatal(test.v, test.lo, test.hi, g, e)
 		}
 	}
 }
@@ -3082,6 +3630,149 @@ func TestMinUint16(t *testing.T) {
 	}
 }
 
+func TestMaxUint16Ptr(t *testing.T) {
+	tests := []struct{ a, b, e *uint16 }{
+		{uInt16Ptr(0), uInt16Ptr(0), uInt16Ptr(0)},
+		{uInt16Ptr(0), uInt16Ptr(1), uInt16Ptr(1)},
+		{uInt16Ptr(1), uInt16Ptr(0), uInt16Ptr(1)},
+		{nil, uInt16Ptr(0), uInt16Ptr(0)},
+		{uInt16Ptr(1), nil, uInt16Ptr(1)},
+
+		{uInt16Ptr(10), uInt16Ptr(10), uInt16Ptr(10)},
+		{uInt16Ptr(10), uInt16Ptr(11), uInt16Ptr(11)},
+		{uInt16Ptr(11), uInt16Ptr(10), uInt16Ptr(11)},
+		{uInt16Ptr(11), uInt16Ptr(11), uInt16Ptr(11)},
+		{nil, nil, nil},
+
+		{uInt16Ptr(math.MaxUint16), uInt16Ptr(math.MaxUint16), uInt16Ptr(math.MaxUint16)},
+		{uInt16Ptr(math.MaxUint16), uInt16Ptr(math.MaxUint16 - 1), uInt16Ptr(math.MaxUint16)},
+		{uInt16Ptr(math.MaxUint16 - 1), uInt16Ptr(math.MaxUint16), uInt16Ptr(math.MaxUint16)},
+		{uInt16Ptr(math.MaxUint16 - 1), uInt16Ptr(math.MaxUint16 - 1), uInt16Ptr(math.MaxUint16 - 1)},
+		{nil, uInt16Ptr(math.MaxUint16 - 1), uInt16Ptr(math.MaxUint16 - 1)},
+		{uInt16Ptr(math.MaxUint16), nil, uInt16Ptr(math.MaxUint16)},
+	}
+
+	for c, test := range tests {
+		g, e := MaxUint16Ptr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestMinUint16Ptr(t *testing.T) {
+	tests := []struct{ a, b, e *uint16 }{
+		{uInt16Ptr(0), uInt16Ptr(0), uInt16Ptr(0)},
+		{uInt16Ptr(0), uInt16Ptr(1), uInt16Ptr(0)},
+		{uInt16Ptr(1), uInt16Ptr(0), uInt16Ptr(0)},
+		{nil, uInt16Ptr(0), uInt16Ptr(0)},
+		{uInt16Ptr(1), nil, uInt16Ptr(1)},
+
+		{uInt16Ptr(10), uInt16Ptr(10), uInt16Ptr(10)},
+		{uInt16Ptr(10), uInt16Ptr(11), uInt16Ptr(10)},
+		{uInt16Ptr(11), uInt16Ptr(10), uInt16Ptr(10)},
+		{uInt16Ptr(11), uInt16Ptr(11), uInt16Ptr(11)},
+		{nil, nil, nil},
+
+		{uInt16Ptr(math.MaxUint16), uInt16Ptr(math.MaxUint16), uInt16Ptr(math.MaxUint16)},
+		{uInt16Ptr(math.MaxUint16), uInt16Ptr(math.MaxUint16 - 1), uInt16Ptr(math.MaxUint16 - 1)},
+		{uInt16Ptr(math.MaxUint16 - 1), uInt16Ptr(math.MaxUint16), uInt16Ptr(math.MaxUint16 - 1)},
+		{uInt16Ptr(math.MaxUint16 - 1), uInt16Ptr(math.MaxUint16 - 1), uInt16Ptr(math.MaxUint16 - 1)},
+		{nil, uInt16Ptr(math.MaxUint16 - 1), uInt16Ptr(math.MaxUint16 - 1)},
+		{uInt16Ptr(math.MaxUint16), nil, uInt16Ptr(math.MaxUint16)},
+	}
+
+	for c, test := range tests {
+		g, e := MinUint16Ptr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestMaxUint16Val(t *testing.T) {
+	tests := []struct{ a, b, c, e uint16 }{
+		{0, 0, 0, 0},
+		{0, 0, 1, 1},
+		{1, 1, 0, 1},
+
+		{10, 10, 10, 10},
+		{10, 10, 11, 11},
+		{11, 11, 10, 11},
+		{11, 11, 11, 11},
+
+		{math.MaxUint16, math.MaxUint16, math.MaxUint16, math.MaxUint16},
+		{math.MaxUint16, math.MaxUint16, math.MaxUint16 - 1, math.MaxUint16},
+		{math.MaxUint16 - 1, math.MaxUint16 - 1, math.MaxUint16, math.MaxUint16},
+		{math.MaxUint16 - 1, math.MaxUint16 - 1, math.MaxUint16 - 1, math.MaxUint16 - 1},
+	}
+
+	for i, test := range tests {
+		if g, e := MaxUint16Val(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := MaxUint16Val(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestMinUint16Val(t *testing.T) {
+	tests := []struct{ a, b, c, e uint16 }{
+		{0, 0, 0, 0},
+		{0, 0, 1, 0},
+		{1, 1, 0, 0},
+
+		{10, 10, 10, 10},
+		{10, 10, 11, 10},
+		{11, 11, 10, 10},
+		{11, 11, 11, 11},
+
+		{math.MaxUint16, math.MaxUint16, math.MaxUint16, math.MaxUint16},
+		{math.MaxUint16, math.MaxUint16, math.MaxUint16 - 1, math.MaxUint16 - 1},
+		{math.MaxUint16 - 1, math.MaxUint16 - 1, math.MaxUint16, math.MaxUint16 - 1},
+		{math.MaxUint16 - 1, math.MaxUint16 - 1, math.MaxUint16 - 1, math.MaxUint16 - 1},
+	}
+
+	for i, test := range tests {
+		if g, e := MinUint16Val(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := MinUint16Val(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestClampUint16(t *testing.T) {
+	tests := []struct{ v, lo, hi, e uint16 }{
+		{0, 0, 0, 0},
+		{5, 10, 20, 10},
+		{10, 10, 20, 10},
+		{15, 10, 20, 15},
+		{20, 10, 20, 20},
+		{25, 10, 20, 20},
+	}
+
+	for _, test := range tests {
+		if g, e := ClampUint16(test.v, test.lo, test.hi), test.e; g != e {
+			t.Fatal(test.v, test.lo, test.hi, g, e)
+		}
+	}
+}
+
 func TestMaxUint32(t *testing.T) {
 	tests := []struct{ a, b, e uint32 }{
 		{0, 0, 0},
@@ -3130,6 +3821,149 @@ func TestMinUint32(t *testing.T) {
 	}
 }
 
+func TestMaxUint32Ptr(t *testing.T) {
+	tests := []struct{ a, b, e *uint32 }{
+		{uInt32Ptr(0), uInt32Ptr(0), uInt32Ptr(0)},
+		{uInt32Ptr(0), uInt32Ptr(1), uInt32Ptr(1)},
+		{uInt32Ptr(1), uInt32Ptr(0), uInt32Ptr(1)},
+		{nil, uInt32Ptr(0), uInt32Ptr(0)},
+		{uInt32Ptr(1), nil, uInt32Ptr(1)},
+
+		{uInt32Ptr(10), uInt32Ptr(10), uInt32Ptr(10)},
+		{uInt32Ptr(10), uInt32Ptr(11), uInt32Ptr(11)},
+		{uInt32Ptr(11), uInt32Ptr(10), uInt32Ptr(11)},
+		{uInt32Ptr(11), uInt32Ptr(11), uInt32Ptr(11)},
+		{nil, nil, nil},
+
+		{uInt32Ptr(math.MaxInt32), uInt32Ptr(math.MaxInt32), uInt32Ptr(math.MaxInt32)},
+		{uInt32Ptr(math.MaxInt32), uInt32Ptr(math.MaxInt32 - 1), uInt32Ptr(math.MaxInt32)},
+		{uInt32Ptr(math.MaxInt32 - 1), uInt32Ptr(math.MaxInt32), uInt32Ptr(math.MaxInt32)},
+		{uInt32Ptr(math.MaxInt32 - 1), uInt32Ptr(math.MaxInt32 - 1), uInt32Ptr(math.MaxInt32 - 1)},
+		{nil, uInt32Ptr(math.MaxInt32 - 1), uInt32Ptr(math.MaxInt32 - 1)},
+		{uInt32Ptr(math.MaxInt32), nil, uInt32Ptr(math.MaxInt32)},
+	}
+
+	for c, test := range tests {
+		g, e := MaxUint32Ptr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestMinUint32Ptr(t *testing.T) {
+	tests := []struct{ a, b, e *uint32 }{
+		{uInt32Ptr(0), uInt32Ptr(0), uInt32Ptr(0)},
+		{uInt32Ptr(0), uInt32Ptr(1), uInt32Ptr(0)},
+		{uInt32Ptr(1), uInt32Ptr(0), uInt32Ptr(0)},
+		{nil, uInt32Ptr(0), uInt32Ptr(0)},
+		{uInt32Ptr(1), nil, uInt32Ptr(1)},
+
+		{uInt32Ptr(10), uInt32Ptr(10), uInt32Ptr(10)},
+		{uInt32Ptr(10), uInt32Ptr(11), uInt32Ptr(10)},
+		{uInt32Ptr(11), uInt32Ptr(10), uInt32Ptr(10)},
+		{uInt32Ptr(11), uInt32Ptr(11), uInt32Ptr(11)},
+		{nil, nil, nil},
+
+		{uInt32Ptr(math.MaxInt32), uInt32Ptr(math.MaxInt32), uInt32Ptr(math.MaxInt32)},
+		{uInt32Ptr(math.MaxInt32), uInt32Ptr(math.MaxInt32 - 1), uInt32Ptr(math.MaxInt32 - 1)},
+		{uInt32Ptr(math.MaxInt32 - 1), uInt32Ptr(math.MaxInt32), uInt32Ptr(math.MaxInt32 - 1)},
+		{uInt32Ptr(math.MaxInt32 - 1), uInt32Ptr(math.MaxInt32 - 1), uInt32Ptr(math.MaxInt32 - 1)},
+		{nil, uInt32Ptr(math.MaxInt32 - 1), uInt32Ptr(math.MaxInt32 - 1)},
+		{uInt32Ptr(math.MaxInt32), nil, uInt32Ptr(math.MaxInt32)},
+	}
+
+	for c, test := range tests {
+		g, e := MinUint32Ptr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestMaxUint32Val(t *testing.T) {
+	tests := []struct{ a, b, c, e uint32 }{
+		{0, 0, 0, 0},
+		{0, 0, 1, 1},
+		{1, 1, 0, 1},
+
+		{10, 10, 10, 10},
+		{10, 10, 11, 11},
+		{11, 11, 10, 11},
+		{11, 11, 11, 11},
+
+		{math.MaxUint32, math.MaxUint32, math.MaxUint32, math.MaxUint32},
+		{math.MaxUint32, math.MaxUint32, math.MaxUint32 - 1, math.MaxUint32},
+		{math.MaxUint32 - 1, math.MaxUint32 - 1, math.MaxUint32, math.MaxUint32},
+		{math.MaxUint32 - 1, math.MaxUint32 - 1, math.MaxUint32 - 1, math.MaxUint32 - 1},
+	}
+
+	for i, test := range tests {
+		if g, e := MaxUint32Val(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := MaxUint32Val(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestMinUint32Val(t *testing.T) {
+	tests := []struct{ a, b, c, e uint32 }{
+		{0, 0, 0, 0},
+		{0, 0, 1, 0},
+		{1, 1, 0, 0},
+
+		{10, 10, 10, 10},
+		{10, 10, 11, 10},
+		{11, 11, 10, 10},
+		{11, 11, 11, 11},
+
+		{math.MaxUint32, math.MaxUint32, math.MaxUint32, math.MaxUint32},
+		{math.MaxUint32, math.MaxUint32, math.MaxUint32 - 1, math.MaxUint32 - 1},
+		{math.MaxUint32 - 1, math.MaxUint32 - 1, math.MaxUint32, math.MaxUint32 - 1},
+		{math.MaxUint32 - 1, math.MaxUint32 - 1, math.MaxUint32 - 1, math.MaxUint32 - 1},
+	}
+
+	for i, test := range tests {
+		if g, e := MinUint32Val(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := MinUint32Val(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestClampUint32(t *testing.T) {
+	tests := []struct{ v, lo, hi, e uint32 }{
+		{0, 0, 0, 0},
+		{5, 10, 20, 10},
+		{10, 10, 20, 10},
+		{15, 10, 20, 15},
+		{20, 10, 20, 20},
+		{25, 10, 20, 20},
+	}
+
+	for _, test := range tests {
+		if g, e := ClampUint32(test.v, test.lo, test.hi), test.e; g != e {
+			t.Fatal(test.v, test.lo, test.hi, g, e)
+		}
+	}
+}
+
 func TestMaxUint64(t *testing.T) {
 	tests := []struct{ a, b, e uint64 }{
 		{0, 0, 0},
@@ -3174,6 +4008,149 @@ func TestMinUint64(t *testing.T) {
 	for _, test := range tests {
 		if g, e := MinUint64(test.a, test.b), test.e; g != e {
 			t.Fatal(test.a, test.b, g, e)
+		}
+	}
+}
+
+func TestMaxUint64Ptr(t *testing.T) {
+	tests := []struct{ a, b, e *uint64 }{
+		{uInt64Ptr(0), uInt64Ptr(0), uInt64Ptr(0)},
+		{uInt64Ptr(0), uInt64Ptr(1), uInt64Ptr(1)},
+		{uInt64Ptr(1), uInt64Ptr(0), uInt64Ptr(1)},
+		{nil, uInt64Ptr(0), uInt64Ptr(0)},
+		{uInt64Ptr(1), nil, uInt64Ptr(1)},
+
+		{uInt64Ptr(10), uInt64Ptr(10), uInt64Ptr(10)},
+		{uInt64Ptr(10), uInt64Ptr(11), uInt64Ptr(11)},
+		{uInt64Ptr(11), uInt64Ptr(10), uInt64Ptr(11)},
+		{uInt64Ptr(11), uInt64Ptr(11), uInt64Ptr(11)},
+		{nil, nil, nil},
+
+		{uInt64Ptr(math.MaxUint64), uInt64Ptr(math.MaxUint64), uInt64Ptr(math.MaxUint64)},
+		{uInt64Ptr(math.MaxUint64), uInt64Ptr(math.MaxUint64 - 1), uInt64Ptr(math.MaxUint64)},
+		{uInt64Ptr(math.MaxUint64 - 1), uInt64Ptr(math.MaxUint64), uInt64Ptr(math.MaxUint64)},
+		{uInt64Ptr(math.MaxUint64 - 1), uInt64Ptr(math.MaxUint64 - 1), uInt64Ptr(math.MaxUint64 - 1)},
+		{nil, uInt64Ptr(math.MaxUint64 - 1), uInt64Ptr(math.MaxUint64 - 1)},
+		{uInt64Ptr(math.MaxUint64), nil, uInt64Ptr(math.MaxUint64)},
+	}
+
+	for c, test := range tests {
+		g, e := MaxUint64Ptr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestMinUint64Ptr(t *testing.T) {
+	tests := []struct{ a, b, e *uint64 }{
+		{uInt64Ptr(0), uInt64Ptr(0), uInt64Ptr(0)},
+		{uInt64Ptr(0), uInt64Ptr(1), uInt64Ptr(0)},
+		{uInt64Ptr(1), uInt64Ptr(0), uInt64Ptr(0)},
+		{nil, uInt64Ptr(0), uInt64Ptr(0)},
+		{uInt64Ptr(1), nil, uInt64Ptr(1)},
+
+		{uInt64Ptr(10), uInt64Ptr(10), uInt64Ptr(10)},
+		{uInt64Ptr(10), uInt64Ptr(11), uInt64Ptr(10)},
+		{uInt64Ptr(11), uInt64Ptr(10), uInt64Ptr(10)},
+		{uInt64Ptr(11), uInt64Ptr(11), uInt64Ptr(11)},
+		{nil, nil, nil},
+
+		{uInt64Ptr(math.MaxUint64), uInt64Ptr(math.MaxUint64), uInt64Ptr(math.MaxUint64)},
+		{uInt64Ptr(math.MaxUint64), uInt64Ptr(math.MaxUint64 - 1), uInt64Ptr(math.MaxUint64 - 1)},
+		{uInt64Ptr(math.MaxUint64 - 1), uInt64Ptr(math.MaxUint64), uInt64Ptr(math.MaxUint64 - 1)},
+		{uInt64Ptr(math.MaxUint64 - 1), uInt64Ptr(math.MaxUint64 - 1), uInt64Ptr(math.MaxUint64 - 1)},
+		{nil, uInt64Ptr(math.MaxUint64 - 1), uInt64Ptr(math.MaxUint64 - 1)},
+		{uInt64Ptr(math.MaxUint64), nil, uInt64Ptr(math.MaxUint64)},
+	}
+
+	for c, test := range tests {
+		g, e := MinUint64Ptr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestMaxUint64Val(t *testing.T) {
+	tests := []struct{ a, b, c, e uint64 }{
+		{0, 0, 0, 0},
+		{0, 0, 1, 1},
+		{1, 1, 0, 1},
+
+		{10, 10, 10, 10},
+		{10, 10, 11, 11},
+		{11, 11, 10, 11},
+		{11, 11, 11, 11},
+
+		{math.MaxUint64, math.MaxUint64, math.MaxUint64, math.MaxUint64},
+		{math.MaxUint64, math.MaxUint64, math.MaxUint64 - 1, math.MaxUint64},
+		{math.MaxUint64 - 1, math.MaxUint64 - 1, math.MaxUint64, math.MaxUint64},
+		{math.MaxUint64 - 1, math.MaxUint64 - 1, math.MaxUint64 - 1, math.MaxUint64 - 1},
+	}
+
+	for i, test := range tests {
+		if g, e := MaxUint64Val(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := MaxUint64Val(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestMinUint64Val(t *testing.T) {
+	tests := []struct{ a, b, c, e uint64 }{
+		{0, 0, 0, 0},
+		{0, 0, 1, 0},
+		{1, 1, 0, 0},
+
+		{10, 10, 10, 10},
+		{10, 10, 11, 10},
+		{11, 11, 10, 10},
+		{11, 11, 11, 11},
+
+		{math.MaxUint64, math.MaxUint64, math.MaxUint64, math.MaxUint64},
+		{math.MaxUint64, math.MaxUint64, math.MaxUint64 - 1, math.MaxUint64 - 1},
+		{math.MaxUint64 - 1, math.MaxUint64 - 1, math.MaxUint64, math.MaxUint64 - 1},
+		{math.MaxUint64 - 1, math.MaxUint64 - 1, math.MaxUint64 - 1, math.MaxUint64 - 1},
+	}
+
+	for i, test := range tests {
+		if g, e := MinUint64Val(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := MinUint64Val(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestClampUint64(t *testing.T) {
+	tests := []struct{ v, lo, hi, e uint64 }{
+		{0, 0, 0, 0},
+		{5, 10, 20, 10},
+		{10, 10, 20, 10},
+		{15, 10, 20, 15},
+		{20, 10, 20, 20},
+		{25, 10, 20, 20},
+	}
+
+	for _, test := range tests {
+		if g, e := ClampUint64(test.v, test.lo, test.hi), test.e; g != e {
+			t.Fatal(test.v, test.lo, test.hi, g, e)
 		}
 	}
 }
@@ -3238,6 +4215,161 @@ func TestMinInt8(t *testing.T) {
 	}
 }
 
+func TestMaxInt8Ptr(t *testing.T) {
+	tests := []struct{ a, b, e *int8 }{
+		{int8Ptr(0), int8Ptr(0), int8Ptr(0)},
+		{int8Ptr(0), int8Ptr(1), int8Ptr(1)},
+		{int8Ptr(1), int8Ptr(0), int8Ptr(1)},
+		{nil, int8Ptr(0), int8Ptr(0)},
+		{int8Ptr(1), nil, int8Ptr(1)},
+
+		{int8Ptr(10), int8Ptr(10), int8Ptr(10)},
+		{int8Ptr(10), int8Ptr(11), int8Ptr(11)},
+		{int8Ptr(11), int8Ptr(10), int8Ptr(11)},
+		{int8Ptr(11), int8Ptr(11), int8Ptr(11)},
+		{nil, nil, nil},
+
+		{int8Ptr(math.MaxInt8), int8Ptr(math.MaxInt8), int8Ptr(math.MaxInt8)},
+		{int8Ptr(math.MaxInt8), int8Ptr(math.MaxInt8 - 1), int8Ptr(math.MaxInt8)},
+		{int8Ptr(math.MaxInt8 - 1), int8Ptr(math.MaxInt8), int8Ptr(math.MaxInt8)},
+		{int8Ptr(math.MaxInt8 - 1), int8Ptr(math.MaxInt8 - 1), int8Ptr(math.MaxInt8 - 1)},
+		{nil, int8Ptr(math.MaxInt8 - 1), int8Ptr(math.MaxInt8 - 1)},
+		{int8Ptr(math.MaxInt8), nil, int8Ptr(math.MaxInt8)},
+	}
+
+	for c, test := range tests {
+		g, e := MaxInt8Ptr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestMinInt8Ptr(t *testing.T) {
+	tests := []struct{ a, b, e *int8 }{
+		{int8Ptr(0), int8Ptr(0), int8Ptr(0)},
+		{int8Ptr(0), int8Ptr(1), int8Ptr(0)},
+		{int8Ptr(1), int8Ptr(0), int8Ptr(0)},
+		{nil, int8Ptr(0), int8Ptr(0)},
+		{int8Ptr(1), nil, int8Ptr(1)},
+
+		{int8Ptr(10), int8Ptr(10), int8Ptr(10)},
+		{int8Ptr(10), int8Ptr(11), int8Ptr(10)},
+		{int8Ptr(11), int8Ptr(10), int8Ptr(10)},
+		{int8Ptr(11), int8Ptr(11), int8Ptr(11)},
+		{nil, nil, nil},
+
+		{int8Ptr(math.MaxInt8), int8Ptr(math.MaxInt8), int8Ptr(math.MaxInt8)},
+		{int8Ptr(math.MaxInt8), int8Ptr(math.MaxInt8 - 1), int8Ptr(math.MaxInt8 - 1)},
+		{int8Ptr(math.MaxInt8 - 1), int8Ptr(math.MaxInt8), int8Ptr(math.MaxInt8 - 1)},
+		{int8Ptr(math.MaxInt8 - 1), int8Ptr(math.MaxInt8 - 1), int8Ptr(math.MaxInt8 - 1)},
+		{nil, int8Ptr(math.MaxInt8 - 1), int8Ptr(math.MaxInt8 - 1)},
+		{int8Ptr(math.MaxInt8), nil, int8Ptr(math.MaxInt8)},
+	}
+
+	for c, test := range tests {
+		g, e := MinInt8Ptr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestMaxInt8Val(t *testing.T) {
+	tests := []struct{ a, b, c, e int8 }{
+		{math.MinInt8, math.MinInt8, math.MinInt8, math.MinInt8},
+		{math.MinInt8, math.MinInt8 + 1, math.MinInt8, math.MinInt8 + 1},
+		{math.MinInt8, math.MinInt8, math.MinInt8 + 1, math.MinInt8 + 1},
+
+		{-1, -1, -1, -1},
+		{-1, -1, 0, 0},
+		{-1, -1, 1, 1},
+
+		{0, 0, -1, 0},
+		{0, 0, 0, 0},
+		{0, 0, 1, 1},
+
+		{1, 1, -1, 1},
+		{1, 1, 0, 1},
+		{1, 1, 1, 1},
+
+		{math.MaxInt8, math.MaxInt8, math.MaxInt8, math.MaxInt8},
+		{math.MaxInt8 - 1, math.MaxInt8 - 1, math.MaxInt8, math.MaxInt8},
+		{math.MaxInt8, math.MaxInt8, math.MaxInt8 - 1, math.MaxInt8},
+	}
+
+	for i, test := range tests {
+		if g, e := MaxInt8Val(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := MaxInt8Val(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestMinInt8Val(t *testing.T) {
+	tests := []struct{ a, b, c, e int8 }{
+		{math.MinInt8, math.MinInt8, math.MinInt8, math.MinInt8},
+		{math.MinInt8, math.MinInt8 + 1, math.MinInt8, math.MinInt8},
+		{math.MinInt8, math.MinInt8, math.MinInt8 + 1, math.MinInt8},
+
+		{-1, -1, -1, -1},
+		{-1, -1, 0, -1},
+		{-1, -1, 1, -1},
+
+		{0, 0, -1, -1},
+		{0, 0, 0, 0},
+		{0, 0, 1, 0},
+
+		{1, 1, -1, -1},
+		{1, 1, 0, 0},
+		{1, 1, 1, 1},
+
+		{math.MaxInt8, math.MaxInt8, math.MaxInt8, math.MaxInt8},
+		{math.MaxInt8 - 1, math.MaxInt8 - 1, math.MaxInt8, math.MaxInt8 - 1},
+		{math.MaxInt8, math.MaxInt8, math.MaxInt8 - 1, math.MaxInt8 - 1},
+	}
+
+	for i, test := range tests {
+		if g, e := MinInt8Val(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := MinInt8Val(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestClampInt8(t *testing.T) {
+	tests := []struct{ v, lo, hi, e int8 }{
+		{0, 0, 0, 0},
+		{5, 10, 20, 10},
+		{10, 10, 20, 10},
+		{15, 10, 20, 15},
+		{20, 10, 20, 20},
+		{25, 10, 20, 20},
+	}
+
+	for _, test := range tests {
+		if g, e := ClampInt8(test.v, test.lo, test.hi), test.e; g != e {
+			t.Fatal(test.v, test.lo, test.hi, g, e)
+		}
+	}
+}
+
 func TestMaxInt16(t *testing.T) {
 	tests := []struct{ a, b, e int16 }{
 		{math.MinInt16, math.MinInt16, math.MinInt16},
@@ -3294,6 +4426,161 @@ func TestMinInt16(t *testing.T) {
 	for _, test := range tests {
 		if g, e := MinInt16(test.a, test.b), test.e; g != e {
 			t.Fatal(test.a, test.b, g, e)
+		}
+	}
+}
+
+func TestMaxInt16Ptr(t *testing.T) {
+	tests := []struct{ a, b, e *int16 }{
+		{int16Ptr(0), int16Ptr(0), int16Ptr(0)},
+		{int16Ptr(0), int16Ptr(1), int16Ptr(1)},
+		{int16Ptr(1), int16Ptr(0), int16Ptr(1)},
+		{nil, int16Ptr(0), int16Ptr(0)},
+		{int16Ptr(1), nil, int16Ptr(1)},
+
+		{int16Ptr(10), int16Ptr(10), int16Ptr(10)},
+		{int16Ptr(10), int16Ptr(11), int16Ptr(11)},
+		{int16Ptr(11), int16Ptr(10), int16Ptr(11)},
+		{int16Ptr(11), int16Ptr(11), int16Ptr(11)},
+		{nil, nil, nil},
+
+		{int16Ptr(math.MaxInt8), int16Ptr(math.MaxInt8), int16Ptr(math.MaxInt8)},
+		{int16Ptr(math.MaxInt8), int16Ptr(math.MaxInt8 - 1), int16Ptr(math.MaxInt8)},
+		{int16Ptr(math.MaxInt8 - 1), int16Ptr(math.MaxInt8), int16Ptr(math.MaxInt8)},
+		{int16Ptr(math.MaxInt8 - 1), int16Ptr(math.MaxInt8 - 1), int16Ptr(math.MaxInt8 - 1)},
+		{nil, int16Ptr(math.MaxInt8 - 1), int16Ptr(math.MaxInt8 - 1)},
+		{int16Ptr(math.MaxInt8), nil, int16Ptr(math.MaxInt8)},
+	}
+
+	for c, test := range tests {
+		g, e := MaxInt16Ptr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestMinInt16Ptr(t *testing.T) {
+	tests := []struct{ a, b, e *int16 }{
+		{int16Ptr(0), int16Ptr(0), int16Ptr(0)},
+		{int16Ptr(0), int16Ptr(1), int16Ptr(0)},
+		{int16Ptr(1), int16Ptr(0), int16Ptr(0)},
+		{nil, int16Ptr(0), int16Ptr(0)},
+		{int16Ptr(1), nil, int16Ptr(1)},
+
+		{int16Ptr(10), int16Ptr(10), int16Ptr(10)},
+		{int16Ptr(10), int16Ptr(11), int16Ptr(10)},
+		{int16Ptr(11), int16Ptr(10), int16Ptr(10)},
+		{int16Ptr(11), int16Ptr(11), int16Ptr(11)},
+		{nil, nil, nil},
+
+		{int16Ptr(math.MaxInt8), int16Ptr(math.MaxInt8), int16Ptr(math.MaxInt8)},
+		{int16Ptr(math.MaxInt8), int16Ptr(math.MaxInt8 - 1), int16Ptr(math.MaxInt8 - 1)},
+		{int16Ptr(math.MaxInt8 - 1), int16Ptr(math.MaxInt8), int16Ptr(math.MaxInt8 - 1)},
+		{int16Ptr(math.MaxInt8 - 1), int16Ptr(math.MaxInt8 - 1), int16Ptr(math.MaxInt8 - 1)},
+		{nil, int16Ptr(math.MaxInt8 - 1), int16Ptr(math.MaxInt8 - 1)},
+		{int16Ptr(math.MaxInt8), nil, int16Ptr(math.MaxInt8)},
+	}
+
+	for c, test := range tests {
+		g, e := MinInt16Ptr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestMaxInt16Val(t *testing.T) {
+	tests := []struct{ a, b, c, e int16 }{
+		{math.MinInt16, math.MinInt16, math.MinInt16, math.MinInt16},
+		{math.MinInt16, math.MinInt16 + 1, math.MinInt16, math.MinInt16 + 1},
+		{math.MinInt16, math.MinInt16, math.MinInt16 + 1, math.MinInt16 + 1},
+
+		{-1, -1, -1, -1},
+		{-1, -1, 0, 0},
+		{-1, -1, 1, 1},
+
+		{0, 0, -1, 0},
+		{0, 0, 0, 0},
+		{0, 0, 1, 1},
+
+		{1, 1, -1, 1},
+		{1, 1, 0, 1},
+		{1, 1, 1, 1},
+
+		{math.MaxInt16, math.MaxInt16, math.MaxInt16, math.MaxInt16},
+		{math.MaxInt16 - 1, math.MaxInt16 - 1, math.MaxInt16, math.MaxInt16},
+		{math.MaxInt16, math.MaxInt16, math.MaxInt16 - 1, math.MaxInt16},
+	}
+
+	for i, test := range tests {
+		if g, e := MaxInt16Val(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := MaxInt16Val(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestMinInt16Val(t *testing.T) {
+	tests := []struct{ a, b, c, e int16 }{
+		{math.MinInt16, math.MinInt16, math.MinInt16, math.MinInt16},
+		{math.MinInt16, math.MinInt16 + 1, math.MinInt16, math.MinInt16},
+		{math.MinInt16, math.MinInt16, math.MinInt16 + 1, math.MinInt16},
+
+		{-1, -1, -1, -1},
+		{-1, -1, 0, -1},
+		{-1, -1, 1, -1},
+
+		{0, 0, -1, -1},
+		{0, 0, 0, 0},
+		{0, 0, 1, 0},
+
+		{1, 1, -1, -1},
+		{1, 1, 0, 0},
+		{1, 1, 1, 1},
+
+		{math.MaxInt16, math.MaxInt16, math.MaxInt16, math.MaxInt16},
+		{math.MaxInt16 - 1, math.MaxInt16 - 1, math.MaxInt16, math.MaxInt16 - 1},
+		{math.MaxInt16, math.MaxInt16, math.MaxInt16 - 1, math.MaxInt16 - 1},
+	}
+
+	for i, test := range tests {
+		if g, e := MinInt16Val(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := MinInt16Val(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestClampInt16(t *testing.T) {
+	tests := []struct{ v, lo, hi, e int16 }{
+		{0, 0, 0, 0},
+		{5, 10, 20, 10},
+		{10, 10, 20, 10},
+		{15, 10, 20, 15},
+		{20, 10, 20, 20},
+		{25, 10, 20, 20},
+	}
+
+	for _, test := range tests {
+		if g, e := ClampInt16(test.v, test.lo, test.hi), test.e; g != e {
+			t.Fatal(test.v, test.lo, test.hi, g, e)
 		}
 	}
 }
@@ -3358,6 +4645,161 @@ func TestMinInt32(t *testing.T) {
 	}
 }
 
+func TestMaxInt32Ptr(t *testing.T) {
+	tests := []struct{ a, b, e *int32 }{
+		{int32Ptr(0), int32Ptr(0), int32Ptr(0)},
+		{int32Ptr(0), int32Ptr(1), int32Ptr(1)},
+		{int32Ptr(1), int32Ptr(0), int32Ptr(1)},
+		{nil, int32Ptr(0), int32Ptr(0)},
+		{int32Ptr(1), nil, int32Ptr(1)},
+
+		{int32Ptr(10), int32Ptr(10), int32Ptr(10)},
+		{int32Ptr(10), int32Ptr(11), int32Ptr(11)},
+		{int32Ptr(11), int32Ptr(10), int32Ptr(11)},
+		{int32Ptr(11), int32Ptr(11), int32Ptr(11)},
+		{nil, nil, nil},
+
+		{int32Ptr(math.MaxInt32), int32Ptr(math.MaxInt32), int32Ptr(math.MaxInt32)},
+		{int32Ptr(math.MaxInt32), int32Ptr(math.MaxInt32 - 1), int32Ptr(math.MaxInt32)},
+		{int32Ptr(math.MaxInt32 - 1), int32Ptr(math.MaxInt32), int32Ptr(math.MaxInt32)},
+		{int32Ptr(math.MaxInt32 - 1), int32Ptr(math.MaxInt32 - 1), int32Ptr(math.MaxInt32 - 1)},
+		{nil, int32Ptr(math.MaxInt32 - 1), int32Ptr(math.MaxInt32 - 1)},
+		{int32Ptr(math.MaxInt32), nil, int32Ptr(math.MaxInt32)},
+	}
+
+	for c, test := range tests {
+		g, e := MaxInt32Ptr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestMinInt32Ptr(t *testing.T) {
+	tests := []struct{ a, b, e *int32 }{
+		{int32Ptr(0), int32Ptr(0), int32Ptr(0)},
+		{int32Ptr(0), int32Ptr(1), int32Ptr(0)},
+		{int32Ptr(1), int32Ptr(0), int32Ptr(0)},
+		{nil, int32Ptr(0), int32Ptr(0)},
+		{int32Ptr(1), nil, int32Ptr(1)},
+
+		{int32Ptr(10), int32Ptr(10), int32Ptr(10)},
+		{int32Ptr(10), int32Ptr(11), int32Ptr(10)},
+		{int32Ptr(11), int32Ptr(10), int32Ptr(10)},
+		{int32Ptr(11), int32Ptr(11), int32Ptr(11)},
+		{nil, nil, nil},
+
+		{int32Ptr(math.MaxInt32), int32Ptr(math.MaxInt32), int32Ptr(math.MaxInt32)},
+		{int32Ptr(math.MaxInt32), int32Ptr(math.MaxInt32 - 1), int32Ptr(math.MaxInt32 - 1)},
+		{int32Ptr(math.MaxInt32 - 1), int32Ptr(math.MaxInt32), int32Ptr(math.MaxInt32 - 1)},
+		{int32Ptr(math.MaxInt32 - 1), int32Ptr(math.MaxInt32 - 1), int32Ptr(math.MaxInt32 - 1)},
+		{nil, int32Ptr(math.MaxInt32 - 1), int32Ptr(math.MaxInt32 - 1)},
+		{int32Ptr(math.MaxInt32), nil, int32Ptr(math.MaxInt32)},
+	}
+
+	for c, test := range tests {
+		g, e := MinInt32Ptr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestMaxInt32Val(t *testing.T) {
+	tests := []struct{ a, b, c, e int32 }{
+		{math.MinInt32, math.MinInt32, math.MinInt32, math.MinInt32},
+		{math.MinInt32, math.MinInt32 + 1, math.MinInt32, math.MinInt32 + 1},
+		{math.MinInt32, math.MinInt32, math.MinInt32 + 1, math.MinInt32 + 1},
+
+		{-1, -1, -1, -1},
+		{-1, -1, 0, 0},
+		{-1, -1, 1, 1},
+
+		{0, 0, -1, 0},
+		{0, 0, 0, 0},
+		{0, 0, 1, 1},
+
+		{1, 1, -1, 1},
+		{1, 1, 0, 1},
+		{1, 1, 1, 1},
+
+		{math.MaxInt32, math.MaxInt32, math.MaxInt32, math.MaxInt32},
+		{math.MaxInt32 - 1, math.MaxInt32 - 1, math.MaxInt32, math.MaxInt32},
+		{math.MaxInt32, math.MaxInt32, math.MaxInt32 - 1, math.MaxInt32},
+	}
+
+	for i, test := range tests {
+		if g, e := MaxInt32Val(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := MaxInt32Val(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestMinInt32Val(t *testing.T) {
+	tests := []struct{ a, b, c, e int32 }{
+		{math.MinInt32, math.MinInt32, math.MinInt32, math.MinInt32},
+		{math.MinInt32, math.MinInt32 + 1, math.MinInt32, math.MinInt32},
+		{math.MinInt32, math.MinInt32, math.MinInt32 + 1, math.MinInt32},
+
+		{-1, -1, -1, -1},
+		{-1, -1, 0, -1},
+		{-1, -1, 1, -1},
+
+		{0, 0, -1, -1},
+		{0, 0, 0, 0},
+		{0, 0, 1, 0},
+
+		{1, 1, -1, -1},
+		{1, 1, 0, 0},
+		{1, 1, 1, 1},
+
+		{math.MaxInt32, math.MaxInt32, math.MaxInt32, math.MaxInt32},
+		{math.MaxInt32 - 1, math.MaxInt32 - 1, math.MaxInt32, math.MaxInt32 - 1},
+		{math.MaxInt32, math.MaxInt32, math.MaxInt32 - 1, math.MaxInt32 - 1},
+	}
+
+	for i, test := range tests {
+		if g, e := MinInt32Val(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := MinInt32Val(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestClampInt32(t *testing.T) {
+	tests := []struct{ v, lo, hi, e int32 }{
+		{0, 0, 0, 0},
+		{5, 10, 20, 10},
+		{10, 10, 20, 10},
+		{15, 10, 20, 15},
+		{20, 10, 20, 20},
+		{25, 10, 20, 20},
+	}
+
+	for _, test := range tests {
+		if g, e := ClampInt32(test.v, test.lo, test.hi), test.e; g != e {
+			t.Fatal(test.v, test.lo, test.hi, g, e)
+		}
+	}
+}
+
 func TestMaxInt64(t *testing.T) {
 	tests := []struct{ a, b, e int64 }{
 		{math.MinInt64, math.MinInt64, math.MinInt64},
@@ -3414,6 +4856,161 @@ func TestMinInt64(t *testing.T) {
 	for _, test := range tests {
 		if g, e := MinInt64(test.a, test.b), test.e; g != e {
 			t.Fatal(test.a, test.b, g, e)
+		}
+	}
+}
+
+func TestMaxInt64Ptr(t *testing.T) {
+	tests := []struct{ a, b, e *int64 }{
+		{int64Ptr(0), int64Ptr(0), int64Ptr(0)},
+		{int64Ptr(0), int64Ptr(1), int64Ptr(1)},
+		{int64Ptr(1), int64Ptr(0), int64Ptr(1)},
+		{nil, int64Ptr(0), int64Ptr(0)},
+		{int64Ptr(1), nil, int64Ptr(1)},
+
+		{int64Ptr(10), int64Ptr(10), int64Ptr(10)},
+		{int64Ptr(10), int64Ptr(11), int64Ptr(11)},
+		{int64Ptr(11), int64Ptr(10), int64Ptr(11)},
+		{int64Ptr(11), int64Ptr(11), int64Ptr(11)},
+		{nil, nil, nil},
+
+		{int64Ptr(math.MaxInt64), int64Ptr(math.MaxInt64), int64Ptr(math.MaxInt64)},
+		{int64Ptr(math.MaxInt64), int64Ptr(math.MaxInt64 - 1), int64Ptr(math.MaxInt64)},
+		{int64Ptr(math.MaxInt64 - 1), int64Ptr(math.MaxInt64), int64Ptr(math.MaxInt64)},
+		{int64Ptr(math.MaxInt64 - 1), int64Ptr(math.MaxInt64 - 1), int64Ptr(math.MaxInt64 - 1)},
+		{nil, int64Ptr(math.MaxInt64 - 1), int64Ptr(math.MaxInt64 - 1)},
+		{int64Ptr(math.MaxInt64), nil, int64Ptr(math.MaxInt64)},
+	}
+
+	for c, test := range tests {
+		g, e := MaxInt64Ptr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestMinInt64Ptr(t *testing.T) {
+	tests := []struct{ a, b, e *int64 }{
+		{int64Ptr(0), int64Ptr(0), int64Ptr(0)},
+		{int64Ptr(0), int64Ptr(1), int64Ptr(0)},
+		{int64Ptr(1), int64Ptr(0), int64Ptr(0)},
+		{nil, int64Ptr(0), int64Ptr(0)},
+		{int64Ptr(1), nil, int64Ptr(1)},
+
+		{int64Ptr(10), int64Ptr(10), int64Ptr(10)},
+		{int64Ptr(10), int64Ptr(11), int64Ptr(10)},
+		{int64Ptr(11), int64Ptr(10), int64Ptr(10)},
+		{int64Ptr(11), int64Ptr(11), int64Ptr(11)},
+		{nil, nil, nil},
+
+		{int64Ptr(math.MaxInt64), int64Ptr(math.MaxInt64), int64Ptr(math.MaxInt64)},
+		{int64Ptr(math.MaxInt64), int64Ptr(math.MaxInt64 - 1), int64Ptr(math.MaxInt64 - 1)},
+		{int64Ptr(math.MaxInt64 - 1), int64Ptr(math.MaxInt64), int64Ptr(math.MaxInt64 - 1)},
+		{int64Ptr(math.MaxInt64 - 1), int64Ptr(math.MaxInt64 - 1), int64Ptr(math.MaxInt64 - 1)},
+		{nil, int64Ptr(math.MaxInt64 - 1), int64Ptr(math.MaxInt64 - 1)},
+		{int64Ptr(math.MaxInt64), nil, int64Ptr(math.MaxInt64)},
+	}
+
+	for c, test := range tests {
+		g, e := MinInt64Ptr(test.a, test.b), test.e
+		if e != nil {
+			if *g != *e {
+				t.Fatal(*test.a, *test.b, *g, *e, c)
+			}
+		} else {
+			if e != g {
+				t.Fatal(*test.a, *test.b, *g, e, c)
+			}
+		}
+	}
+}
+
+func TestMaxInt64Val(t *testing.T) {
+	tests := []struct{ a, b, c, e int64 }{
+		{math.MinInt64, math.MinInt64, math.MinInt64, math.MinInt64},
+		{math.MinInt64, math.MinInt64 + 1, math.MinInt64, math.MinInt64 + 1},
+		{math.MinInt64, math.MinInt64, math.MinInt64 + 1, math.MinInt64 + 1},
+
+		{-1, -1, -1, -1},
+		{-1, -1, 0, 0},
+		{-1, -1, 1, 1},
+
+		{0, 0, -1, 0},
+		{0, 0, 0, 0},
+		{0, 0, 1, 1},
+
+		{1, 1, -1, 1},
+		{1, 1, 0, 1},
+		{1, 1, 1, 1},
+
+		{math.MaxInt64, math.MaxInt64, math.MaxInt64, math.MaxInt64},
+		{math.MaxInt64 - 1, math.MaxInt64 - 1, math.MaxInt64, math.MaxInt64},
+		{math.MaxInt64, math.MaxInt64, math.MaxInt64 - 1, math.MaxInt64},
+	}
+
+	for i, test := range tests {
+		if g, e := MaxInt64Val(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := MaxInt64Val(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestMinInt64Val(t *testing.T) {
+	tests := []struct{ a, b, c, e int64 }{
+		{math.MinInt64, math.MinInt64, math.MinInt64, math.MinInt64},
+		{math.MinInt64, math.MinInt64 + 1, math.MinInt64, math.MinInt64},
+		{math.MinInt64, math.MinInt64, math.MinInt64 + 1, math.MinInt64},
+
+		{-1, -1, -1, -1},
+		{-1, -1, 0, -1},
+		{-1, -1, 1, -1},
+
+		{0, 0, -1, -1},
+		{0, 0, 0, 0},
+		{0, 0, 1, 0},
+
+		{1, 1, -1, -1},
+		{1, 1, 0, 0},
+		{1, 1, 1, 1},
+
+		{math.MaxInt64, math.MaxInt64, math.MaxInt64, math.MaxInt64},
+		{math.MaxInt64 - 1, math.MaxInt64 - 1, math.MaxInt64, math.MaxInt64 - 1},
+		{math.MaxInt64, math.MaxInt64, math.MaxInt64 - 1, math.MaxInt64 - 1},
+	}
+
+	for i, test := range tests {
+		if g, e := MinInt64Val(test.a, test.b, test.c), test.e; g != e {
+			t.Fatal(i, test.a, test.b, test.c, g, e)
+		}
+		if g, e := MinInt64Val(test.a), test.a; g != e {
+			t.Fatal(i, test.a, g, e)
+		}
+	}
+}
+
+func TestClampInt64(t *testing.T) {
+	tests := []struct{ v, lo, hi, e int64 }{
+		{0, 0, 0, 0},
+		{5, 10, 20, 10},
+		{10, 10, 20, 10},
+		{15, 10, 20, 15},
+		{20, 10, 20, 20},
+		{25, 10, 20, 20},
+	}
+
+	for _, test := range tests {
+		if g, e := ClampInt64(test.v, test.lo, test.hi), test.e; g != e {
+			t.Fatal(test.v, test.lo, test.hi, g, e)
 		}
 	}
 }
@@ -3575,6 +5172,51 @@ func poly(a ...int) string {
 	return b.String()
 }
 
+func polyBig(a ...*big.Int) string {
+	var b bytes.Buffer
+	for i, v := range a {
+		p := len(a) - i - 1
+		if v.Sign() == 0 && p != 0 {
+			continue
+		}
+
+		if v.Sign() == 0 && p == 0 && b.Len() != 0 {
+			continue
+		}
+
+		if av := bigAbs(v); av.Cmp(_1) == 0 && p != 0 {
+			if b.Len() != 0 {
+				if v.Cmp(_1) == 0 {
+					b.WriteByte('+')
+				} else {
+					b.WriteByte('-')
+				}
+			} else if v.Cmp(_m1) == 0 {
+				b.WriteByte('-')
+			}
+		} else {
+			switch {
+			case b.Len() == 0:
+				fmt.Fprintf(&b, "%d", v)
+			default:
+				fmt.Fprintf(&b, "%+d", v)
+			}
+		}
+
+		if p == 0 {
+			continue
+		}
+
+		if p == 1 {
+			fmt.Fprintf(&b, "x")
+			continue
+		}
+
+		fmt.Fprintf(&b, "x^%d", p)
+	}
+	return b.String()
+}
+
 func polyK(k int) string {
 	switch {
 	case k == -1:
@@ -3583,6 +5225,150 @@ func polyK(k int) string {
 		return ""
 	default:
 		return fmt.Sprint(k)
+	}
+}
+
+func polyKBig(k *big.Int) string {
+	switch {
+	case k.Cmp(_m1) == 0:
+		return "-"
+	case k.Cmp(_1) == 0:
+		return ""
+	default:
+		return fmt.Sprint(k)
+	}
+}
+
+func TestQuadPolyDiscriminantBig(t *testing.T) {
+	for i, test := range []struct {
+		a, b, c, ds, d int
+	}{
+		{-1, -5, 6, 49, 7},
+		{-1, 5, 6, 49, 7},
+		{1, -5, -6, 49, 7},
+		{1, 5, -6, 49, 7},
+		{1, 5, 6, 1, 1},
+		{2, 3, 5, -31, -1},
+		{2, 7, 3, 25, 5},
+		{3, 8, 5, 4, 2},
+		{3, 9, 5, 21, -1},
+		{4, 5, 1, 9, 3},
+		{5, 3, 2, -31, -1},
+	} {
+		ds, d := QuadPolyDiscriminantBig(big.NewInt(int64(test.a)), big.NewInt(int64(test.b)), big.NewInt(int64(test.c)))
+		if g, e := ds, big.NewInt(int64(test.ds)); g.Cmp(e) != 0 {
+			t.Fatal(i, g, e)
+		}
+
+		switch {
+		case test.d < 0:
+			if d != nil {
+				t.Fatal(i, d, nil)
+			}
+		default:
+			if g, e := d, big.NewInt(int64(test.d)); g.Cmp(e) != 0 {
+				t.Fatal(i, g, e)
+			}
+		}
+	}
+}
+
+func testQuadPolyFactorsBig(t *testing.T, p1, q1, p2, q2, k *big.Int, cases int) {
+	a := bigMul(k, bigMul(p1, p2))
+	b := bigMul(k, bigAdd(bigMul(p1, q2), bigMul(q1, p2)))
+	c := bigMul(k, bigMul(q1, q2))
+	con, f := QuadPolyFactorsBig(a, b, c)
+
+	switch {
+	case a.Sign() == 0:
+		if g, e := len(f), 1; g != e {
+			t.Fatalf(
+				"%d: %s(%s)(%s) = %s -> got %v factors, expected %v",
+				cases, polyKBig(k), polyBig(p1, q1), polyBig(p2, q2), polyBig(a, b, c),
+				g, e,
+			)
+		}
+
+		a2 := big.NewInt(0)
+		b2 := bigMul(con, f[0].P)
+		c2 := bigMul(con, f[0].Q)
+		if a.Cmp(a2) != 0 || b.Cmp(b2) != 0 || c.Cmp(c2) != 0 {
+			t.Fatalf(
+				"%d: %s(%s)(%s) = %s -> %s(%s) = %s",
+				cases, polyKBig(k), polyBig(p1, q1), polyBig(p2, q2), polyBig(a, b, c),
+				polyKBig(con), polyBig(f[0].P, f[0].Q), polyBig(a2, b2, c2),
+			)
+		}
+
+		t.Logf(
+			"%d: %s(%s)(%s) = %s -> %s(%s) = %s",
+			cases, polyKBig(k), polyBig(p1, q1), polyBig(p2, q2), polyBig(a, b, c),
+			polyKBig(con), polyBig(f[0].P, f[0].Q), polyBig(a2, b2, c2),
+		)
+	default:
+		if g, e := len(f), 2; g != e {
+			t.Fatalf(
+				"%d: %s(%s)(%s) = %s -> got %v factors, expected %v",
+				cases, polyKBig(k), polyBig(p1, q1), polyBig(p2, q2), polyBig(a, b, c),
+				g, e,
+			)
+		}
+
+		a2 := bigMul(con, bigMul(f[0].P, f[1].P))
+		b2 := bigMul(con, bigAdd(bigMul(f[0].P, f[1].Q), bigMul(f[0].Q, f[1].P)))
+		c2 := bigMul(con, bigMul(f[0].Q, f[1].Q))
+		if a.Cmp(a2) != 0 || b.Cmp(b2) != 0 || c.Cmp(c2) != 0 {
+			t.Fatalf(
+				"%d: %s(%s)(%s) = %s -> %s(%s)(%s) = %s",
+				cases, polyKBig(k), polyBig(p1, q1), polyBig(p2, q2), polyBig(a, b, c),
+				polyKBig(con), polyBig(f[0].P, f[0].Q), polyBig(f[1].P, f[1].Q), polyBig(a2, b2, c2),
+			)
+		}
+
+		t.Logf(
+			"%d: %s(%s)(%s) = %s -> %s(%s)(%s) = %s",
+			cases, polyKBig(k), polyBig(p1, q1), polyBig(p2, q2), polyBig(a, b, c),
+			polyKBig(con), polyBig(f[0].P, f[0].Q), polyBig(f[1].P, f[1].Q), polyBig(a2, b2, c2),
+		)
+	}
+}
+
+func TestQuadPolyFactorsBig(t *testing.T) {
+	cases := 0
+
+	const N = 1e4
+	rng := rand.New(rand.NewSource(42))
+	for i := 0; i < N; i++ {
+		p1 := big.NewInt(rng.Int63())
+		q1 := big.NewInt(rng.Int63())
+		p2 := big.NewInt(rng.Int63())
+		q2 := big.NewInt(rng.Int63())
+		k := big.NewInt(rng.Int63())
+		testQuadPolyFactorsBig(t, p1, q1, p2, q2, k, cases)
+		cases++
+	}
+
+	cons := []int{-1, 1}
+	const lim = 7
+	for p1 := -lim; p1 <= lim; p1++ {
+		for q1 := -lim; q1 <= lim; q1++ {
+			for p2 := -lim; p2 <= lim; p2++ {
+				for q2 := -lim; q2 <= lim; q2++ {
+					for _, k := range cons {
+						testQuadPolyFactorsBig(
+							t,
+							big.NewInt(int64(p1)),
+							big.NewInt(int64(q1)),
+							big.NewInt(int64(p2)),
+							big.NewInt(int64(q2)),
+							big.NewInt(int64(k)),
+							cases,
+						)
+						cases++
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -3669,7 +5455,6 @@ func testQuadPolyFactors(t *testing.T, p1, q1, p2, q2, k, cases int) {
 		b2 := con * (f[0].P*f[1].Q + f[0].Q*f[1].P)
 		c2 := con * f[0].Q * f[1].Q
 		if a != a2 || b != b2 || c != c2 {
-			dbg("", con, f)
 			t.Fatalf(
 				"%d: %s(%s)(%s) = %s -> %s(%s)(%s) = %s",
 				cases, polyK(k), poly(p1, q1), poly(p2, q2), poly(a, b, c),

@@ -213,6 +213,10 @@ func (t *table) checkConstraintsAndDefaults(ctx *execCtx, row []interface{}, m m
 
 		// 2.
 		for i, c := range cols {
+			if i >= len(t.defaults) {
+				break
+			}
+
 			val := row[c.index]
 			expr := t.defaults[i]
 			if val != nil || expr == nil {
@@ -239,6 +243,10 @@ func (t *table) checkConstraintsAndDefaults(ctx *execCtx, row []interface{}, m m
 
 		// 4.
 		for i, c := range cols {
+			if i >= len(t.constraints) {
+				break
+			}
+
 			constraint := t.constraints[i]
 			if constraint == nil {
 				continue
@@ -829,10 +837,6 @@ func newRoot(store storage) (r *root, err error) {
 			tables: map[string]*table{},
 		}, nil
 	case 1: // existing DB, load tables
-		if len(data) != 1 {
-			return nil, fmt.Errorf("corrupted DB: root is an %d-scalar", len(data))
-		}
-
 		p, ok := data[0].(int64)
 		if !ok {
 			return nil, fmt.Errorf("corrupted DB: root head has type %T", data[0])
