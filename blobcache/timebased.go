@@ -13,7 +13,7 @@ import (
 
 // A TimeBased cache will keep items for a fixed length of time after their
 // last access. If they are accessed again in that period of time, their
-// eperiation clock is reset. Items whose experiation clock expires will be
+// expiration clock is reset. Items whose expiration clock expires will be
 // removed from the cache.
 //
 // The total amount of storage used by this cache will vary over time, and may
@@ -25,12 +25,13 @@ type TimeBased struct {
 	// length of time to keep accessed items around
 	ttl time.Duration
 
-	// close this chanel to cancel the background goroutine
+	// close this channel to cancel the background goroutine
 	done chan struct{}
 
 	m sync.RWMutex // protects everything to the --- below
 
-	// total size in bytes used by the cache. If 0 then we have not caluclated the total size of the cache yet.
+	// total size in bytes used by the cache. If 0 then we have not calculated
+	// the total size of the cache yet.
 	size int64
 
 	// cache items hashed by key
@@ -105,7 +106,7 @@ func (te *TimeBased) Get(key string) (store.ReadAtCloser, int64, error) {
 	te.items[key] = item
 	rac, size, err := te.s.Open(key)
 	if err != nil {
-		// something happened getting the item. assume it is bad and just remove
+		// Something happened getting the item. Assume it is bad and just remove
 		// it from our list
 		te.delete(key)
 	}
@@ -119,7 +120,7 @@ func (te *TimeBased) Get(key string) (store.ReadAtCloser, int64, error) {
 func (te *TimeBased) Put(key string) (io.WriteCloser, error) {
 	te.m.Lock()
 	_, exists := te.pending[key]
-	te.pending[key] = struct{}{} // dosn't hurt since we already know exists
+	te.pending[key] = struct{}{} // doesn't hurt since we already know exists
 	te.m.Unlock()
 	if exists {
 		return nil, ErrPutPending
@@ -213,8 +214,9 @@ func (te *TimeBased) background() {
 	te.readIndexFile()
 	te.scanstore()
 
-	// duration is either 1/4 of the ttl or once a day, whichever is shorter
-	// these amounts are arbitrary. feel free to adjust
+	// Figure out how often to check for expired keys and save the index file.
+	// Duration is either 1/4 of the TTL or once a day, whichever is shorter.
+	// These amounts are arbitrary, feel free to adjust.
 	d := te.ttl / 4
 	if d > 24*time.Hour {
 		d = 24 * time.Hour
@@ -238,9 +240,9 @@ func (te *TimeBased) background() {
 // time.
 func (te *TimeBased) expireKeys() {
 	// The expireList is kept so we do not need to scan every item in the cache
-	// to figure out what needs to be removed. However, since items in list are not
-	// updated after being added, their expire times may have changed.
-	// We only need to check items that the list think are expired since item
+	// to figure out what needs to be removed. However, since items in list are
+	// not updated after being added, their expire times may have changed. We
+	// only need to check items that the list thinks are expired since item
 	// expire times only move forward in time (hopefully!).
 	te.expireM.Lock()
 	defer te.expireM.Unlock()
@@ -258,6 +260,7 @@ func (te *TimeBased) expireKeys() {
 		if ok {
 			if item.Expires.After(now) {
 				// item's expire time has been updated, add to the end of list
+				// it will be sorted into the correct position next time.
 				te.expireList = append(te.expireList, item)
 			} else {
 				te.delete(item.Key)
@@ -333,7 +336,7 @@ func (te *TimeBased) scanstore() {
 }
 
 // Scan will scan the backing store for items and also try to load previous
-// expire times from a cache file.
+// expire times from a cache file. An updated index file is saved.
 func (te *TimeBased) Scan() {
 	te.readIndexFile()
 	te.scanstore()
