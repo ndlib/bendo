@@ -28,8 +28,10 @@ type T interface {
 	Put(key string) (io.WriteCloser, error)
 	// Remove an entry from the cache
 	Delete(key string) error
-	// The maximum size of the cache
+	// The amount currently stored in the cache
 	Size() int64
+	// The maximum size of the cache in bytes. (0 if there is no max size)
+	MaxSize() int64
 }
 
 // A StoreLRU implements a cache using the least recently used (LRU) eviction
@@ -176,6 +178,21 @@ func (t *StoreLRU) unpending(key string) {
 	delete(t.pending, key)
 }
 
+// discard handles unsuccessful writes on a new entry
+func (t *StoreLRU) discard(w *writer) {
+	// TODO: handle errors better here?
+	t.Delete(w.key)
+	t.unpending(w.key)
+	t.reserve(-w.size) // give space back to cache
+}
+
+// save handles successful writes on new entries
+func (t *StoreLRU) save(w *writer) {
+	// add new item to LRU list and remove from pending list
+	t.linkEntry(entry{key: w.key, size: w.size})
+	t.unpending(w.key) // do AFTER adding the LRU entry!
+}
+
 // Delete removed an item from the cache. It is not an error to remove
 // a key which is not present.
 func (t *StoreLRU) Delete(key string) error {
@@ -194,10 +211,17 @@ func (t *StoreLRU) Delete(key string) error {
 	return err2
 }
 
-// Size returns the maximum size of this cache in bytes.
+// MaxSize returns the maximum size of this cache in bytes.
 // (Not the current size of the cache.)
-func (t *StoreLRU) Size() int64 {
+func (t *StoreLRU) MaxSize() int64 {
 	return t.maxSize
+}
+
+// Size returns the amount currently used by the cache in bytes.
+func (t *StoreLRU) Size() int64 {
+	t.m.RLock()
+	defer t.m.RUnlock()
+	return t.size
 }
 
 // linkEntry adds the given entry into our LRU list.

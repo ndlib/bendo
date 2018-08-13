@@ -7,7 +7,7 @@ import (
 	"github.com/ndlib/bendo/store"
 )
 
-func TestEviction(t *testing.T) {
+func TestEvictionLRU(t *testing.T) {
 	cache := NewLRU(store.NewMemory(), 100)
 	// "hello world" is 11 bytes. so 10 should cause a cache eviction
 	for i := 0; i < 10; i++ {
@@ -43,7 +43,7 @@ func TestEviction(t *testing.T) {
 	}
 }
 
-func TestTooLargeItem(t *testing.T) {
+func TestTooLargeItemLRU(t *testing.T) {
 	cache := NewLRU(store.NewMemory(), 100)
 	key := "qwerty"
 	w, err := cache.Put(key)
@@ -68,7 +68,7 @@ func TestTooLargeItem(t *testing.T) {
 	}
 }
 
-func TestScan(t *testing.T) {
+func TestScanLRU(t *testing.T) {
 	mem := store.NewMemory()
 
 	// populate the store
@@ -116,7 +116,7 @@ func TestScan(t *testing.T) {
 	}
 }
 
-func TestDelete(t *testing.T) {
+func TestDeleteLRU(t *testing.T) {
 	cache := NewLRU(store.NewMemory(), 100)
 	key := "1234"
 	w, err := cache.Put(key)
@@ -153,7 +153,7 @@ func TestDelete(t *testing.T) {
 
 }
 
-func TestStoreSync(t *testing.T) {
+func TestStoreSyncLRU(t *testing.T) {
 	// the cache keeps a LRU list in memory.
 	// That means it can get out of sync with the backing store
 	// in two ways: a file could exist that the LRU does not know about
@@ -185,7 +185,7 @@ func TestStoreSync(t *testing.T) {
 	// should be able to add the key
 	w, err = cache.Put("1234")
 	if err != nil {
-		t.Error("Error putting item: %v", err)
+		t.Errorf("Error putting item: %v", err)
 	}
 	w.Write([]byte("1234567890"))
 	// should get error while the first add is pending

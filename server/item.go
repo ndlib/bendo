@@ -108,7 +108,9 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 		// cache this item if it is not too large.
 		// doing 1/8th of the cache size is arbitrary.
 		// not sure what a good cutoff would be.
-		if length < s.Cache.Size()/8 {
+		// (remember maxsize == 0 means infinite)
+		cacheMaxSize := s.Cache.MaxSize()
+		if cacheMaxSize == 0 || length < cacheMaxSize/8 {
 			w.Header().Set("X-Cached", "0")
 			if r.Method == "GET" {
 				go s.copyBlobIntoCache(key, id, bid)
