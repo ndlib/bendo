@@ -40,12 +40,26 @@ Strings are enclosed inside double-quote characters.
 
 Set the directory to use for storing the download cache as well as the temporary storage place for uploaded files.
 If this is not given, everything is kept in memory.
+The path may refer to an S3 bucket using the notation `s3:/bucket/prefix` or
+`s3://hostname:port/bucket/prefix/to/use`. In this case the environment variables
+`AWS_ACCESS_KEY` and `AWS_SECRET_ACCESS_KEY` are used to supply the credentials
+needed to access that particular S3 bucket.
 
     CacheSize = <MEGABYTES>
 
 Set the maximum cache size, in megabytes (decimal, so passing "1" will set the cache size to 1,000,000 bytes, not 2**20 bytes).
 This size limit applies only to the download cache, not to the temporary storage used for file uploads, so
 the total space used for the cache directory may be larger than the size given.
+
+    CacheTimeout = "<DURATION>"
+
+If set, the time-based eviction strategy is used, and items in the cache are kept
+for the given length of time since the most recent access, and then removed.
+The time is reset if an item is accessed in the interim. Set the duration using
+the letters "s", "m", and "h" for seconds, minutes, and hours. For example, to
+set the timeout to be one day, use `"24h"`. For one month use `"720h"`, etc.
+Leave empty or set to zero to use the size-based cache eviction strategy.
+Defaults to 0.
 
     CowHost = <URL>
 
@@ -54,9 +68,7 @@ This bendo server will refer to the external one whenever an item is requested w
 the local store. Any writes will be saved locally and not on the external bendo.
 When this is enabled, background fixity checking on this bendo server is disabled (since
 otherwise, all the content on the remote bendo server will end up copied to this one).
-An example:
-
-        CowHost = "http://bendo.example.org:14000/"
+An example: `CowHost = "http://bendo.example.org:14000/"`
 
     CowToken = "<Token>"
 
