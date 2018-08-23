@@ -1,6 +1,9 @@
 StoreDir = "./bendo_storage"
 CacheDir = "./bendo_cache"
+# if CacheTimeout is given, then CacheSize is ignored
+# Only one cache-strategy is possible at a time
 CacheSize = 1000   # in MB
+CacheTimeout = "2160h"  # 90 days
 Mysql = "/test"
 CowHost = ""
 CowToken = ""

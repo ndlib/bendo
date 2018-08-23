@@ -33,14 +33,24 @@ It was designed to fit into a larger digital architecture.
 # Description of this repository
 
 This repository contains the code for the Bendo server, along with related command-line tools, tests, and documentation.
-The server is in `cmd/bendo`.
+The repository is organized as so:
+
+ * `cmd/bendo` is the top-level application
+ * `cmd/bclient` is a command line utility to interact with a bendo server
+ * `server` contains everything relating with the REST API and databases
+ * `blobcache` is the cache logic
+ * `transaction` for the code to create and update items
+ * `items` for reading and writing the stored bundle files
+ * `bagit`, `fragment`, `store` handle details with file format, storage, and organization
+ * `architecture` has some design documents and other guides
+ * `bclientapi` has supporting code for bclient
 
 # Getting Started
 
 To install bendo, first install golang. This is probably easy with a package manager, e.g. `brew install go` or `yum install golang`.
 
-Then install the bendo server by executing `go get github.com/ndlib/bendo/cmd/bendo`.
-In the directory of your hydra application, create a subdirectory to store files, for example `bendo`
+Get and compile the server by executing `go get github.com/ndlib/bendo/cmd/bendo`.
+In the directory of your samvera application create a subdirectory to store files, for example `bendo`
 
     mkdir -p bendo/uploads bendo/store
 
@@ -54,9 +64,9 @@ If you already had files in these directories Bendo will resync itself on them, 
 
 # Copy-On-Write
 
-It is possible for a bendo server to pull content from a second bendo server.
-In this way, the first bendo server will appear to have all the content the second one has, but any writes or changes to the data are kept
-only in the first one.
+It is possible for one bendo server to pull content from a second bendo server.
+In this way, the first bendo server will appear to have all the content the second one has,
+but any writes or changes to the data are kept only in the first one.
 The transfer of data happens in the background, and is not noticiable to any clients.
 The ability is only a proof-of-concept now, and entire bundle files are transferred.
 If the Copy-on-Write ability is useful, the code should be rewritten so that
@@ -69,6 +79,23 @@ If the second bendo server is protected by a token, also give an access token.
     CowToken = "1234567890"
 
 The second bendo server supports the copying by default and does not need to be configured in any way.
+
+# S3
+
+Bendo can use S3 as storage for the cache. To use it specisify the bucket name and an optional prefix
+to use by setting the CacheDir to be `s3:/bucket/prefix`.
+Put the credentials in the envrionment variables `AWS_ACCESS_KEY` and `AWS_SECRET_ACCESS_KEY`.
+
+You can also use it with a local instance of Minio. One way to run Minio is with docker, e.g.
+
+    docker run -p 9000:9000  minio/minio server /shared/data
+
+Then set the `CacheDir` to access this server by supplying a hostname:
+
+    CacheDir = s3://localhost:9000/bucket/prefix
+
+And set the envrionment variables to have the correct access key and secret access key.
+
 
 # Deployment in Production
 

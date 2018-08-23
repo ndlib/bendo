@@ -340,4 +340,5 @@ func (te *TimeBased) scanstore() {
 func (te *TimeBased) Scan() {
 	te.readIndexFile()
 	te.scanstore()
+	te.writeIndexFile() // make sure things we just scanned end up in the index
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/ndlib/bendo/items"
@@ -16,30 +17,32 @@ import (
 //Config info needed for Bendo
 
 type bendoConfig struct {
-	StoreDir   string
-	Tokenfile  string
-	CacheDir   string
-	CacheSize  int64
-	PortNumber string
-	PProfPort  string
-	Mysql      string
-	CowHost    string
-	CowToken   string
+	StoreDir     string
+	Tokenfile    string
+	CacheDir     string
+	CacheSize    int64
+	CacheTimeout string
+	PortNumber   string
+	PProfPort    string
+	Mysql        string
+	CowHost      string
+	CowToken     string
 }
 
 func main() {
 
 	// Start with the Default values
 	config := bendoConfig{
-		StoreDir:   ".",
-		Tokenfile:  "",
-		CacheDir:   "",
-		CacheSize:  100,
-		PortNumber: "14000",
-		PProfPort:  "14001",
-		Mysql:      "",
-		CowHost:    "",
-		CowToken:   "",
+		StoreDir:     ".",
+		Tokenfile:    "",
+		CacheDir:     "",
+		CacheSize:    100,
+		CacheTimeout: "",
+		PortNumber:   "14000",
+		PProfPort:    "14001",
+		Mysql:        "",
+		CowHost:      "",
+		CowToken:     "",
 	}
 
 	var configFile = flag.String("config-file", "", "Configuration File")
@@ -57,6 +60,7 @@ func main() {
 
 	log.Printf("Using storage dir %s\n", config.StoreDir)
 	log.Printf("Using cache dir %s\n", config.CacheDir)
+	log.Printf("Using cache timeout %s\n", config.CacheTimeout)
 	var validator server.TokenValidator
 	if config.Tokenfile != "" {
 		var err error
@@ -70,22 +74,21 @@ func main() {
 		log.Printf("No user token file specified")
 		validator = server.NobodyValidator{}
 	}
-	if config.CacheDir != "" {
-		os.MkdirAll(config.CacheDir, 0755)
-	}
 	var itemstore store.Store = store.NewFileSystem(config.StoreDir)
 	if config.CowHost != "" {
 		log.Printf("Using COW with target %s", config.CowHost)
 		itemstore = store.NewCOW(itemstore, config.CowHost, config.CowToken)
 	}
+	timeout, _ := time.ParseDuration(config.CacheTimeout)
 	var s = server.RESTServer{
-		Items:      items.New(itemstore),
-		Validator:  validator,
-		MySQL:      config.Mysql,
-		CacheDir:   config.CacheDir,
-		CacheSize:  config.CacheSize * 1000000,
-		PortNumber: config.PortNumber,
-		PProfPort:  config.PProfPort,
+		Items:        items.New(itemstore),
+		Validator:    validator,
+		MySQL:        config.Mysql,
+		CacheDir:     config.CacheDir,
+		CacheSize:    config.CacheSize * 1000000,
+		CacheTimeout: timeout,
+		PortNumber:   config.PortNumber,
+		PProfPort:    config.PProfPort,
 	}
 	if config.CowHost != "" {
 		// don't run fixity if we are using a copy-on-write.
