@@ -519,8 +519,13 @@ func qlschema3(tx migration.LimitedTx) error {
 		deleter string,
 		deletenote string
 	);
+<<<<<<< HEAD
 	CREATE INDEX IF NOT EXISTS blob_item ON blobs (item);
 	CREATE INDEX IF NOT EXISTS blob_itemid ON blobs (item, blobid);
+=======
+	CREATE INDEX IF NOT EXISTS blobitem ON blobs (item);
+	CREATE INDEX IF NOT EXISTS blobitemid ON blobs (item, blobid);
+>>>>>>> add version/slot/blob tables to ql driver
 	CREATE TABLE IF NOT EXISTS versions (
 		item string,
 		versionid int,
@@ -528,17 +533,28 @@ func qlschema3(tx migration.LimitedTx) error {
 		creator string,
 		note string
 	);
+<<<<<<< HEAD
 	CREATE INDEX IF NOT EXISTS version_item ON versions (item);
 	CREATE INDEX IF NOT EXISTS version_itemid ON versions(item, versionid);
+=======
+	CREATE INDEX IF NOT EXISTS versionitem ON versions (item);
+	CREATE INDEX IF NOT EXISTS versionitemid ON versions(item, versionid);
+>>>>>>> add version/slot/blob tables to ql driver
 	CREATE TABLE IF NOT EXISTS slots (
 		item string,
 		versionid int,
 		blobid int,
 		name string
 	);
+<<<<<<< HEAD
 	CREATE INDEX IF NOT EXISTS slot_item ON slots (item);
 	CREATE INDEX IF NOT EXISTS slot_itemversion ON slots (item, versionid);
 	CREATE INDEX IF NOT EXISTS slot_itemname ON slots (item, name);
+=======
+	CREATE INDEX IF NOT EXISTS slotitem ON slots (item);
+	CREATE INDEX IF NOT EXISTS slotitemversion ON slots (item, versionid);
+	CREATE INDEX IF NOT EXISTS slotitemname ON slots (item, name);
+>>>>>>> add version/slot/blob tables to ql driver
 	`
 
 	_, err := tx.Exec(s)
