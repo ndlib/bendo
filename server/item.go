@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/julienschmidt/httprouter"
 
@@ -21,16 +22,25 @@ var (
 	nCacheMiss = expvar.NewInt("cache.miss")
 )
 
+type blobDB interface {
+	FindBlob(item string, blobid int) (*items.Blob, error)
+	// version = 0 means use most recent version
+	FindBlobBySlot(item string, version int, slot string) (*items.Blob, error)
+	IndexItem(item *items.Item) error
+}
+
 // BlobHandler handles requests to GET /blob/:id/:bid
 func (s *RESTServer) BlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
-	bid, err := strconv.ParseInt(ps.ByName("bid"), 10, 0)
-	if err != nil || bid <= 0 {
+	binfo, err := s.resolveblob(id, "@blob/"+ps.ByName("bid"))
+	if binfo == nil || err != nil {
 		w.WriteHeader(404)
-		fmt.Fprintln(w, err)
+		if err != nil {
+			fmt.Fprintln(w, err)
+		}
 		return
 	}
-	s.getblob(w, r, id, items.BlobID(bid))
+	s.getblob(w, r, id, binfo)
 }
 
 // SlotHandler handles requests to GET /item/:id/*slot
@@ -40,9 +50,25 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 	// the star parameter in httprouter returns the leading slash
 	slot := ps.ByName("slot")[1:]
 
-	item, err := s.Items.Item(id)
+	// if we have the empty path, reroute to the item metadata handler
+	if slot == "" {
+		s.ItemHandler(w, r, ps)
+		return
+	}
 
-	if err != nil {
+	binfo, err := s.resolveblob(id, slot)
+	if binfo == nil && err == nil {
+		// see if the item needs to be loaded into the database?
+		var item *items.Item
+		item, err = s.Items.Item(id)
+		if item != nil {
+			// this needs to be revised. since it will reindex the item
+			// whether or not it is already in the database.
+			s.BlobDB.IndexItem(item)
+			binfo, err = s.resolveblob(id, slot)
+		}
+	}
+	if binfo == nil || err != nil {
 		// if item store use disabled, return 503
 		if err == items.ErrNoStore {
 			w.WriteHeader(503)
@@ -50,28 +76,58 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 		} else {
 			w.WriteHeader(404)
 		}
-		fmt.Fprintln(w, err.Error())
+		if err != nil {
+			fmt.Fprintln(w, err.Error())
+		}
 		return
 	}
-	// if we have the empty path, reroute to the item metadata handler
-	if slot == "" {
-		s.ItemHandler(w, r, ps)
-		return
-	}
-	// slot might have a "@nnn" version prefix
-	bid := item.BlobByExtendedSlot(slot)
-	if bid == 0 {
-		w.WriteHeader(404)
-		fmt.Fprintf(w, "Invalid Version")
-		return
-	}
-	w.Header().Set("X-Content-Sha256", hex.EncodeToString(item.Blobs[bid-1].SHA256))
-	w.Header().Set("Location", fmt.Sprintf("/item/%s/@blob/%d", id, bid))
-	s.getblob(w, r, id, items.BlobID(bid))
+	w.Header().Set("X-Content-Sha256", hex.EncodeToString(binfo.SHA256))
+	w.Header().Set("Location", fmt.Sprintf("/item/%s/@blob/%d", id, binfo.ID))
+	s.getblob(w, r, id, binfo)
 }
 
-func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, bid items.BlobID) {
-	key := fmt.Sprintf("%s+%04d", id, bid)
+// resolveblob tries to resolve the given item+slotpath identifier to a particular
+// blob, and returns information for that blob. If there is an error doing the
+// resoultion, the error is returned. If the item+slotpath did not resolve to a blob,
+// a nil is returned with no error.
+//
+// Unlike item.BlobByExtendedSlot, this only uses the database to do the
+// resolution. Returns nil if the slot couldn't be parsed or if the item/slot
+// is not indexed.
+func (s *RESTServer) resolveblob(itemID string, slot string) (*items.Blob, error) {
+	if slot == "" {
+		return nil, nil
+	}
+	// handle "@blob/nnn" path
+	if strings.HasPrefix(slot, "@blob/") {
+		// try to parse the blob number
+		b, err := strconv.ParseInt(slot[6:], 10, 0)
+		if err != nil || b <= 0 {
+			return nil, nil
+		}
+		return s.BlobDB.FindBlob(itemID, int(b))
+	}
+	if slot[0] != '@' {
+		// common case...no version
+		return s.BlobDB.FindBlobBySlot(itemID, 0, slot)
+	}
+	// handle "@nnn/path/to/file" paths
+	var err error
+	var vid int64
+	j := strings.Index(slot, "/")
+	if j >= 1 {
+		// start from index 1 to skip initial "@"
+		vid, err = strconv.ParseInt(slot[1:j], 10, 0)
+	}
+	// if j was invalid, then vid == 0, so following will catch it
+	if err != nil || vid <= 0 {
+		return nil, nil
+	}
+	return s.BlobDB.FindBlobBySlot(itemID, int(vid), slot[j+1:])
+}
+
+func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, binfo *items.Blob) {
+	key := fmt.Sprintf("%s+%04d", id, binfo.ID)
 	cacheContents, length, err := s.Cache.Get(key)
 	if err != nil {
 		w.WriteHeader(500)
@@ -98,13 +154,7 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 			return
 		}
 
-		blobinfo, err := s.Items.BlobInfo(id, bid)
-		if err != nil {
-			w.WriteHeader(404)
-			fmt.Fprintln(w, err)
-			return
-		}
-		length = blobinfo.Size
+		length = binfo.Size
 		// cache this item if it is not too large.
 		// doing 1/8th of the cache size is arbitrary.
 		// not sure what a good cutoff would be.
@@ -113,7 +163,7 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 		if cacheMaxSize == 0 || length < cacheMaxSize/8 {
 			w.Header().Set("X-Cached", "0")
 			if r.Method == "GET" {
-				go s.copyBlobIntoCache(key, id, bid)
+				go s.copyBlobIntoCache(key, id, binfo)
 			}
 		} else {
 			// item is too large to be cached
@@ -122,7 +172,7 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 
 		// If this is a GET, retrieve the blob- if it's a HEAD, don't
 		if r.Method == "GET" {
-			realContents, _, err := s.Items.Blob(id, bid)
+			realContents, _, err := s.Items.BlobByBlob(id, binfo)
 			if err != nil {
 				w.WriteHeader(404)
 				fmt.Fprintln(w, err)
@@ -132,7 +182,7 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 			src = realContents
 		}
 	}
-	w.Header().Set("ETag", fmt.Sprintf(`"%d"`, bid))
+	w.Header().Set("ETag", fmt.Sprintf(`"%d"`, binfo.ID))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", length))
 
 	// if it's a GET, copy the data into the response- if it's a HEAD, don't
@@ -141,13 +191,13 @@ func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, 
 	}
 	n, err := io.Copy(w, src)
 	if err != nil {
-		log.Printf("getblob (%s,%d) %d,%s", id, bid, n, err.Error())
+		log.Printf("getblob (%s,%d) %d,%s", id, binfo.ID, n, err.Error())
 	}
 }
 
 // copyBlobIntoCache copies the given blob of the item id into s's blobcache
 // under the given key.
-func (s *RESTServer) copyBlobIntoCache(key, id string, bid items.BlobID) {
+func (s *RESTServer) copyBlobIntoCache(key, id string, binfo *items.Blob) {
 	var keepcopy bool
 	// defer this first so it is the last to run at exit.
 	// because cw needs to be Closed() before the Delete().
@@ -164,15 +214,15 @@ func (s *RESTServer) copyBlobIntoCache(key, id string, bid items.BlobID) {
 		return
 	}
 	defer cw.Close()
-	cr, length, err := s.Items.Blob(id, bid)
+	cr, length, err := s.Items.BlobByBlob(id, binfo)
 	if err != nil {
-		log.Printf("cache items get %s: %s", key, err.Error())
+		log.Printf("cache items get %s: %s", key, err)
 		return
 	}
 	defer cr.Close()
 	n, err := io.Copy(cw, cr)
 	if err != nil {
-		log.Printf("cache copy %s: %s", key, err.Error())
+		log.Printf("cache copy %s: %s", key, err)
 		return
 	}
 	if n != length {

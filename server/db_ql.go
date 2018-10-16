@@ -33,6 +33,7 @@ var _ FixityDB = &QlCache{}
 var qlMigrations = []migration.Migrator{
 	qlschema1,
 	qlschema2,
+	qlschema3,
 }
 
 // adapt schema versioning for QL
@@ -123,6 +124,107 @@ func (qc *QlCache) Set(item string, thisItem *items.Item) {
 		_, err = performExec(qc.db, dbInsert, item, created, modified, size, value)
 		if err != nil {
 			log.Printf("Item Cache QL: %s", err.Error())
+		}
+	}
+	qc.indexVersionsAndSlots(item, thisItem)
+}
+
+func (qc *QlCache) FindBlob(item string, blobid int) (*items.Blob, error) {
+	const query = `
+		SELECT blobid, size, bundle, created, creator, MD5, SHA256, mimetype,
+			deleted, deleter, deletenote
+		FROM blobs
+		WHERE item == ?1 AND blobid == ?2
+		LIMIT 1`
+
+	var b items.Blob
+	err := qc.db.QueryRow(query, blobid).Scan(&b.ID, &b.Size, &b.Bundle, &b.SaveDate, &b.Creator, &b.MD5, &b.SHA256, &b.MimeType, &b.DeleteDate, &b.Deleter, &b.DeleteNote)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return b, err
+}
+
+func (qc *QlCache) getMaxVersion(item string) (int, error) {
+	const maxversion = `
+		SELECT max(versionid)
+		FROM versions
+		WHERE item == ?1
+		GROUP BY item`
+
+	var version int
+	err := qc.db.QueryRow(maxversion, item).Scan(&version)
+	if version == 0 || err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return version, nil
+}
+
+func (qc *QlCache) FindBlobBySlot(item string, version int, slot string) (*items.Blob, error) {
+	if version == 0 {
+		var err error
+		version, err = qc.getMaxVersion(item)
+		if err != nil || version == 0 {
+			return nil, err
+		}
+	}
+	// we do the resolution in two steps for simplicity
+	const query = `
+		SELECT blobid
+		FROM slots
+		WHERE item == ?1 AND versionid == ?2 AND name == ?3
+		LIMIT 1`
+	var bid int
+	err := qc.db.QueryRow(query, item, version, slot).Scan(&bid)
+	if bid == 0 || err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return qc.FindBlob(item, bid)
+}
+
+// indexVersionsAndSlots adds row entries for every version, slot, and blob
+// for the given item. It is ok if some pieces are already in the tables.
+func (qc *QlCache) indexVersionsAndSlots(item string, thisItem *items.Item) {
+	// first update blobs. This isn't perfect. While a blob record doesn't
+	// change often, it is possible. The Bundle id, the mime type or the deleted
+	// flags could be changed. Not sure how to handle that. It seems inefficient
+	// to check the records already in the table. maybe we need a way to track
+	// changes to blob records so we can only update those.
+
+	// figure out max blob in table
+	// then loop to add anything missing
+
+	// update the version and slot tables. These should not change once created,
+	// so we do not have the update problem as the blobs do
+
+	// figure out max version index
+	maxversion, err := qc.getMaxVersion(item)
+	if err != nil {
+		log.Println("index", err)
+		return
+	}
+
+	// then loop to add anything missing
+	for _, v := range thisItem.Versions {
+		if v.ID <= items.VersionID(maxversion) {
+			// this has already been indexed
+			continue
+		}
+		const insertver = `INSERT INTO versions (item, versionid, created, creator, note) VALUES (?1, ?2, ?3, ?4, ?5)`
+
+		_, err := qc.performExec(qc.db, insertver, item, v.ID, v.SaveDate, v.Creator, v.Note)
+
+		// now add all the slots
+		for slot, bid := range v.Slots {
+			const insertslot = `INSERT INTO slots (item, versionid, blobid, name) VALUES (?1, ?2, ?3, ?4)`
+			_, err := qc.performExec(qc.db, insertslot, item, v.ID, bid, slot)
 		}
 	}
 }
@@ -340,4 +442,47 @@ func qlschema2(tx migration.LimitedTx) error {
 	}
 
 	return execlist(tx, s)
+}
+
+func qlschema3(tx migration.LimitedTx) error {
+	// break out blobs, versions, and slots into their own tables
+	const s = `
+	CREATE TABLE IF NOT EXISTS blobs (
+		item string,
+		blobid int,
+		size int,
+		bundle int,
+		created time,
+		creator string,
+		MD5 blob,
+		SHA256 blob,
+		mimetype string,
+		deleted time,
+		deleter string,
+		deletenote string
+	);
+	CREATE INDEX IF NOT EXISTS blobitem ON blobs (item);
+	CREATE INDEX IF NOT EXISTS blobitemid ON blobs (item, blobid);
+	CREATE TABLE IF NOT EXISTS versions (
+		item string,
+		versionid int,
+		created time,
+		creator string,
+		note string
+	);
+	CREATE INDEX IF NOT EXISTS versionitem ON versions (item);
+	CREATE INDEX IF NOT EXISTS versionitemid ON versions(item, versionid);
+	CREATE TABLE IF NOT EXISTS slots (
+		item string,
+		versionid int,
+		blobid int,
+		name string
+	);
+	CREATE INDEX IF NOT EXISTS slotitem ON slots (item);
+	CREATE INDEX IF NOT EXISTS slotitemversion ON slots (item, versionid);
+	CREATE INDEX IF NOT EXISTS slotitemname ON slots (item, name);
+	`
+
+	_, err := tx.Exec(s)
+	return err
 }
