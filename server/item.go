@@ -26,13 +26,21 @@ type blobDB interface {
 	FindBlob(item string, blobid int) (*items.Blob, error)
 	// version = 0 means use most recent version
 	FindBlobBySlot(item string, version int, slot string) (*items.Blob, error)
-	IndexItem(item *items.Item) error
+	IndexItem(itemid string, item *items.Item) error
 }
 
 // BlobHandler handles requests to GET /blob/:id/:bid
 func (s *RESTServer) BlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
-	binfo, err := s.resolveblob(id, "@blob/"+ps.ByName("bid"))
+	slot := "@blob/" + ps.ByName("bid")
+	binfo, err := s.resolveblob(id, slot)
+	if binfo == nil || err != nil {
+		err = s.IndexItem(id)
+		if err != nil {
+			log.Println(err)
+		}
+		binfo, err = s.resolveblob(id, slot)
+	}
 	if binfo == nil || err != nil {
 		w.WriteHeader(404)
 		if err != nil {
@@ -58,15 +66,11 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 
 	binfo, err := s.resolveblob(id, slot)
 	if binfo == nil && err == nil {
-		// see if the item needs to be loaded into the database?
-		var item *items.Item
-		item, err = s.Items.Item(id)
-		if item != nil {
-			// this needs to be revised. since it will reindex the item
-			// whether or not it is already in the database.
-			s.BlobDB.IndexItem(item)
-			binfo, err = s.resolveblob(id, slot)
+		err = s.IndexItem(id)
+		if err != nil {
+			log.Println(err)
 		}
+		binfo, err = s.resolveblob(id, slot)
 	}
 	if binfo == nil || err != nil {
 		// if item store use disabled, return 503
@@ -84,6 +88,16 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 	w.Header().Set("X-Content-Sha256", hex.EncodeToString(binfo.SHA256))
 	w.Header().Set("Location", fmt.Sprintf("/item/%s/@blob/%d", id, binfo.ID))
 	s.getblob(w, r, id, binfo)
+}
+
+// IndexItem loads an item from the item store and indexes it into our blob database
+func (s *RESTServer) IndexItem(id string) error {
+	item, err := s.Items.Item(id)
+	if item != nil {
+		// this will reindex the item whether or not it is already in the database.
+		err = s.BlobDB.IndexItem(id, item)
+	}
+	return err
 }
 
 // resolveblob tries to resolve the given item+slotpath identifier to a particular

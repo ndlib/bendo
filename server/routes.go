@@ -194,7 +194,9 @@ func (s *RESTServer) Run() error {
 			path = "memory"
 		}
 		log.Printf("Using internal database at %s", path)
-		db, err = NewQlCache(path)
+		qdb, err2 := NewQlCache(path)
+		s.BlobDB = qdb // do here until MySQL supports blob stuff
+		db, err = qdb, err2
 	}
 	if db == nil || err != nil {
 		panic("problem setting up database")
