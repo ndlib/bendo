@@ -26,6 +26,7 @@ type MsqlCache struct {
 
 var _ items.ItemCache = &MsqlCache{}
 var _ FixityDB = &MsqlCache{}
+var _ blobDB = &MsqlCache{}
 
 // List of migrations to perform. Add new ones to the end.
 // DO NOT change the order of items already in this list.
@@ -33,6 +34,7 @@ var mysqlMigrations = []migration.Migrator{
 	mysqlschema1,
 	mysqlschema2,
 	mysqlschema3,
+	mysqlschema4,
 }
 
 // Adapt the schema versioning for MySQL
@@ -109,6 +111,176 @@ func (ms *MsqlCache) Set(id string, thisItem *items.Item) {
 		log.Printf("Item Cache: %s", err.Error())
 		return
 	}
+}
+
+func (ms *MsqlCache) FindBlob(item string, blobid int) (*items.Blob, error) {
+	const query = `
+		SELECT size, bundle, created, creator, MD5, SHA256, mimetype,
+			deleted, deleter, deletenote
+		FROM blobs
+		WHERE item = ? AND blobid = ?
+		LIMIT 1`
+
+	var b items.Blob
+	var dDeleted mysql.NullTime
+	var dSave mysql.NullTime
+	err := ms.db.QueryRow(query, item, blobid).Scan(&b.Size, &b.Bundle, &dSave, &b.Creator, &b.MD5, &b.SHA256, &b.MimeType, &dDeleted, &b.Deleter, &b.DeleteNote)
+	b.ID = items.BlobID(blobid)
+	if dSave.Valid {
+		b.SaveDate = dSave.Time
+	}
+	if dDeleted.Valid {
+		b.DeleteDate = dDeleted.Time
+	}
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return &b, err
+}
+
+func (ms *MsqlCache) getMaxBlob(item string) (int, error) {
+	const maxblob = `
+		SELECT max(blobid)
+		FROM blobs
+		WHERE item = ?`
+
+	var blob sql.NullInt64
+	err := ms.db.QueryRow(maxblob, item).Scan(&blob)
+	if err == sql.ErrNoRows {
+		err = nil
+	}
+	if blob.Valid {
+		return int(blob.Int64), err
+	}
+	return 0, err
+}
+
+func (ms *MsqlCache) getMaxVersion(item string) (int, error) {
+	const maxversion = `
+		SELECT max(versionid)
+		FROM versions
+		WHERE item = ?`
+
+	var version sql.NullInt64
+	err := ms.db.QueryRow(maxversion, item).Scan(&version)
+	if err == sql.ErrNoRows {
+		err = nil
+	}
+	if version.Valid {
+		return int(version.Int64), err
+	}
+	return 0, nil
+}
+
+func (ms *MsqlCache) FindBlobBySlot(item string, version int, slot string) (*items.Blob, error) {
+	if version == 0 {
+		var err error
+		version, err = ms.getMaxVersion(item)
+		if err != nil || version == 0 {
+			return nil, err
+		}
+	}
+	// we do the resolution in two steps for simplicity
+	const query = `
+		SELECT blobid
+		FROM slots
+		WHERE item = ? AND versionid = ? AND name = ?
+		LIMIT 1`
+	var bid int
+	err := ms.db.QueryRow(query, item, version, slot).Scan(&bid)
+	if bid == 0 || err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return ms.FindBlob(item, bid)
+}
+
+// IndexItem adds row entries for every version, slot, and blob
+// for the given item. It is ok if some pieces are already in the tables.
+func (ms *MsqlCache) IndexItem(item string, thisItem *items.Item) error {
+	// first update blobs. This isn't perfect. While a blob record doesn't
+	// change often, it is possible. The Bundle id, the mime type or the deleted
+	// flags could be changed. Not sure how to handle that. It seems inefficient
+	// to check the records already in the table. maybe we need a way to track
+	// changes to blob records so we can only update those.
+
+	var maxversion int
+	maxblob, err := ms.getMaxBlob(item)
+	if err == nil {
+		maxversion, err = ms.getMaxVersion(item)
+	}
+	if err != nil {
+		return err
+	}
+
+	tx, err := ms.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	// add/update blobs
+	for _, blob := range thisItem.Blobs {
+		var dd mysql.NullTime
+		if !blob.DeleteDate.IsZero() {
+			dd.Time = blob.DeleteDate
+			dd.Valid = true
+		}
+		if int(blob.ID) > maxblob {
+			const insertblob = `INSERT INTO blobs
+		(item, blobid, size, bundle, created, creator, MD5, SHA256,
+		mimetype, deleted, deleter, deletenote)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+			_, err = tx.Exec(insertblob, item, blob.ID, blob.Size, blob.Bundle,
+				blob.SaveDate, blob.Creator, blob.MD5, blob.SHA256,
+				blob.MimeType, dd, blob.Deleter, blob.DeleteNote)
+		} else {
+			const updateblob = `UPDATE blobs SET
+				bundle = ?,
+				mimetype = ?,
+				deleted = ?,
+				deleter = ?,
+				deletenote = ?
+			WHERE item = ? AND blobid = ?`
+			_, err = tx.Exec(updateblob, blob.Bundle, blob.MimeType,
+				dd, blob.Deleter, blob.DeleteNote, item, blob.ID)
+		}
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	// update the version and slot tables. These should not change once created,
+	// so we do not have the update problem as the blobs do
+	for _, v := range thisItem.Versions {
+		if v.ID <= items.VersionID(maxversion) {
+			continue // this version has already been indexed
+		}
+
+		const insertver = `INSERT INTO versions
+			(item, versionid, created, creator, note)
+			VALUES (?, ?, ?, ?, ?)`
+		_, err := tx.Exec(insertver, item, v.ID, v.SaveDate, v.Creator, v.Note)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		for slot, bid := range v.Slots {
+			const insertslot = `INSERT INTO slots
+				(item, versionid, blobid, name)
+				VALUES (?, ?, ?, ?)`
+			_, err := tx.Exec(insertslot, item, v.ID, bid, slot)
+			if err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+	}
+	return tx.Commit()
 }
 
 // NextFixity returns the earliest scheduled fixity record
@@ -323,6 +495,52 @@ func mysqlschema3(tx migration.LimitedTx) error {
 		`CREATE TEMPORARY TABLE mult_ids AS SELECT item FROM items GROUP BY item HAVING count(*) > 1`,
 		`DELETE FROM items WHERE item IN (SELECT * from mult_ids)`,
 		`ALTER TABLE items ADD UNIQUE INDEX items_item (item), CHANGE COLUMN value value LONGTEXT, CHANGE COLUMN size size BIGINT`,
+	}
+
+	return execlist(tx, s)
+}
+
+func mysqlschema4(tx migration.LimitedTx) error {
+	var s = []string{
+		`CREATE TABLE IF NOT EXISTS blobs (
+			id int PRIMARY KEY AUTO_INCREMENT,
+			item varchar(255),
+			blobid int,
+			size int,
+			bundle int,
+			created datetime,
+			creator varchar(64),
+			MD5 binary(16),
+			SHA256 binary(32),
+			mimetype varchar(64),
+			deleted datetime,
+			deleter varchar(64),
+			deletenote text)`,
+
+		`CREATE INDEX blobs_item ON blobs (item)`,
+		`CREATE INDEX blobs_itemid ON blobs (item, blobid)`,
+
+		`CREATE TABLE IF NOT EXISTS versions (
+			id int PRIMARY KEY AUTO_INCREMENT,
+			item varchar(255),
+			versionid int,
+			created datetime,
+			creator varchar(64),
+			note text)`,
+
+		`CREATE INDEX versions_item ON versions (item)`,
+		`CREATE INDEX versions_itemid ON versions(item, versionid)`,
+
+		`CREATE TABLE IF NOT EXISTS slots (
+			id int PRIMARY KEY AUTO_INCREMENT,
+			item varchar(255),
+			versionid int,
+			blobid int,
+			name varchar(1024))`,
+
+		`CREATE INDEX slots_item ON slots (item)`,
+		`CREATE INDEX slots_itemversion ON slots (item, versionid)`,
+		//`CREATE INDEX slot_itemname ON slots (item, name)`,
 	}
 
 	return execlist(tx, s)

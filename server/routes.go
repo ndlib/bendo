@@ -178,6 +178,7 @@ func (s *RESTServer) Run() error {
 	var db interface {
 		FixityDB
 		items.ItemCache
+		blobDB
 	}
 	var err error
 	if s.MySQL != "" {
@@ -194,14 +195,13 @@ func (s *RESTServer) Run() error {
 			path = "memory"
 		}
 		log.Printf("Using internal database at %s", path)
-		qdb, err2 := NewQlCache(path)
-		s.BlobDB = qdb // do here until MySQL supports blob stuff
-		db, err = qdb, err2
+		db, err = NewQlCache(path)
 	}
 	if db == nil || err != nil {
 		panic("problem setting up database")
 	}
 	s.Items.SetCache(db)
+	s.BlobDB = db
 
 	// init tapeuse
 	s.EnableTapeUse()
