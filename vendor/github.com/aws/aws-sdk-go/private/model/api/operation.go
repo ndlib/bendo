@@ -23,10 +23,25 @@ type Operation struct {
 	ErrorRefs     []ShapeRef `json:"errors"`
 	Paginator     *Paginator
 	Deprecated    bool   `json:"deprecated"`
+	DeprecatedMsg string `json:"deprecatedMessage"`
 	AuthType      string `json:"authtype"`
 	imports       map[string]bool
 
 	EventStreamAPI *EventStreamAPI
+}
+
+// OperationForMethod returns the API operation name that corresponds to the
+// client method name provided.
+func (a *API) OperationForMethod(name string) *Operation {
+	for _, op := range a.Operations {
+		for _, m := range op.Methods() {
+			if m == name {
+				return op
+			}
+		}
+	}
+
+	return nil
 }
 
 // A HTTPInfo defines the method of HTTP request for the Operation.
@@ -34,6 +49,24 @@ type HTTPInfo struct {
 	Method       string
 	RequestURI   string
 	ResponseCode uint
+}
+
+// Methods Returns a list of method names that will be generated.
+func (o *Operation) Methods() []string {
+	methods := []string{
+		o.ExportedName,
+		o.ExportedName + "Request",
+		o.ExportedName + "WithContext",
+	}
+
+	if o.Paginator != nil {
+		methods = append(methods, []string{
+			o.ExportedName + "Pages",
+			o.ExportedName + "PagesWithContext",
+		}...)
+	}
+
+	return methods
 }
 
 // HasInput returns if the Operation accepts an input paramater
@@ -71,13 +104,14 @@ func (o *Operation) GetSigner() string {
 var tplOperation = template.Must(template.New("operation").Funcs(template.FuncMap{
 	"GetCrosslinkURL":       GetCrosslinkURL,
 	"EnableStopOnSameToken": enableStopOnSameToken,
+	"GetDeprecatedMsg":      getDeprecatedMessage,
 }).Parse(`
 const op{{ .ExportedName }} = "{{ .Name }}"
 
 // {{ .ExportedName }}Request generates a "aws/request.Request" representing the
 // client's request for the {{ .ExportedName }} operation. The "output" return
 // value will be populated with the request's response once the request completes
-// successfuly.
+// successfully.
 //
 // Use "Send" method on the returned Request to send the API call to the service.
 // the "output" return value is not valid until after Send returns without error.
@@ -100,6 +134,9 @@ const op{{ .ExportedName }} = "{{ .Name }}"
 {{ if ne $crosslinkURL "" -}} 
 //
 // See also, {{ $crosslinkURL }}
+{{ end -}}
+{{- if .Deprecated }}//
+// Deprecated: {{ GetDeprecatedMsg .DeprecatedMsg .ExportedName }}
 {{ end -}}
 func (c *{{ .API.StructName }}) {{ .ExportedName }}Request(` +
 	`input {{ .InputRef.GoType }}) (req *request.Request, output {{ .OutputRef.GoType }}) {
@@ -168,6 +205,9 @@ func (c *{{ .API.StructName }}) {{ .ExportedName }}Request(` +
 {{ if ne $crosslinkURL "" -}} 
 // See also, {{ $crosslinkURL }}
 {{ end -}}
+{{- if .Deprecated }}//
+// Deprecated: {{ GetDeprecatedMsg .DeprecatedMsg .ExportedName }}
+{{ end -}}
 func (c *{{ .API.StructName }}) {{ .ExportedName }}(` +
 	`input {{ .InputRef.GoType }}) ({{ .OutputRef.GoType }}, error) {
 	req, out := c.{{ .ExportedName }}Request(input)
@@ -183,6 +223,9 @@ func (c *{{ .API.StructName }}) {{ .ExportedName }}(` +
 // the context is nil a panic will occur. In the future the SDK may create
 // sub-contexts for http.Requests. See https://golang.org/pkg/context/
 // for more information on using Contexts.
+{{ if .Deprecated }}//
+// Deprecated: {{ GetDeprecatedMsg .DeprecatedMsg (printf "%s%s" .ExportedName "WithContext") }}
+{{ end -}}
 func (c *{{ .API.StructName }}) {{ .ExportedName }}WithContext(` +
 	`ctx aws.Context, input {{ .InputRef.GoType }}, opts ...request.Option) ` +
 	`({{ .OutputRef.GoType }}, error) {
@@ -210,6 +253,9 @@ func (c *{{ .API.StructName }}) {{ .ExportedName }}WithContext(` +
 //            return pageNum <= 3
 //        })
 //
+{{ if .Deprecated }}//
+// Deprecated: {{ GetDeprecatedMsg .DeprecatedMsg (printf "%s%s" .ExportedName "Pages") }}
+{{ end -}}
 func (c *{{ .API.StructName }}) {{ .ExportedName }}Pages(` +
 	`input {{ .InputRef.GoType }}, fn func({{ .OutputRef.GoType }}, bool) bool) error {
 	return c.{{ .ExportedName }}PagesWithContext(aws.BackgroundContext(), input, fn)
@@ -222,6 +268,9 @@ func (c *{{ .API.StructName }}) {{ .ExportedName }}Pages(` +
 // the context is nil a panic will occur. In the future the SDK may create
 // sub-contexts for http.Requests. See https://golang.org/pkg/context/
 // for more information on using Contexts.
+{{ if .Deprecated }}//
+// Deprecated: {{ GetDeprecatedMsg .DeprecatedMsg (printf "%s%s" .ExportedName "PagesWithContext") }}
+{{ end -}}
 func (c *{{ .API.StructName }}) {{ .ExportedName }}PagesWithContext(` +
 	`ctx aws.Context, ` +
 	`input {{ .InputRef.GoType }}, ` +

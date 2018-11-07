@@ -1248,7 +1248,9 @@
         "SnapshotId":{"shape":"SnapshotId"},
         "PreserveExistingData":{"shape":"boolean"},
         "TargetName":{"shape":"TargetName"},
-        "NetworkInterfaceId":{"shape":"NetworkInterfaceId"}
+        "NetworkInterfaceId":{"shape":"NetworkInterfaceId"},
+        "KMSEncrypted":{"shape":"Boolean"},
+        "KMSKey":{"shape":"KMSKey"}
       }
     },
     "CreateStorediSCSIVolumeOutput":{
@@ -1898,6 +1900,17 @@
       "max":100,
       "min":0
     },
+    "Folder":{
+      "type":"string",
+      "max":1024,
+      "min":1
+    },
+    "FolderList":{
+      "type":"list",
+      "member":{"shape":"Folder"},
+      "max":50,
+      "min":1
+    },
     "GatewayARN":{
       "type":"string",
       "max":500,
@@ -2282,13 +2295,16 @@
       "type":"structure",
       "required":["FileShareARN"],
       "members":{
-        "FileShareARN":{"shape":"FileShareARN"}
+        "FileShareARN":{"shape":"FileShareARN"},
+        "FolderList":{"shape":"FolderList"},
+        "Recursive":{"shape":"Boolean"}
       }
     },
     "RefreshCacheOutput":{
       "type":"structure",
       "members":{
-        "FileShareARN":{"shape":"FileShareARN"}
+        "FileShareARN":{"shape":"FileShareARN"},
+        "NotificationId":{"shape":"NotificationId"}
       }
     },
     "RegionId":{
@@ -2511,7 +2527,8 @@
         "PreservedExistingData":{"shape":"boolean"},
         "VolumeiSCSIAttributes":{"shape":"VolumeiSCSIAttributes"},
         "CreatedDate":{"shape":"CreatedDate"},
-        "VolumeUsedInBytes":{"shape":"VolumeUsedInBytes"}
+        "VolumeUsedInBytes":{"shape":"VolumeUsedInBytes"},
+        "KMSKey":{"shape":"KMSKey"}
       }
     },
     "StorediSCSIVolumes":{
