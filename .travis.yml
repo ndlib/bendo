@@ -1,9 +1,11 @@
 language: go
 
 go:
- - 1.7.6
- - 1.8.3
- - 1.9
+ - 1.7.6  # needed?
+ - 1.8.7  # needed?
+ - 1.9.7
+ - 1.10.5
+ - 1.11.2
 services:
  - mysql
 before_script:
