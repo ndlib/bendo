@@ -335,6 +335,12 @@ func init() {
 		FixityDatabase: db,
 		useTape:        true,
 	}
+	server.itemRequests = singleflight{
+		F: func(id string) (interface{}, error) {
+			return server.Items.Item(id)
+		},
+	}
+
 	server.txqueue = make(chan string)
 	server.txcancel = make(chan struct{})
 	for i := 0; i < MaxConcurrentCommits; i++ {

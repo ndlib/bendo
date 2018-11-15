@@ -94,11 +94,12 @@ type RESTServer struct {
 	FixityDatabase FixityDB
 	DisableFixity  bool
 
-	server   httpdown.Server // used to close our listening socket
-	txqueue  chan string     // channel to feed background transaction workers. contains tx ids
-	txwg     sync.WaitGroup  // for waiting for all background tx workers to exit
-	txcancel chan struct{}   // Is closed to indicate tx workers should exit
-	useTape  bool            // Is Bendo reading/writing from tape?
+	server       httpdown.Server // used to close our listening socket
+	txqueue      chan string     // channel to feed background transaction workers. contains tx ids
+	txwg         sync.WaitGroup  // for waiting for all background tx workers to exit
+	txcancel     chan struct{}   // Is closed to indicate tx workers should exit
+	useTape      bool            // Is Bendo reading/writing from tape?
+	itemRequests singleflight    // track inflight loads of items from tape
 }
 
 // the number of transaction commits to tape we allow at a given time. If there are more
@@ -114,6 +115,8 @@ func (s *RESTServer) getcachestore(name string) store.Store {
 	u, _ := url.Parse(s.CacheDir)
 	switch u.Scheme {
 	case "", "file":
+		// XXX(dbrower): can making this directory be moved somewhere else?
+		// TestGetCacheStore() is making directories
 		path := filepath.Join(u.Path, name)
 		os.MkdirAll(path, 0755)
 		return store.NewFileSystem(path)
@@ -172,6 +175,12 @@ func (s *RESTServer) Run() error {
 	if s.Validator == nil {
 		log.Println("No Validator given")
 		s.Validator = NobodyValidator{}
+	}
+
+	s.itemRequests = singleflight{
+		F: func(id string) (interface{}, error) {
+			return s.Items.Item(id)
+		},
 	}
 
 	// init database

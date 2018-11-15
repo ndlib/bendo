@@ -92,7 +92,7 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 
 // IndexItem loads an item from the item store and indexes it into our blob database
 func (s *RESTServer) IndexItem(id string) error {
-	item, err := s.Items.Item(id)
+	item, err := s.loadItemFromTape(id)
 	if item != nil {
 		// this will reindex the item whether or not it is already in the database.
 		err = s.BlobDB.IndexItem(id, item)
@@ -157,6 +157,16 @@ func (s *RESTServer) resolveblob0(itemID string, slot string) (*items.Blob, erro
 		return nil, nil
 	}
 	return s.BlobDB.FindBlobBySlot(itemID, int(vid), slot[j+1:])
+}
+
+// loadItemFromTape will realize the given item in memory. Will access tape as needed.
+// Using this routine will organize repeated requests from multiple goroutines
+// for the same item, so we an only hit the tape once for everyone.
+func (s *RESTServer) loadItemFromTape(id string) (*items.Item, error) {
+	r0, err := s.itemRequests.Get(id)
+	r1, _ := r0.(*items.Item)
+	return r1, err
+
 }
 
 // getblob copies a blob's content to the ResponseWriter.
@@ -273,6 +283,8 @@ func (s *RESTServer) copyBlobIntoCache(key, id string, binfo *items.Blob) {
 // ItemHandler handles requests to GET /item/:id
 func (s *RESTServer) ItemHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
+	// XXX: need to go through single flight
+	// and rework tape disabled logic
 	item, err := s.Items.Item(id)
 	if err != nil {
 		// If Item Store Disable, return a 503

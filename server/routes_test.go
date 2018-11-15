@@ -6,13 +6,13 @@ import (
 	"github.com/ndlib/bendo/store"
 )
 
-const (
-	typeMemory = iota
-	typeFileSystem
-	typeS3
-)
-
 func TestGetCacheStore(t *testing.T) {
+	const (
+		typeMemory = iota
+		typeFileSystem
+		typeS3
+	)
+
 	var table = []struct {
 		cachedir string
 		typ      int
