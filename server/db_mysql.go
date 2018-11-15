@@ -515,10 +515,9 @@ func mysqlschema4(tx migration.LimitedTx) error {
 			mimetype varchar(64),
 			deleted datetime,
 			deleter varchar(64),
-			deletenote text)`,
-
-		`CREATE INDEX blobs_item ON blobs (item)`,
-		`CREATE INDEX blobs_itemid ON blobs (item, blobid)`,
+			deletenote text,
+			INDEX (item,blobid)
+			)`,
 
 		`CREATE TABLE IF NOT EXISTS versions (
 			id int PRIMARY KEY AUTO_INCREMENT,
@@ -526,21 +525,16 @@ func mysqlschema4(tx migration.LimitedTx) error {
 			versionid int,
 			created datetime,
 			creator varchar(64),
-			note text)`,
-
-		`CREATE INDEX versions_item ON versions (item)`,
-		`CREATE INDEX versions_itemid ON versions(item, versionid)`,
+			note text,
+			INDEX (item, versionid) )`,
 
 		`CREATE TABLE IF NOT EXISTS slots (
 			id int PRIMARY KEY AUTO_INCREMENT,
 			item varchar(255),
 			versionid int,
 			blobid int,
-			name varchar(1024))`,
-
-		`CREATE INDEX slots_item ON slots (item)`,
-		`CREATE INDEX slots_itemversion ON slots (item, versionid)`,
-		//`CREATE INDEX slot_itemname ON slots (item, name)`,
+			name varchar(1024),
+			INDEX (item, versionid) )`,
 	}
 
 	return execlist(tx, s)

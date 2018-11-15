@@ -22,10 +22,24 @@ var (
 	nCacheMiss = expvar.NewInt("cache.miss")
 )
 
+// blobDB are the methods we need to interact with the new item metadata caching.
+// This interface is expected to grow as more functionality is moved to the database.
+//
+// The goal is to remove the original database Cache interface along with its hooks into the
+// item package.
 type blobDB interface {
+	// Look up the metadata for the given item+blob id. Returns error if error encountered.
+	// returns nil,nil if the blob was not found in the index.
 	FindBlob(item string, blobid int) (*items.Blob, error)
-	// version = 0 means use most recent version
+
+	// Look up blob metadata using an item+version+slot name combo. Returns error if one
+	// happened. Returns nil,nil if no such blob is in the index, so a missing item is not an error.
+	// The slot name needs to be exact, no wildcard expansion is done.
+	// Use version = 0 to refer to the most recent version of the item.
 	FindBlobBySlot(item string, version int, slot string) (*items.Blob, error)
+
+	// Index the given item using the given id.
+	// (The item id should already be in the item structure. can that parameter be removed?)
 	IndexItem(itemid string, item *items.Item) error
 }
 
@@ -34,13 +48,6 @@ func (s *RESTServer) BlobHandler(w http.ResponseWriter, r *http.Request, ps http
 	id := ps.ByName("id")
 	slot := "@blob/" + ps.ByName("bid")
 	binfo, err := s.resolveblob(id, slot)
-	if binfo == nil || err != nil {
-		err = s.IndexItem(id)
-		if err != nil {
-			log.Println(err)
-		}
-		binfo, err = s.resolveblob(id, slot)
-	}
 	if binfo == nil || err != nil {
 		w.WriteHeader(404)
 		if err != nil {
@@ -65,13 +72,6 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 	}
 
 	binfo, err := s.resolveblob(id, slot)
-	if binfo == nil && err == nil {
-		err = s.IndexItem(id)
-		if err != nil {
-			log.Println(err)
-		}
-		binfo, err = s.resolveblob(id, slot)
-	}
 	if binfo == nil || err != nil {
 		// if item store use disabled, return 503
 		if err == items.ErrNoStore {
@@ -105,10 +105,29 @@ func (s *RESTServer) IndexItem(id string) error {
 // resoultion, the error is returned. If the item+slotpath did not resolve to a blob,
 // a nil is returned with no error.
 //
-// Unlike item.BlobByExtendedSlot, this only uses the database to do the
-// resolution. Returns nil if the slot couldn't be parsed or if the item/slot
-// is not indexed.
+// This will try to use the database only to do the resolution, but will scan the
+// tape store if no resoultion was found in the database.
+//
+// Always going to tape is useful for now since not everything might be indexed and it
+// keeps the tape system as the source of truth. But it is not that performant.
+// Possible optimizations might be an in-memory list of not-found items on tape, or
+// changing the semantics so that if it is not in the database, it doesn't exist.
 func (s *RESTServer) resolveblob(itemID string, slot string) (*items.Blob, error) {
+	binfo, err := s.resolveblob0(itemID, slot)
+	if binfo == nil && err == nil && s.useTape {
+		// look on tape for the item
+		err = s.IndexItem(itemID)
+		if err != nil {
+			return nil, err
+		}
+		// now that we have indexed it, try using the database again
+		binfo, err = s.resolveblob0(itemID, slot)
+	}
+	return binfo, err
+}
+
+// resolveblob0 does a resoultion using only the database. It does not touch the tape.
+func (s *RESTServer) resolveblob0(itemID string, slot string) (*items.Blob, error) {
 	if slot == "" {
 		return nil, nil
 	}
@@ -140,6 +159,11 @@ func (s *RESTServer) resolveblob(itemID string, slot string) (*items.Blob, error
 	return s.BlobDB.FindBlobBySlot(itemID, int(vid), slot[j+1:])
 }
 
+// getblob copies a blob's content to the ResponseWriter.
+// Pass in the blob's metadata as binfo.
+//
+// First looks for the content in the local blobcache. Then tries to get it from
+// tape. Updates the blobcache in the process.
 func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, binfo *items.Blob) {
 	key := fmt.Sprintf("%s+%04d", id, binfo.ID)
 	cacheContents, length, err := s.Cache.Get(key)
