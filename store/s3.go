@@ -429,7 +429,7 @@ func (wc *s3WriteCloser) reap(n int) error {
 
 func (wc *s3WriteCloser) uploadpart(partno int, buf *bytes.Buffer) {
 	// This function should not change values in wc since we do not hold a lock
-	// on wc. Also, we own buf and this point and can do anything with it.
+	// on wc. Also, we own buf at this point and can do anything with it.
 	//log.Println("s3: uploading", wc.key, partno, buf.Len())
 	input := &s3.UploadPartInput{
 		Body:       bytes.NewReader(buf.Bytes()),
@@ -439,9 +439,9 @@ func (wc *s3WriteCloser) uploadpart(partno int, buf *bytes.Buffer) {
 		UploadId:   aws.String(wc.uploadID),
 	}
 	output, err := wc.svc.UploadPart(input)
-	// can we detect and retry in event of transient errors?
-	wcBufferPool.Put(buf)
-	buf = nil // release our reference
+	// TODO(dbrower): can we detect and retry in event of transient errors?
+	wcBufferPool.Put(buf) // return buffer to pool
+	buf = nil             // release our reference
 	result := uploadresult{
 		part: partno,
 		err:  err,
