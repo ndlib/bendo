@@ -10,6 +10,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	raven "github.com/getsentry/raven-go"
 )
 
 // FileSystem implements the simple file system based store. It tries to
@@ -71,6 +73,7 @@ func walkTree(out chan<- string, root string, level int) {
 	f, err := os.Open(root)
 	if err != nil {
 		log.Println(err)
+		raven.CaptureError(err, nil)
 		return
 	}
 	defer f.Close()
@@ -81,6 +84,7 @@ func walkTree(out chan<- string, root string, level int) {
 		} else if err != nil {
 			// we have no other way of passing this error back
 			log.Println(err)
+			raven.CaptureError(err, nil)
 			return
 		}
 		for _, e := range entries {

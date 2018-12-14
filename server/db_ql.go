@@ -10,6 +10,7 @@ import (
 
 	"github.com/BurntSushi/migration"
 	_ "github.com/cznic/ql/driver" // load the ql sql driver
+	raven "github.com/getsentry/raven-go"
 
 	"github.com/ndlib/bendo/items"
 )
@@ -101,17 +102,20 @@ func (qc *QlCache) Set(item string, thisItem *items.Item) {
 	}
 	value, err := json.Marshal(thisItem)
 	if err != nil {
-		log.Printf("Item Cache QL: %s", err.Error())
+		log.Println("Item Cache QL:", err)
+		raven.CaptureError(err, nil)
 		return
 	}
 	result, err := performExec(qc.db, dbUpdate, item, created, modified, size, value)
 	if err != nil {
-		log.Printf("Item Cache QL: %s", err.Error())
+		log.Println("Item Cache QL:", err)
+		raven.CaptureError(err, nil)
 		return
 	}
 	nrows, err := result.RowsAffected()
 	if err != nil {
-		log.Printf("Item Cache QL: %s", err.Error())
+		log.Println("Item Cache QL:", err)
+		raven.CaptureError(err, nil)
 		return
 	}
 	if nrows == 0 {
@@ -137,7 +141,8 @@ func (qc *QlCache) NextFixity(cutoff time.Time) int64 {
 	var when time.Time
 	err := qc.db.QueryRow(query, cutoff).Scan(&id, &when)
 	if err != nil && err != sql.ErrNoRows {
-		log.Println("nextfixity QL", err.Error())
+		log.Println("nextfixity QL", err)
+		raven.CaptureError(err, nil)
 	}
 	return id
 }
@@ -157,6 +162,7 @@ func (qc *QlCache) GetFixity(id int64) *Fixity {
 		return nil
 	} else if err != nil {
 		log.Println("GetFixity", err)
+		raven.CaptureError(err, nil)
 		return nil
 	}
 	return &record
@@ -172,6 +178,7 @@ func (qc *QlCache) SearchFixity(start, end time.Time, item string, status string
 		return nil
 	} else if err != nil {
 		log.Println("GetFixity QL Query:", err)
+		raven.CaptureError(err, nil)
 		return nil
 	}
 	defer rows.Close()
@@ -181,6 +188,7 @@ func (qc *QlCache) SearchFixity(start, end time.Time, item string, status string
 		scanErr := rows.Scan(&record.ID, &record.Item, &record.ScheduledTime, &record.Status, &record.Notes)
 		if scanErr != nil {
 			log.Println("GetFixity QL Scan", err)
+			raven.CaptureError(err, nil)
 			continue
 		}
 		result = append(result, record)

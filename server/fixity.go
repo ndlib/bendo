@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	raven "github.com/getsentry/raven-go"
 	"github.com/julienschmidt/httprouter"
 )
 
@@ -112,6 +113,7 @@ func (s *RESTServer) fixity() {
 		fx := s.FixityDatabase.GetFixity(id)
 		if fx == nil {
 			log.Println("fixity received bad id", id)
+			raven.CaptureMessage("fixity received bad id", map[string]string{"id": fmt.Sprintf("%d", id)})
 			continue
 		}
 		log.Println("begin fixity check for", fx.Item)
@@ -123,16 +125,19 @@ func (s *RESTServer) fixity() {
 			fx.Status = "error"
 			fx.Notes = err.Error()
 			xFixityError.Add(1)
+			raven.CaptureError(err, map[string]string{"id": fx.Item})
 		} else if len(problems) > 0 {
 			fx.Status = "mismatch"
 			fx.Notes = strings.Join(problems, "\n")
 			xFixityMismatch.Add(1)
+			raven.CaptureMessage("Fixity Mismatch", map[string]string{"id": fx.Item})
 		}
 		d := time.Now().Sub(starttime)
 		log.Println("Fixity for", fx.Item, "is", fx.Status, "duration = ", d)
 		_, err = s.FixityDatabase.UpdateFixity(*fx)
 		if err != nil {
 			log.Println("fixity:", err)
+			raven.CaptureError(err, nil)
 		}
 
 		xFixityItemsChecked.Add(1)
@@ -163,7 +168,8 @@ func (s *RESTServer) scanfixity() {
 		when, err := s.FixityDatabase.LookupCheck(id)
 		if err != nil {
 			// error? skip this id
-			log.Println("scanfixity", id, err.Error())
+			log.Println("scanfixity", id, err)
+			raven.CaptureError(err, map[string]string{"id": id})
 			continue
 		}
 		if !when.IsZero() {

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	raven "github.com/getsentry/raven-go"
 	"github.com/julienschmidt/httprouter"
 
 	"github.com/ndlib/bendo/transaction"
@@ -182,6 +183,7 @@ func (s *RESTServer) TxCleaner() {
 		}
 		if err != nil {
 			log.Println("TxCleaner:", err)
+			raven.CaptureError(err, nil)
 		}
 		// wait for a while before beginning again
 		time.Sleep(12 * time.Hour) // duration is arbitrary

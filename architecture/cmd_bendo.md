@@ -123,4 +123,16 @@ new requests and any active requests are finished.
 Finally, the daemon will exit.
 There is a possibility that these steps may take some time to finish, on the order of minutes.
 
+## ENVIRONMENT VARIABLES
 
+Bendo uses a few envrionment variables to confiugure optional features.
+
+  AWS_ACCESS_KEY and AWS_SECRET_ACCESS_KEY
+
+    These variables are used by the S3 cache store, should that be enabled by specifying an S3
+    location for CacheDir in the configuration file.
+
+  SENTRY_DSN, SENTRY_RELEASE, and SENTRY_ENVIRONMENT
+
+    These variables contain configuration error reporting to Sentry. They are optional.
+    Refer to https://docs.sentry.io/clients/go/ for information on setting them.

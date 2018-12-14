@@ -68,6 +68,14 @@
   version = "v1.15.69"
 
 [[projects]]
+  digest = "1:8722889ad027febfced94665914d1e7be8f1b703d31f2ef9461c59e4d40fe974"
+  name = "github.com/certifi/gocertifi"
+  packages = ["."]
+  pruneopts = ""
+  revision = "deb3ae2ef2610fde3330947281941c562861188b"
+  version = "2018.01.18"
+
+[[projects]]
   branch = "master"
   digest = "1:55189e6c0cfbd5d758fefc627278651ab12506d3a834aaa7e04338bcc3c31f1c"
   name = "github.com/cznic/b"
@@ -204,6 +212,14 @@
   revision = "1b76add642e42c6ffba7211ad7b3939ce654526e"
 
 [[projects]]
+  digest = "1:40548207236a3c3d02b4dae094f5901d662a792e015948287dc3e9ea1bd50674"
+  name = "github.com/getsentry/raven-go"
+  packages = ["."]
+  pruneopts = ""
+  revision = "f04e7487e9a6b9d9837d52743fb5f40576c56411"
+  version = "v0.2.0"
+
+[[projects]]
   digest = "1:c07de423ca37dc2765396d6971599ab652a339538084b9b58c9f7fc533b28525"
   name = "github.com/go-sql-driver/mysql"
   packages = ["."]
@@ -225,6 +241,14 @@
   pruneopts = ""
   revision = "348b672cd90d8190f8240323e372ecd1e66b59dc"
   version = "v1.2.0"
+
+[[projects]]
+  digest = "1:7365acd48986e205ccb8652cc746f09c8b7876030d53710ea6ef7d0bd0dcd7ca"
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  pruneopts = ""
+  revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
+  version = "v0.8.0"
 
 [[projects]]
   branch = "master"
@@ -255,6 +279,7 @@
     "github.com/aws/aws-sdk-go/service/s3",
     "github.com/cznic/ql/driver",
     "github.com/facebookgo/httpdown",
+    "github.com/getsentry/raven-go",
     "github.com/go-sql-driver/mysql",
     "github.com/julienschmidt/httprouter",
   ]
