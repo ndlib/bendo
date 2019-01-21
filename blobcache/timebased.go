@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	raven "github.com/getsentry/raven-go"
+
 	"github.com/ndlib/bendo/store"
 )
 
@@ -281,6 +283,7 @@ func (te *TimeBased) writeIndexFile() {
 	w, err := te.s.Create(indexFilename)
 	if err != nil {
 		log.Println("Error creating", indexFilename, ":", err)
+		raven.CaptureError(err, nil)
 		return
 	}
 	enc := json.NewEncoder(w)
@@ -289,6 +292,7 @@ func (te *TimeBased) writeIndexFile() {
 	te.m.RUnlock()
 	if err != nil {
 		log.Println("Error writing", indexFilename, ":", err)
+		raven.CaptureError(err, nil)
 	}
 	w.Close()
 }
@@ -297,6 +301,7 @@ func (te *TimeBased) readIndexFile() {
 	rac, _, err := te.s.Open(indexFilename)
 	if err != nil {
 		log.Println("Error opening", indexFilename, ":", err)
+		raven.CaptureError(err, nil)
 		return
 	}
 	dec := json.NewDecoder(store.NewReader(rac))

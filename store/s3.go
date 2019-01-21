@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	raven "github.com/getsentry/raven-go"
 )
 
 // A S3 store represents a store that is kept on AWS S3 storage.
@@ -56,6 +57,7 @@ func (s *S3) List() <-chan string {
 			})
 		if err != nil {
 			log.Println("List:", err)
+			raven.CaptureError(err, nil)
 		}
 	}()
 	return out

@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/facebookgo/httpdown"
+	raven "github.com/getsentry/raven-go"
 	"github.com/julienschmidt/httprouter"
 
 	"github.com/ndlib/bendo/blobcache"
@@ -267,7 +268,7 @@ func (s *RESTServer) Run() error {
 	h := httpdown.HTTP{}
 	s.server, err = h.ListenAndServe(&http.Server{
 		Addr:    ":" + s.PortNumber,
-		Handler: s.addRoutes(),
+		Handler: raven.Recoverer(s.addRoutes()),
 	})
 	if err != nil {
 		log.Println(err)
@@ -403,6 +404,7 @@ func writeHTMLorJSON(w http.ResponseWriter,
 	err := tmpl.Execute(w, val)
 	if err != nil {
 		log.Println(err)
+		raven.CaptureError(err, nil)
 	}
 }
 

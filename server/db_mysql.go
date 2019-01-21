@@ -9,6 +9,7 @@ import (
 
 	// no _ in import mysql since we need mysql.NullTime
 	"github.com/BurntSushi/migration"
+	raven "github.com/getsentry/raven-go"
 	"github.com/go-sql-driver/mysql"
 
 	"github.com/ndlib/bendo/items"
@@ -52,7 +53,7 @@ func NewMysqlCache(dial string) (*MsqlCache, error) {
 		mysqlVersioning.Get,
 		mysqlVersioning.Set)
 	if err != nil {
-		log.Printf("Open Mysql: %s", err.Error())
+		log.Println("Open Mysql", err)
 		return nil, err
 	}
 	return &MsqlCache{db: db}, nil
@@ -68,7 +69,8 @@ func (ms *MsqlCache) Lookup(id string) *items.Item {
 	if err != nil {
 		if err != sql.ErrNoRows {
 			// some kind of error...treat it as a miss
-			log.Printf("Item Cache: %s", err.Error())
+			log.Println("Item Cache: ", err)
+			raven.CaptureError(err, nil)
 		}
 		return nil
 	}
@@ -76,7 +78,8 @@ func (ms *MsqlCache) Lookup(id string) *items.Item {
 	var thisItem = new(items.Item)
 	err = json.Unmarshal([]byte(value), thisItem)
 	if err != nil {
-		log.Printf("Item Cache: error in lookup: %s", err.Error())
+		log.Println("Item Cache: error in lookup:", err)
+		raven.CaptureError(err, nil)
 		return nil
 	}
 	return thisItem
@@ -95,7 +98,8 @@ func (ms *MsqlCache) Set(id string, thisItem *items.Item) {
 	}
 	value, err := json.Marshal(thisItem)
 	if err != nil {
-		log.Printf("Item Cache: %s", err.Error())
+		log.Println("Item Cache:", err)
+		raven.CaptureError(err, nil)
 		return
 	}
 	stmt := `INSERT INTO items (item, created, modified, size, value) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE created=?, modified=?, size=?, value=?`
@@ -124,6 +128,7 @@ func (mc *MsqlCache) NextFixity(cutoff time.Time) int64 {
 		return 0
 	} else if err != nil {
 		log.Println("nextfixity", err)
+		raven.CaptureError(err, nil)
 		return 0
 	}
 	return id
@@ -145,6 +150,7 @@ func (mc *MsqlCache) GetFixity(id int64) *Fixity {
 		return nil
 	} else if err != nil {
 		log.Println("GetFixtyByID  MySQL queryrow", err)
+		raven.CaptureError(err, nil)
 		return nil
 	}
 	// Handle for null time value
@@ -165,6 +171,7 @@ func (mc *MsqlCache) SearchFixity(start, end time.Time, item string, status stri
 		return nil
 	} else if err != nil {
 		log.Println("GetFixity Query MySQL", err)
+		raven.CaptureError(err, nil)
 		return nil
 	}
 	defer rows.Close()
@@ -175,6 +182,7 @@ func (mc *MsqlCache) SearchFixity(start, end time.Time, item string, status stri
 		err = rows.Scan(&rec.ID, &rec.Item, &when, &rec.Status, &rec.Notes)
 		if err != nil {
 			log.Println("GetFixity Scan MySQL", err)
+			raven.CaptureError(err, nil)
 			continue
 		}
 		if when.Valid {

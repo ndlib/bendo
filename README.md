@@ -75,6 +75,12 @@ Then set the `CacheDir` to access this server by supplying a host name:
 And set the environment variables to have the correct access key and secret access key.
 
 
+# Sentry
+
+Bendo can optionally send error messages to the Sentry service. Enable it by setting the environment
+variables `SENTRY_DSN`, `SENTRY_RELEASE`, and `SENTRY_ENVIRONMENT`.
+
+
 # Copy-On-Write
 
 It is possible for one Bendo server to pull content from a second Bendo server.
