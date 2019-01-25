@@ -36,7 +36,7 @@ func (s *Store) SetCache(cache ItemCache) {
 	s.cache = cache
 }
 
-// SetUseStore enables or disables access to the underlying store. true- on/ false-off 
+// SetUseStore enables or disables access to the underlying store. true- on/ false-off
 func (s *Store) SetUseStore(value bool) {
 	s.useStore = value
 }
@@ -103,7 +103,7 @@ func (s *Store) Item(id string) (*Item, error) {
 		return result, nil // a complete item record
 	}
 	// if item not in cache, and useStore disabled, return ErrNoStore Error error
-	if  s.useStore == false {
+	if s.useStore == false {
 		return result, ErrNoStore
 	}
 
