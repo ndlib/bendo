@@ -51,3 +51,37 @@ to oldest.
 * 2016.1 (2016-2-2)
 
  - Initial Release
+
+* 2018.1
+ - Only return fixity checks from current day
+ - Change `start` and `end` of Fixity Search queries to default to midnight
+    of the current day, and of the next day.
+    This (hopefully, for now) keeps too many results from being returned.
+ -  Return [] for empty fixity search results
+ -  Let bclient upload zero length files
+ -  Aws codepipeline
+ - swap .gitignore and .dockerignore
+ - added public bucket policy
+ - update CodeBuildRole parameter
+ - use hesburghlibraries/bendo-buildimage for codebuild
+ =  add Dockerfile.buildimage
+ - Rpm build using codebuild
+ - upgrade timeout and compute type
+ - fix sha check
+ - wget -> curl
+
+* 2019.1 (1/29/19)
+
+ -  gofmt depenedencies
+ -  Add hooks for Sentry
+ -  Update all deps
+ -  Revise readme
+ -  Add config options for S3 to bendo daemon
+ -  Add config option to use the time-based cache evection strategy.
+ -  Always write tim-based cache index file after a scan. This ensures
+    items get timestamped in case the server is restarted before the next
+    index save.
+ -  Adding S3 store adapter
+ -  Altered the Cache interface slightly. Added MaxSize().
+ -  Add option to put token in basic auth header
+ 
