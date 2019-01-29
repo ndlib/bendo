@@ -70,7 +70,7 @@ to oldest.
  - fix sha check
  - wget -> curl
 
-* 2019.1 (1/29/19)
+* 2019.2 (1/29/19)
 
  -  gofmt depenedencies
  -  Add hooks for Sentry
