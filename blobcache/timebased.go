@@ -300,6 +300,8 @@ func (te *TimeBased) writeIndexFile() {
 func (te *TimeBased) readIndexFile() {
 	rac, _, err := te.s.Open(indexFilename)
 	if err != nil {
+		// If the index file does not already exist, it will generate an error.
+		// Is is not a problem, but we log the error anyway.
 		log.Println("Error opening", indexFilename, ":", err)
 		raven.CaptureError(err, nil)
 		return

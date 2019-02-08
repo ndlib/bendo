@@ -2,6 +2,7 @@ package store
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -310,52 +311,47 @@ type s3WriteCloser struct {
 	key      string
 	uploadID string
 	buf      *bytes.Buffer // current buffer we are writing to
-	part     int           // the part number we are currently filling up
-	results  chan uploadresult
-	etags    map[int]string
-	err      error // non-nil to abort upload at close
-}
-
-type uploadresult struct {
-	part int
-	etag string
-	err  error
+	part     int           // the part number we are currently filling up (0-based. n.b. AWS is 1-based)
+	etags    []string      // list of etags for all our uploaded parts, index i == etag for part i
+	abort    bool          // true to abort upload at close
 }
 
 const (
-	wcBaseSize     = 5 * 1024 * 1024
-	wcIncSize      = 128 * 1024
-	wcMaxUploaders = 7
+	wcBaseSize = 5 * 1024 * 1024
+	wcIncSize  = 128 * 1024
 )
 
 var (
 	// wcBufferPool contains spare buffers to use for uploading. It is shared
 	// between all the s3WriteCloser instances.
 	wcBufferPool sync.Pool
+
+	ErrNoETag = errors.New("No ETag was returned from AWS")
 )
 
 func (wc *s3WriteCloser) Write(p []byte) (int, error) {
 	// lazily initialize stuff
-	if wc.results == nil {
-		wc.results = make(chan uploadresult)
-		wc.etags = make(map[int]string)
+	if wc.buf == nil {
 		wc.buf = wc.getbuf()
 	}
-	// block if there are too many pending uploads
-	err := wc.reap(wcMaxUploaders)
-	if err != nil {
-		return 0, err
-	}
 	n, err := wc.buf.Write(p)
+	if n == 0 && err != nil {
+		wc.abort = true
+		return n, err
+	}
 	// see if we need to upload this buffer
 	lowerlimit := wcBaseSize + wcIncSize*wc.part
 	if wc.buf.Len() >= lowerlimit {
-		go wc.uploadpart(wc.part, wc.buf)
-		// set up new buffer
+		err = wc.uploadpart(wc.part, wc.buf)
+		if err != nil {
+			// do we need to do anything with the buffer content?
+			// it will have (probably) been read out of buf, so...can we do anything at this point?
+			wc.abort = true
+			return 0, err
+		}
 		wc.part++
-		wc.buf = wc.getbuf()
 	}
-	return n, err
+	return n, nil
 }
 
 // Close will flush any temporary buffers to S3, and then wait for everything
@@ -363,33 +359,49 @@ func (wc *s3WriteCloser) Write(p []byte) (int, error) {
 // Write()), the entire upload will be deleted. Otherwise it will be saved
 // into S3.
 func (wc *s3WriteCloser) Close() error {
-	// upload anything left in the buffer
 	// if wc.buf == nil then nothing was written
 	// TODO(dbrower): don't bother if wc.err != nil
-	if wc.buf != nil && wc.buf.Len() > 0 {
-		go wc.uploadpart(wc.part, wc.buf)
-		wc.part++
+
+	// keep err here so if there is one, we can send it after aborting the upload on S3
+	var err error
+	if wc.buf != nil {
+		// upload anything left in the buffer
+		if wc.buf.Len() > 0 {
+			err = wc.uploadpart(wc.part, wc.buf)
+			if err != nil {
+				wc.abort = true
+			}
+			wc.part++
+		}
+		// we're done with the buffer, so return it for someone else
+		wcBufferPool.Put(wc.buf)
+		wc.buf = nil
 	}
-	// wait for everything to upload
-	wc.reap(0)
-	if wc.err != nil || wc.buf == nil {
+	// if there was an upload error, remove the item
+	if wc.abort {
 		_, err2 := wc.svc.AbortMultipartUpload(&s3.AbortMultipartUploadInput{
 			Bucket:   aws.String(wc.bucket),
 			Key:      aws.String(wc.key),
 			UploadId: aws.String(wc.uploadID),
 		})
-		log.Println("s3:", wc.bucket, wc.key, err2)
-		return wc.err
+		// if there was not a previous error, send whatever this one is
+		if err == nil {
+			err = err2
+		} else if err2 != nil {
+			// both err and err2 are set. log err2 so it isn't lost
+			log.Println("s3:", wc.bucket, wc.key, err2)
+		}
+		return err
 	}
 	// need to upload all the part number/etag pairs
 	var completed []*s3.CompletedPart
-	for i := 0; i < wc.part; i++ {
+	for i, etag := range wc.etags {
 		completed = append(completed, &s3.CompletedPart{
-			ETag:       aws.String(wc.etags[i]),
-			PartNumber: aws.Int64(int64(i)),
+			ETag:       aws.String(etag),
+			PartNumber: aws.Int64(int64(i + 1)), // part numbers are 1-based
 		})
 	}
-	_, err := wc.svc.CompleteMultipartUpload(
+	_, err = wc.svc.CompleteMultipartUpload(
 		&s3.CompleteMultipartUploadInput{
 			Bucket:   aws.String(wc.bucket),
 			Key:      aws.String(wc.key),
@@ -411,41 +423,25 @@ func (wc *s3WriteCloser) getbuf() *bytes.Buffer {
 	return b
 }
 
-// reap processes any worker results, and blocks until there are only n workers
-// uploading in the background. returns an error if there were any.
-func (wc *s3WriteCloser) reap(n int) error {
-	var err error
-	// loop until no more than n workers are running
-	for len(wc.etags)+n < wc.part {
-		r := <-wc.results
-		wc.etags[r.part] = r.etag
-		if r.err != nil {
-			err = r.err
-			wc.err = r.err // make sure error is recorded
-		}
-	}
-	return err
-}
-
-func (wc *s3WriteCloser) uploadpart(partno int, buf *bytes.Buffer) {
-	// This function should not change values in wc since we do not hold a lock
-	// on wc. Also, we own buf and this point and can do anything with it.
+func (wc *s3WriteCloser) uploadpart(partno int, buf *bytes.Buffer) error {
 	//log.Println("s3: uploading", wc.key, partno, buf.Len())
 	input := &s3.UploadPartInput{
 		Body:       bytes.NewReader(buf.Bytes()),
 		Bucket:     aws.String(wc.bucket),
 		Key:        aws.String(wc.key),
-		PartNumber: aws.Int64(int64(partno)),
+		PartNumber: aws.Int64(int64(partno + 1)), // parts are 1-based in AWS
 		UploadId:   aws.String(wc.uploadID),
 	}
 	output, err := wc.svc.UploadPart(input)
+	buf.Reset() // mark the buffer as empty. Invalidates earlier pointer from buf.Bytes()
 	// can we detect and retry in event of transient errors?
-	wcBufferPool.Put(buf)
-	buf = nil // release our reference
-	result := uploadresult{
-		part: partno,
-		err:  err,
-		etag: *output.ETag,
+	if err != nil {
+		return err
 	}
-	wc.results <- result
+	if output.ETag == nil {
+		log.Println("nil ETag for part", partno, "key=", wc.key)
+		return ErrNoETag
+	}
+	wc.etags = append(wc.etags, *output.ETag)
+	return nil
 }
