@@ -110,6 +110,7 @@ Resources:
         Path: bendo
         Name: rpms
         Location: !If [NoBucket, !Ref Bucket, !Ref TargetBucket]
+        EncryptionDisabled: true
       Environment:
         Type: LINUX_CONTAINER
         ComputeType: BUILD_GENERAL1_SMALL
