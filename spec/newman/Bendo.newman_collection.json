@@ -1,0 +1,50 @@
+{
+	"info": {
+		"_postman_id": "8fd6b5dc-ce2a-4b54-ada4-d2f969bda58e",
+		"name": "Bendo",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "http://{{BendoURL}}:{{BendoPort}}",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"id": "d12e9e0f-822d-46f8-b2b8-4b5fdd4985aa",
+						"exec": [
+							"pm.test(\"Body Contains String: Bendo\", function () {",
+							"    pm.expect(pm.response.text()).to.include(\"Bendo\");",
+							"});",
+							"pm.test(\"Response time is less than 1000ms\", function () {",
+							"    pm.expect(pm.response.responseTime).to.be.below(1000);",
+							"});",
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": ""
+				},
+				"url": {
+					"raw": "http://{{BendoURL}}:{{BendoPort}}",
+					"protocol": "http",
+					"host": [
+						"{{BendoURL}}"
+					],
+					"port": "{{BendoPort}}"
+				},
+				"description": "Basic Bendo QA Test"
+			},
+			"response": []
+		}
+	]
+}
