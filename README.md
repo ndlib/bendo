@@ -66,13 +66,16 @@ Put the credentials in the environment variables `AWS_ACCESS_KEY` and `AWS_SECRE
 
 You can use a local instance of Minio as well. For example, using docker:
 
-    docker run -p 9000:9000  minio/minio server /shared/data
+    docker run -p 9000:9000 -e "MINIO_ACCESS_KEY=bob" -e "MINIO_SECRET_KEY=1234567890" minio/minio server /data
 
 Then set the `CacheDir` to access this server by supplying a host name:
 
     CacheDir = s3://localhost:9000/bucket/prefix
 
 And set the environment variables to have the correct access key and secret access key.
+To run the S3 tests in the `store/` directory run
+
+    env "AWS_ACCESS_KEY_ID=bob" "AWS_SECRET_ACCESS_KEY=1234567890" go test -tags=s3 -run S3
 
 
 # Sentry

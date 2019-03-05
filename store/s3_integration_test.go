@@ -20,18 +20,21 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 )
 
+const testBucket = "testlibnd-bendo-cache"
+
 func getSession() *session.Session {
 	s3Config := &aws.Config{
-		Endpoint:         aws.String("http://localhost:9000"),
+		// uncomment for local Minio instance
+		//Endpoint:         aws.String("http://localhost:9000"),
+		//DisableSSL:       aws.Bool(true),
 		Region:           aws.String("us-east-1"),
-		DisableSSL:       aws.Bool(true),
 		S3ForcePathStyle: aws.Bool(true),
 	}
 	return session.New(s3Config)
 }
 
 func TestS3Open(t *testing.T) {
-	s := NewS3("zoo", "", getSession())
+	s := NewS3(testBucket, "", getSession())
 	items, err := s.ListPrefix("")
 	t.Log(err)
 	t.Log(items)
@@ -47,10 +50,10 @@ func TestS3Open(t *testing.T) {
 }
 
 func TestS3Create(t *testing.T) {
-	s := NewS3("zoo", "abc/", getSession())
+	s := NewS3(testBucket, "abc/", getSession())
 	w, err := s.Create("first")
 	if err != nil {
-		t.Log(err)
+		t.Error(err)
 	}
 	n, err := w.Write([]byte("abcdefghijklmnopqrstuvwxyz"))
 	t.Log(n, err)
@@ -58,19 +61,31 @@ func TestS3Create(t *testing.T) {
 	t.Log(err)
 
 	w, err = s.Create("second")
-	data := make([]byte, 3000000)
-	for i := 0; i < 10; i++ {
-		n, err = w.Write(data)
-		t.Log(n, err)
+	t.Log(err)
+	totallength := int64(0)
+	for i := 0; i < 400000; i++ {
+		n, err = w.Write([]byte("abcdefghijklmnopqrstuvwxyz"))
+		if err != nil {
+			t.Error(err)
+		}
+		totallength += int64(n)
 	}
 	err = w.Close()
 	t.Log(err)
+
+	// is the uploaded file the right length?
+	r, size, err := s.Open("second")
+	t.Log(size, err)
+	if size != totallength {
+		t.Error("Uploaded item length is", size, "expected", totallength)
+	}
+	r.Close()
 }
 
 func TestS3List(t *testing.T) {
 	const N = 3 * 1024
 
-	s := NewS3("zoo", "list/", getSession())
+	s := NewS3(testBucket, "list/", getSession())
 
 	// add items
 	for i := 0; i < N; i++ {
@@ -79,8 +94,11 @@ func TestS3List(t *testing.T) {
 			t.Error(err)
 			continue
 		}
-		w.Write([]byte("01234567890123456789"))
-		w.Close()
+		_, err = w.Write([]byte("01234567890123456789"))
+		t.Log(err)
+
+		err = w.Close()
+		t.Log(err)
 	}
 
 	// see if everything was found
@@ -93,7 +111,8 @@ func TestS3List(t *testing.T) {
 			continue
 		}
 		nfound++
-		s.Delete(name)
+		err = s.Delete(name)
+		t.Log(err)
 	}
 	if nfound != N {
 		t.Error("expected", N, "found", nfound)
@@ -101,7 +120,7 @@ func TestS3List(t *testing.T) {
 }
 
 func TestS3Delete(t *testing.T) {
-	s := NewS3("zoo", "delete/", getSession())
+	s := NewS3(testBucket, "delete/", getSession())
 	w, err := s.Create("first")
 	if err != nil {
 		t.Log(err)
