@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"crypto/md5"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -192,6 +193,47 @@ func TestDeleteBlob(t *testing.T) {
 	if err == nil {
 		t.Errorf("Received nil, expected error")
 	}
+}
+
+type ErrorReader struct{}
+
+var ErrError = errors.New("General Error")
+
+func (_ ErrorReader) Read(p []byte) (int, error) {
+	return 0, ErrError
+}
+
+// underlying cause of DLTP-1676 was a reader error while creating the bundle
+func TestReaderError(t *testing.T) {
+	ms := store.NewMemory()
+	s := New(ms)
+	w, err := s.Open("item-name", "nobody")
+	if err != nil {
+		t.Fatalf("Unexpected error %s", err.Error())
+	}
+
+	// try writing a blob that had an error. Is the blob added to the item-json list?
+	// and is there an entry for it in the zip file?
+	bid, err := w.WriteBlob(ErrorReader{}, 37, nil, nil) // length of 37 is arbitrary
+	if err != ErrError {
+		t.Fatalf("Received %s, expected ErrError", err)
+	}
+	t.Logf("Received blob id %d", bid)
+
+	err = w.Close()
+	if err != nil {
+		t.Fatalf("Got %s, expected nil", err.Error())
+	}
+
+	// is the error blob in the item list?
+	item, err := s.Item("item-name")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(item.Blobs) != 1 {
+		t.Fatalf("Expected blob in item list")
+	}
+	t.Logf("%v", item.Blobs[0])
 }
 
 //

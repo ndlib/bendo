@@ -142,7 +142,10 @@ func (s *RESTServer) transactionWorker(queue <-chan string) {
 			fallthrough
 		case transaction.StatusChecking:
 			tx.VerifyFiles(s.FileStore)
-			// check for len(tx.Err) > 0
+			if len(tx.Err) > 0 {
+				tx.SetStatus(transaction.StatusError)
+				goto out
+			}
 			tx.SetStatus(transaction.StatusIngest)
 			fallthrough
 		case transaction.StatusIngest:
@@ -157,6 +160,7 @@ func (s *RESTServer) transactionWorker(queue <-chan string) {
 			}
 			tx.Commit(*s.Items, s.FileStore, s.Cache)
 		}
+	out:
 		duration := time.Now().Sub(start)
 		log.Printf("Finish transaction %s on %s (%s)", tx.ID, tx.ItemID, duration.String())
 

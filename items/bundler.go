@@ -93,50 +93,77 @@ const (
 	IdealBundleSize = 500 * MB
 )
 
+// Results is used to return info from BundleWriter.WriteBlob().
+// Both WrittenMD5 and WrittenSHA256 are empty if nothing was written.
+type Results struct {
+	BytesWritten  int64
+	Bundle        int
+	WrittenMD5    []byte
+	WrittenSHA256 []byte
+}
+
 // WriteBlob writes the given blob into the bundle.
-func (bw *BundleWriter) WriteBlob(blob *Blob, r io.Reader) error {
+//
+// WriteBlob first sees if it needs to start a new bundle file based on the
+// number of bytes already written into the current bundle. At the end of the
+// call, CurrentBundle() returns the bundle the blob was written into.
+//
+// If WrittenMD5 is empty, then the file was not created in the bundle.
+//
+// The *Blob is not modified and no validation of the write is performed.
+// Use ValidateWriteBlob() to do validation of the returned Results with the
+// expected values in the *Blob.
+func (bw *BundleWriter) WriteBlob(blob *Blob, r io.Reader) (Results, error) {
+	var result Results
 	if bw.size >= IdealBundleSize || bw.zw == nil {
 		if err := bw.Next(); err != nil {
-			return err
+			return result, err
 		}
 	}
 	w, err := bw.zw.MakeStream(fmt.Sprintf("blob/%d", blob.ID))
 	if err != nil {
-		return err
+		return result, err
 	}
+	// if there was an error on the copy, return it after first filling out
+	// the metadata
 	size, err := io.Copy(w, r)
 	bw.size += size
-	if err != nil {
-		return err
-	}
-	// Don't update DateSaved timestamp, since the blob may be a copy
-	// because of a purge
-	blob.Bundle = bw.n - 1
-	if blob.Size == 0 {
-		blob.Size = size
-	} else if blob.Size != size {
-		return fmt.Errorf("commit (%s blob %d), copied %d bytes, expected %d",
-			bw.item.ID,
-			blob.ID,
-			size,
-			blob.Size)
-	}
+	result.BytesWritten = size
+	result.Bundle = bw.n - 1
 	checksums := bw.zw.Checksum()
-	err = testhash(checksums.MD5, &blob.MD5, bw.item.ID)
-	if err == nil {
-		err = testhash(checksums.SHA256, &blob.SHA256, bw.item.ID)
-	}
-	return err
+	result.WrittenMD5 = checksums.MD5[:]
+	result.WrittenSHA256 = checksums.SHA256[:]
+	return result, err
 }
 
-func testhash(h []byte, target *[]byte, name string) error {
-	if *target == nil {
-		*target = h
-	} else if !bytes.Equal(*target, h) {
+func testhash(h []byte, target []byte, name string) error {
+	if !bytes.Equal(target, h) {
 		return fmt.Errorf("commit (%s), got %s, expected %s",
 			name,
 			hex.EncodeToString(h),
-			hex.EncodeToString(*target))
+			hex.EncodeToString(target))
+	}
+	return nil
+}
+
+// ValidateWriteBlob checks that the correct number of bytes was written and
+// that the written hashes match the expected hashes. Returns nil if everything
+// is good. Otherwise returns an error.
+func ValidateWriteBlob(itemID string, blob *Blob, result Results) error {
+	if blob.Size != result.BytesWritten {
+		return fmt.Errorf("commit (%s blob %d), copied %d bytes, expected %d",
+			itemID,
+			blob.ID,
+			result.BytesWritten,
+			blob.Size)
+	}
+	err := testhash(result.WrittenMD5, blob.MD5, itemID)
+	if err != nil {
+		return err
+	}
+	err = testhash(result.WrittenSHA256, blob.SHA256, itemID)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -163,9 +190,18 @@ func (bw *BundleWriter) CopyBundleExcept(src int, except []BlobID) error {
 		if err != nil {
 			return err
 		}
-		// TODO(dbrower): check for errors
 		blob := bw.item.blobByID(extractBlobID(fname))
-		err = bw.WriteBlob(blob, rc)
+		result, err := bw.WriteBlob(blob, rc)
+		if err != nil {
+			goto close
+		}
+		err = ValidateWriteBlob(bw.item.ID, blob, result)
+		if err != nil {
+			goto close
+		}
+		// only update the bundle if the blob was sucessfully copied.
+		blob.Bundle = result.Bundle
+	close:
 		rc.Close()
 		if err != nil {
 			return err

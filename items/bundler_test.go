@@ -16,10 +16,11 @@ func TestBundleWriter(t *testing.T) {
 	}
 	blob := &Blob{ID: 1}
 	item.Blobs = append(item.Blobs, blob)
-	err := bw.WriteBlob(blob, strings.NewReader("Hello There"))
+	result, err := bw.WriteBlob(blob, strings.NewReader("Hello There"))
 	if err != nil {
 		t.Fatalf("WriteBlob() == %s, expected nil", err.Error())
 	}
+	blob.Bundle = result.Bundle
 	err = bw.Close()
 	if err != nil {
 		t.Fatalf("Close() == %s, expected nil", err.Error())
