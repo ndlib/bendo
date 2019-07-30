@@ -165,16 +165,48 @@ func (wr *Writer) WriteBlob(r io.Reader, size int64, md5, sha256 []byte) (BlobID
 		MD5:    md5,
 		SHA256: sha256,
 	}
-	wr.bnext++ // prevent duplicate blob names inside this bundle
-	err := wr.bw.WriteBlob(blob, r)
-	if err != nil {
+	// This is delicate because of error recovery.
+	// If the blob file was created in the bundle then we will reserve this
+	// blobID and add it to the blob list. Otherwise, we will reuse the blob
+	// id for the next one.
+	result, err := wr.bw.WriteBlob(blob, r)
+	if err != nil && len(result.WrittenMD5) == 0 {
+		// blob was never opened in the target bundle, so return an error
+		// and don't increase the blob ID
 		return 0, err
 	}
-	// now add the blob to the item's blob list
+	// whether or not there was an error, update the blob info to be saved
+	wr.bnext++ // prevent duplicate blob names inside this bundle
+	blob.Bundle = result.Bundle
 	wr.item.Blobs = append(wr.item.Blobs, blob)
 	// ensure blobs are always sorted by increasing ID
 	sort.Stable(byID(wr.item.Blobs))
 	wr.item.MaxBundle = wr.bw.CurrentBundle()
+	// overwrite blank values in the blob...
+	if blob.Size == 0 {
+		blob.Size = result.BytesWritten
+	}
+	if len(blob.MD5) == 0 {
+		blob.MD5 = result.WrittenMD5[:]
+	}
+	if len(blob.SHA256) == 0 {
+		blob.SHA256 = result.WrittenSHA256[:]
+	}
+	// return error from WriteBlob(), if one
+	if err != nil {
+		return 0, err
+	}
+	// now check for validation errors
+	err = ValidateWriteBlob(wr.bw.item.ID, blob, result)
+	if err != nil {
+		// since this blob was never sucessfully written, update the blob
+		// structure to match what was actually written, and then signal an
+		// error.
+		blob.Size = result.BytesWritten
+		blob.MD5 = result.WrittenMD5[:]
+		blob.SHA256 = result.WrittenSHA256[:]
+		return 0, err
+	}
 	return blob.ID, nil
 }
 

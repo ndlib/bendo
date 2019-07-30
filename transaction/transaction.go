@@ -256,7 +256,10 @@ func (tx *T) VerifyFiles(files *fragment.Store) {
 			tx.AppendError("Missing file " + fid)
 			continue
 		}
-		if !f.Verify() {
+		ok, err := f.Verify()
+		if err != nil {
+			tx.AppendError("Checking " + fid + ": " + err.Error())
+		} else if !ok {
 			tx.AppendError("Checksum mismatch for " + fid)
 		}
 	}

@@ -73,7 +73,7 @@ type FileEntry interface {
 
 	// Verify the checksums of this file. Returns true if they match,
 	// and false otherwise.
-	Verify() bool
+	Verify() (bool, error)
 }
 
 // Stat contains the metadata for a file entry.
@@ -361,11 +361,11 @@ func (f *file) save() error {
 // Returns true if the MD5 and SHA256 checksums set on this file match the
 // checksums of the file's contents. If a checksum is not provided, then it
 // is not checked. If neither checksum is provided, then returns true.
-func (f *file) Verify() bool {
+// If an error occured while trying to verify the checksums, the error is returned and the bool value should be ignored.
+func (f *file) Verify() (bool, error) {
 	r := f.Open()
 	defer r.Close()
-	ok, _ := util.VerifyStreamHash(r, f.MD5, f.SHA256)
-	return ok
+	return util.VerifyStreamHash(r, f.MD5, f.SHA256)
 }
 
 func (f *file) SetCreator(name string) {
