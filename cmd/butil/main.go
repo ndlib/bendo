@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/ndlib/bendo/items"
 	"github.com/ndlib/bendo/store"
@@ -35,6 +36,10 @@ Possible commands:
     add <item id> <file/directory list>
 
     set <item id> <file/directory list>
+
+    identify-missing-blobs
+
+    fix-missing-blobs <item id list>
 `
 )
 
@@ -42,7 +47,8 @@ func main() {
 	flag.Parse()
 
 	fmt.Printf("Using storage dir %s\n", *storeDir)
-	r := items.New(store.NewFileSystem(*storeDir))
+	fs := store.NewFileSystem(*storeDir)
+	r := items.New(fs)
 
 	args := flag.Args()
 
@@ -63,6 +69,10 @@ func main() {
 		doadd(r, args[1], args[2:], true)
 	case "delete":
 		dodelete(r, args[1], args[2:])
+	case "identify-missing-blobs":
+		doidentifymissingblobs(r)
+	case "fix-missing-blobs":
+		dofixmissingblobs(fs, r, args[1:])
 	}
 }
 
@@ -291,3 +301,122 @@ func dodelete(r *items.Store, id string, delblobs []string) {
 		fmt.Println(err.Error())
 	}
 }
+
+// doidentifymissingblob will scan an entire store and list the item ids that
+// have "missing blobs". Passing those ids to fix-missing-blob will repair them.
+//
+// See DLTP-1676.
+func doidentifymissingblobs(r *items.Store) {
+	ids := r.List()
+
+	for id := range ids {
+		item, err := r.Item(id)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		n := len(item.Blobs)
+		if n == 0 {
+			// no blobs?
+			continue
+		}
+		if items.BlobID(n) == item.Blobs[n-1].ID {
+			// nothing missing
+			continue
+		}
+		// missing blobs are present
+		fmt.Println(id)
+	}
+}
+
+type missingPair struct {
+	ID     items.BlobID
+	Bundle int
+}
+
+var (
+	zeroMD5 = []byte{0xd4, 0x1d, 0x8c, 0xd9, 0x8f, 0x00, 0xb2, 0x04,
+		0xe9, 0x80, 0x09, 0x98, 0xec, 0xf8, 0x42, 0x7e}
+	zeroSHA256 = []byte{0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14,
+		0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
+		0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c,
+		0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55}
+)
+
+// dofixmissingblobs does an extremely low level fix to repair items that have
+// missing blobs. A missing blob is one that has an ID between 1 and the
+// maximum blob id, and is not in the blob list. The fix is to add these blobs
+// to the blob list. They are added as having a length of zero (which might not
+// be correct!).
+//
+// See DLTP-1676.
+func dofixmissingblobs(fs store.Store, r *items.Store, ids []string) {
+	for _, id := range ids {
+		fixmissingblob(fs, r, id)
+	}
+}
+
+func fixmissingblob(fs store.Store, r *items.Store, id string) {
+	item, err := r.Item(id)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	n := len(item.Blobs)
+	if n == 0 {
+		fmt.Println(id, "- No blobs in item")
+		return
+	}
+	if items.BlobID(n) == item.Blobs[n-1].ID {
+		fmt.Println(id, "- No missing blobs")
+		return
+	}
+	// blob list should be sorted by increasing BlobIDs
+	var missing []missingPair
+	max := item.Blobs[n-1].ID
+	i := 0
+	for expected := items.BlobID(1); expected <= max; expected++ {
+		if item.Blobs[i].ID == expected {
+			i++
+		} else {
+			missing = append(missing, missingPair{
+				ID: expected,
+				// assumes the missing blob is in the same bundle as the blob
+				// with the next larger ID
+				Bundle: item.Blobs[i].Bundle,
+			})
+		}
+	}
+	fmt.Println(id, "-", len(missing), "missing blobs")
+
+	// Add a blob entry for each one missing. This assumes each missing blob
+	// has size 0. Unknown whether this assumption is always true.
+	for _, mp := range missing {
+		blob := &items.Blob{
+			ID:       mp.ID,
+			SaveDate: time.Now(),
+			Creator:  *creator,
+			Size:     0,
+			MD5:      zeroMD5,
+			SHA256:   zeroSHA256,
+			Bundle:   mp.Bundle,
+		}
+		item.Blobs = append(item.Blobs, blob)
+	}
+	sort.Stable(byID(item.Blobs))
+
+	// Save the item. We don't make a new version, since we are not changing
+	// any file mappings. We are only adding blob entries for missing blobs.
+	bw := items.NewBundler(fs, item)
+	item.MaxBundle++ // do this after opening the bundle
+	err = bw.Close()
+	if err != nil {
+		fmt.Println(id, err)
+	}
+}
+
+type byID []*items.Blob
+
+func (p byID) Len() int           { return len(p) }
+func (p byID) Less(i, j int) bool { return p[i].ID < p[j].ID }
+func (p byID) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
