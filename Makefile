@@ -23,7 +23,7 @@ clean:
 	mkdir -p ./bin
 
 # the rpm target requires `fpm` to be installed
-rpm: ./bin/bendo ./bin/bclient
+rpm: ./bin/bendo ./bin/bclient ./bin/butil
 	fpm -t rpm -s dir \
 		--name bendo \
 		--version $(VERSION) \
@@ -33,7 +33,8 @@ rpm: ./bin/bendo ./bin/bclient
 		--rpm-user app \
 		--rpm-group app \
 		bin/bendo=/opt/bendo/bin/bendo \
-		bin/bclient=/opt/bendo/bin/bclient
+		bin/bclient=/opt/bendo/bin/bclient \
+		bin/butil=/opt/bendo/bin/butil
 
 
 # go will track changes in dependencies, so the makefile does not need to do

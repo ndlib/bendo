@@ -1,113 +1,95 @@
-# Command lines for the bendo command line utility
+# Command lines for `butil`, the bendo command line utility
 
-Goal: Upload a directory of files into a bendo item on a remote bendo server.
+This command provides several utility functions for working with a bendo
+storage tree. This utility is designed to run directly on a storage filesystem.
+Use `bclient` to interact with a bendo server.
 
 # Usage
 
-Suppose the server `bendo-staging.library.nd.edu:14000` contains an item named `abc123`.
-This item contains the following files:
+    butil [options] <command> <command arguments>
 
-    abc123/
-        README
-        first.txt
+Options:
 
-## Command line 1
+  -storage <path>
+        The root of the storage tree. Defaults to `.`.
 
-The first command line is
+  -creator <name>
+        The name of the creator to use, if needed. Defaults to `butil`.
 
-    butil upload abc123 directory-name --server bendo-staging.library.nd.edu:14000
+  -verbose
+        Flag to increase the amount of logging output.
 
-This command will upload the files inside directory-name into the item "abc123" on the
-server "bendo-staging.library.nd.edu:14000". If the directory `directory-name` contains the following files:
 
-    directory-name/
-        first.txt
-        second.pdf
-        extra/
-            third.xls
-            fourth.csv
+## Commands
 
-Then the item "abc123" will be changed in the following way:
+### blob
 
-    abc123/
-        README          (untouched)
-        first.txt       (updated with directory-name/first.txt)
-        second.pdf      (added from directory-name/second.pdf)
-        extra/
-            third.xls   (added from directory-name/extra/third.xls)
-            fourth.csv  (added from directory-name/extra/fourth.csv)
+    blob <item id> <blob number>
 
-## Command line 2
+Retreives a specific blob from a given item. The blob's contents are sent to
+STDOUT.
 
-The second command line is
+example:
 
-    butil upload abc123/extra/tenth.mp3 tenth.mp3 --server bendo-staging.library.nd.edu:14000
+    butil blob abcd1234 56
 
-This command will upload the file tenth.mp3 to the item "abc123" on the server "bendo-staging.library.nd.edu:14000". The item "abc123" will now look like this
 
-    abc123/
-        README          (untouched)
-        first.txt       (untouched)
-        extra/
-            tenth.mp3   (added)
+### item
 
-## Command line 3
+    item <item id list>
 
-The third command line is
+Prints a human-readable output describing each item passed in. It will print
+information about the item overall, an entry for each version and information
+for each blob.
 
-    butil get abc123          --server bendo-staging.library.nd.edu:14000
-    butil get abc123 dest-dir --server bendo-staging.library.nd.edu:14000
 
-This command has two variants. The first one will download the complete contents
-of item "abc123" on the server "bendo-staging.library.nd.edu:14000" into the directory
-"abc123" inside the current working directory (creating it if it doesn't already exist.)
+### list
 
-    $CWD/abc123/
-        README      (created from abc123/README)
-        first.txt   (created from abc123/first.txt)
+    list
 
-The second command will download the contents of the given item into the directory `dest-dir` (creating the directory if it doesn't exist).
+List will print to STDOUT an item id for each item in the storage area.
 
-    dest-dir/
-        README      (created from abc123/README)
-        first.txt   (created from abc123/first.txt)
+example:
 
-Note, the identifier given may contain a version marker, e.g. `abc123/@2`. It may also
-include a specific subdirectory or file inside the item, in which case only that subdirectory or item is downloaded. For example
+    butil list
 
-    abc123/@2        - Will download version 2 of the item "abc123"
-    abc123/extra     - If extra is a directory, will download only the contents of that
-    abc123/README    - Will only download the file README
-    abc123/@2/README - Will download the file README from version 2 of the item
 
-# Other uses
+### add
 
-This document has not given a way to perform the following operations on an item in a remote bendo server
+    add <item id> <file/directory list>
 
- * remove a single file
- * rename a single file
- * delete a blob
- * update a file from a diff (i.e. a patching operation)
+Add will add each file and directory to the given item. Files and directories
+that begin with a dot are skipped.
 
-The thought was that these could be done after the essential mechanism of uploading a directory of files was finished.
 
-# Appendix: Bendo item identifiers
+### set
 
-A bendo item identifier is any string meeting the following conditions
+    set <item id> <file/directory list>
 
- * It is at least 1 character long. (There is no specified maximum length. But we all know there is a practical maximum length. I don't know what that is).
- * It does not contain a forward slash `/` or whitespace characters.
- * It does not contain control characters.
- * TBD: should all unicode characters be allowed.
+Set is like add, except it also clears any existing slot entries, so only the
+given files are mapped in the newest version.
 
-Individual files inside an item have identifiers based on the item's ID. They take
-two forms:
 
-    item-id/path/to/file
-    item-id/@2/path/to/file
+### delete
 
-The first form refers to a file in the most recent version of the item. The
-second form refers to a file in a specific version of an item (in this case
-version 2). If a version is given which is not a positive integer or is a
-version which is larger than the current version of the item, then the
-identifier is invalid.
+    delete <item id> <blob number list>
+
+Delete will delete the given blobs from the underlying item. It does this by
+copying any other blobs in the same bundles as the target deleted blobs into a
+new bundle. Then it removes the bundles that contain the target blobs.
+
+
+### identify-missing-blobs
+
+    identify-missing-blobs
+
+This will scan the storage looking for items that have unmapped blobs. (This is
+a rare error condition of the server.)
+
+
+### fix-missing-blobs
+
+    fix-missing-blobs <item id list>
+
+This will fix specific items as identified by `identify-missing-blobs`. If a
+passed in id does not have the error condition, it is ignored.
