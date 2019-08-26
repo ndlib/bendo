@@ -41,7 +41,12 @@ func (w *Writer) Close() error {
 	w.t.tags["Bagging-Date"] = time.Now().Format("2006-01-02")
 	w.t.tags["Bag-Size"] = humansize(w.sz)
 
-	w.writeTags()
+	// If Close() is called after a write error, then this first
+	// call will also fail with an error.
+	err := w.writeTags()
+	if err != nil {
+		return err
+	}
 	w.writeManifests()
 	return w.z.Close()
 }
@@ -95,17 +100,24 @@ func (w *Writer) Checksum() *Checksum {
 	return w.checksum
 }
 
-func (w *Writer) writeTags() {
+func (w *Writer) writeTags() error {
 	// first write bag-it marker file
-	out, _ := w.create("bagit.txt")
+	out, err := w.create("bagit.txt")
+	if err != nil {
+		return err
+	}
 	fmt.Fprintf(out, "BagIt-Version: %s\n", Version)
 	fmt.Fprintf(out, "Tag-File-Character-Encoding: UTF-8\n")
 
 	// now write tags file
-	out, _ = w.create("bag-info.txt")
+	out, err = w.create("bag-info.txt")
+	if err != nil {
+		return err
+	}
 	for k, v := range w.t.tags {
 		fmt.Fprintf(out, "%s: %s\n", k, v)
 	}
+	return nil
 }
 
 func (w *Writer) writeManifests() {
