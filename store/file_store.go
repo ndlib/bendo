@@ -198,6 +198,13 @@ type moveCloser struct {
 }
 
 func (w *moveCloser) Close() error {
+	// Sync the file before we close the descriptor since closing does not
+	// guarantee a sync
+	f, ok := w.WriteCloser.(*os.File)
+	if ok {
+		// is there anything to do if an error occurs here?
+		_ = f.Sync()
+	}
 	err := w.WriteCloser.Close()
 	if err != nil {
 		return err
