@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 
+	raven "github.com/getsentry/raven-go"
 	"github.com/julienschmidt/httprouter"
 
 	"github.com/ndlib/bendo/items"
@@ -50,6 +51,10 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 		} else {
 			w.WriteHeader(404)
 		}
+		// We were unaware of recall errors until it was reported upstream
+		// this appears to capture those issues. However, we may need further
+		// logic to not send every error.
+		raven.CaptureError(err, nil)
 		fmt.Fprintln(w, err.Error())
 		return
 	}
