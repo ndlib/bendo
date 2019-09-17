@@ -22,15 +22,15 @@ import (
 func New(s store.Store) *Store {
 	return &Store{
 		TxStore: fragment.NewJSON(s),
-		txs:     make(map[string]*T),
+		txs:     make(map[string]*Transaction),
 	}
 }
 
 // A Store tracks item transactions.
 type Store struct {
 	TxStore fragment.JSONStore
-	m       sync.RWMutex  // protects txs
-	txs     map[string]*T // cache of transaction ID to transaction
+	m       sync.RWMutex            // protects txs
+	txs     map[string]*Transaction // cache of transaction ID to transaction
 }
 
 // Load reads the underlying store and caches an inventory into memory.
@@ -38,7 +38,7 @@ func (r *Store) Load() error {
 	r.m.Lock()
 	defer r.m.Unlock()
 	for key := range r.TxStore.List() {
-		tx := new(T)
+		tx := new(Transaction)
 		err := r.TxStore.Open(key, tx)
 		if err != nil {
 			log.Printf("TxLoad %s: %s\n", key, err.Error())
@@ -72,7 +72,7 @@ var (
 
 // Create a new transaction to update itemid. There can be at most one
 // transaction per itemid.
-func (r *Store) Create(itemid string) (*T, error) {
+func (r *Store) Create(itemid string) (*Transaction, error) {
 	r.m.Lock()
 	defer r.m.Unlock()
 	// is there currently a open transaction for the item?
@@ -86,7 +86,7 @@ func (r *Store) Create(itemid string) (*T, error) {
 			return nil, ErrExistingTransaction
 		}
 	}
-	tx := &T{
+	tx := &Transaction{
 		ID:       r.makenewid(),
 		Status:   StatusOpen,
 		Started:  time.Now(),
@@ -118,7 +118,7 @@ func randomid() string {
 
 // Lookup the given transaction identifier and return a pointer to the
 // transaction. Returns nil if there is no transaction with that id.
-func (r *Store) Lookup(txid string) *T {
+func (r *Store) Lookup(txid string) *Transaction {
 	r.m.RLock()
 	defer r.m.RUnlock()
 	return r.txs[txid]
@@ -140,8 +140,8 @@ func (r *Store) Delete(id string) error {
 	return err
 }
 
-// T Represents a single transaction.
-type T struct {
+// Transaction Represents a single transaction.
+type Transaction struct {
 	txstore  *fragment.JSONStore // where this structure is stored
 	files    *fragment.Store     // Where files are stored
 	M        sync.RWMutex        // protects everything below
@@ -174,7 +174,7 @@ const (
 
 // AddCommandList changes the command list to process when committing this
 // transaction to the one given.
-func (tx *T) AddCommandList(cmds [][]string) error {
+func (tx *Transaction) AddCommandList(cmds [][]string) error {
 	// first make sure commands are okay
 	for _, cmd := range cmds {
 		c := command(cmd)
@@ -192,7 +192,7 @@ func (tx *T) AddCommandList(cmds [][]string) error {
 }
 
 // SetStatus updates the status of this transaction to s.
-func (tx *T) SetStatus(s Status) {
+func (tx *Transaction) SetStatus(s Status) {
 	tx.M.Lock()
 	defer tx.M.Unlock()
 	tx.Status = s
@@ -203,7 +203,7 @@ func (tx *T) SetStatus(s Status) {
 // underlying item.
 // Commit a creation/update of an item in s, possibly using files
 // in files, and with the given creator name.
-func (tx *T) Commit(s items.Store, files *fragment.Store, cache blobcache.T) {
+func (tx *Transaction) Commit(s items.Store, files *fragment.Store, cache blobcache.T) {
 	// we hold the lock on tx for the duration of the commit.
 	// That might be for a very long time.
 	tx.M.Lock()
@@ -233,7 +233,7 @@ func (tx *T) Commit(s items.Store, files *fragment.Store, cache blobcache.T) {
 
 // ReferencedFiles returns a list of all the upload file ids associated with
 // this transaction. That is, all the files referenced by an "add" command.
-func (tx *T) ReferencedFiles() []string {
+func (tx *Transaction) ReferencedFiles() []string {
 	tx.M.RLock()
 	defer tx.M.RUnlock()
 	var result []string
@@ -249,7 +249,7 @@ func (tx *T) ReferencedFiles() []string {
 // transaction.
 // Pass in the fragment store containing the uploaded files. Any negative
 // results are returned in tx.Err.
-func (tx *T) VerifyFiles(files *fragment.Store) {
+func (tx *Transaction) VerifyFiles(files *fragment.Store) {
 	for _, fid := range tx.ReferencedFiles() {
 		f := files.Lookup(fid)
 		if f == nil {
@@ -267,14 +267,14 @@ func (tx *T) VerifyFiles(files *fragment.Store) {
 
 // AppendError appends the given error string to this transaction.
 // It will acquire the write lock on tx.
-func (tx *T) AppendError(e string) {
+func (tx *Transaction) AppendError(e string) {
 	tx.M.Lock()
 	tx.Err = append(tx.Err, e)
 	tx.M.Unlock()
 }
 
 // must hold lock tx.M to call this
-func (tx *T) save() {
+func (tx *Transaction) save() {
 	if tx.txstore != nil {
 		tx.Modified = time.Now()
 		tx.txstore.Save(tx.ID, tx)
@@ -293,7 +293,7 @@ type command []string
 // Execute this command on the given item writer and transaction.
 // Assumes the write mutex on tx is held on entry. Execute will
 // give up and then reacquire the write mutex on tx during lengthy processing steps.
-func (c command) Execute(iw *items.Writer, tx *T, cache blobcache.T) {
+func (c command) Execute(iw *items.Writer, tx *Transaction, cache blobcache.T) {
 	if !c.WellFormed() {
 		tx.Err = append(tx.Err, "Command is not well formed")
 		return
