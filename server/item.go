@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 
+	raven "github.com/getsentry/raven-go"
 	"github.com/julienschmidt/httprouter"
 
 	"github.com/ndlib/bendo/items"
@@ -43,14 +44,19 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 	item, err := s.Items.Item(id)
 
 	if err != nil {
-		// if item store use disabled, return 503
-		if err == items.ErrNoStore {
+		switch {
+		case err == items.ErrNoStore:
+			// if item store use disabled, return 503
 			w.WriteHeader(503)
 			log.Printf("GET/HEAD /item/%s/%s returns 503 - tape disabled", id, slot)
-		} else {
+		case err == items.ErrNoItem:
 			w.WriteHeader(404)
+		default:
+			raven.CaptureError(err, nil)
+			log.Println(id, ":", err)
+			w.WriteHeader(500)
 		}
-		fmt.Fprintln(w, err.Error())
+		fmt.Fprintln(w, err)
 		return
 	}
 	// if we have the empty path, reroute to the item metadata handler
