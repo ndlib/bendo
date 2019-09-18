@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -137,7 +138,7 @@ func (s *Store) itemload(id string) (*Item, error) {
 func (s *Store) findMaxBundle(id string) int {
 	bundles, err := s.S.ListPrefix(id)
 	if err != nil {
-		// TODO(dbrower): log the error or just lose it?
+		log.Println(id, ":", err)
 		return 0
 	}
 	var max int
