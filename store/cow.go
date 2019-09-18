@@ -201,6 +201,7 @@ func (c *COW) remoteList() <-chan string {
 		// read open bracket
 		_, err = dec.Token()
 		if err != nil {
+			log.Println("Token error:", err)
 			return
 		}
 		var s string
@@ -209,6 +210,7 @@ func (c *COW) remoteList() <-chan string {
 			// decode an array value
 			err = dec.Decode(&s)
 			if err != nil {
+				log.Println("Decoding error:", err)
 				return
 			}
 			out <- s
