@@ -88,6 +88,11 @@ func TestListPrefix(t *testing.T) {
 		{"abcde", []string{
 			"abcdef-0001",
 		}},
+		{"z", []string{}},
+		{"zz", []string{}},
+		{"zzz", []string{}},
+		{"zzzz", []string{}},
+		{"zzzzz", []string{}},
 	}
 	dir := makeTmpTree(files)
 	defer os.RemoveAll(dir)
