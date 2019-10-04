@@ -8,6 +8,7 @@ package fragment
 import (
 	"fmt"
 	"io"
+	"log"
 	"sync"
 	"time"
 
@@ -19,7 +20,7 @@ import (
 // to be uploaded in pieces, "fragments", and then read back as a single
 // unit.
 type Store struct {
-	meta   JSONStore    // for the metadata
+	mstore JSONStore    // for the metadata
 	fstore store.Store  // for the file fragments
 	m      sync.RWMutex // protects everything below
 	files  map[string]*file
@@ -117,7 +118,7 @@ type fragment struct {
 // using the store.
 func New(s store.Store) *Store {
 	return &Store{
-		meta:   NewJSON(store.NewWithPrefix(s, fileKeyPrefix)),
+		mstore: NewJSON(store.NewWithPrefix(s, fileKeyPrefix)),
 		fstore: store.NewWithPrefix(s, fragmentKeyPrefix),
 		files:  make(map[string]*file),
 	}
@@ -126,7 +127,7 @@ func New(s store.Store) *Store {
 // Load initializes the in-memory indexing and caches for the stored file
 // entries. It must be called before using this store.
 func (s *Store) Load() error {
-	metadata, err := s.meta.ListPrefix("")
+	metadata, err := s.mstore.ListPrefix("")
 	if err != nil {
 		return err
 	}
@@ -134,7 +135,7 @@ func (s *Store) Load() error {
 	defer s.m.Unlock()
 	for _, key := range metadata {
 		f := new(file)
-		err := s.meta.Open(key, &f)
+		err := s.mstore.Open(key, &f)
 		if err != nil {
 			// TODO(dbrower): this is probably too strict. We should
 			// probably just skip this file
@@ -205,11 +206,11 @@ func (s *Store) Delete(id string) error {
 	}
 
 	// don't need the lock for the following
-	err := s.meta.Delete(f.ID)
+	err := s.mstore.Delete(f.ID)
 	for _, child := range f.Children {
-		er := s.fstore.Delete(child.ID)
+		err2 := s.fstore.Delete(child.ID)
 		if err == nil {
-			err = er
+			err = err2
 		}
 	}
 	return err
@@ -236,9 +237,8 @@ func (f *file) Stat() Stat {
 func (f *file) Append() (io.WriteCloser, error) {
 	f.m.Lock()
 	defer f.m.Unlock()
-	// TODO(dbrower): replace sprintf with string concat?
 	fragkey := fmt.Sprintf("%s+%04d", f.ID, f.N)
-	f.N++
+	f.N++ // make sure this sequence number is not used again
 	w, err := f.parent.fstore.Create(fragkey)
 	if err != nil {
 		return nil, err
@@ -246,9 +246,19 @@ func (f *file) Append() (io.WriteCloser, error) {
 	frag := &fragment{ID: fragkey}
 	f.Children = append(f.Children, frag)
 	err = f.save()
-	return &fragwriter{frag: frag, parent: f, w: w}, err
+	if err != nil {
+		log.Println(f.ID, err)
+		f.Children = f.Children[:len(f.Children)-1]
+		err2 := w.Close()
+		if err2 != nil {
+			log.Println(err2)
+		}
+		return nil, err
+	}
+	return &fragwriter{frag: frag, parent: f, w: w}, nil
 }
 
+// A fragwriter is used to write a fragment that will be appended to a file
 type fragwriter struct {
 	w    io.WriteCloser
 	size int64
@@ -293,10 +303,10 @@ func (f *file) Open() io.ReadCloser {
 // Each fragment is opened and closed in turn, so there is at most one
 // file descriptor open at any time.
 type fragreader struct {
-	s    store.Store        // the store containing the keys
-	keys []string           // next one to open is at index 0
-	r    store.ReadAtCloser // nil if no reader is open
-	off  int64              // offset into r to read from next
+	s      store.Store        // the store containing the keys
+	keys   []string           // next one to open is at index 0
+	r      store.ReadAtCloser // nil if no reader is open
+	offset int64              // offset into r to read from next
 }
 
 func (fr *fragreader) Read(p []byte) (int, error) {
@@ -308,11 +318,11 @@ func (fr *fragreader) Read(p []byte) (int, error) {
 			if err != nil {
 				return 0, err
 			}
-			fr.off = 0
+			fr.offset = 0
 			fr.keys = fr.keys[1:]
 		}
-		n, err := fr.r.ReadAt(p, fr.off)
-		fr.off += int64(n)
+		n, err := fr.r.ReadAt(p, fr.offset)
+		fr.offset += int64(n)
 		if err == io.EOF {
 			// need to check rest of list before sending EOF
 			err = fr.r.Close()
@@ -355,7 +365,14 @@ func (f *file) Rollback() error {
 // must hold a write lock on f to call this
 func (f *file) save() error {
 	f.Modified = time.Now()
-	return f.parent.meta.Save(f.ID, f)
+	return f.parent.mstore.Save(f.ID, f)
+}
+
+func (f *file) saveAndLog() {
+	err := f.save()
+	if err != nil {
+		log.Println(f.ID, err)
+	}
 }
 
 // Returns true if the MD5 and SHA256 checksums set on this file match the
@@ -364,41 +381,45 @@ func (f *file) save() error {
 // If an error occured while trying to verify the checksums, the error is returned and the bool value should be ignored.
 func (f *file) Verify() (bool, error) {
 	r := f.Open()
-	defer r.Close()
-	return util.VerifyStreamHash(r, f.MD5, f.SHA256)
+	result, err := util.VerifyStreamHash(r, f.MD5, f.SHA256)
+	err2 := r.Close()
+	if err2 != nil {
+		log.Println(f.ID, err2)
+	}
+	return result, err
 }
 
 func (f *file) SetCreator(name string) {
 	f.m.Lock()
 	defer f.m.Unlock()
 	f.Creator = name
-	f.save()
+	f.saveAndLog()
 }
 
 func (f *file) SetMD5(hash []byte) {
 	f.m.Lock()
 	defer f.m.Unlock()
 	f.MD5 = hash[:]
-	f.save()
+	f.saveAndLog()
 }
 
 func (f *file) SetSHA256(hash []byte) {
 	f.m.Lock()
 	defer f.m.Unlock()
 	f.SHA256 = hash[:]
-	f.save()
+	f.saveAndLog()
 }
 
 func (f *file) SetMimeType(mimetype string) {
 	f.m.Lock()
 	defer f.m.Unlock()
 	f.MimeType = mimetype
-	f.save()
+	f.saveAndLog()
 }
 
 func (f *file) SetExtra(extra string) {
 	f.m.Lock()
 	defer f.m.Unlock()
 	f.Extra = extra
-	f.save()
+	f.saveAndLog()
 }
