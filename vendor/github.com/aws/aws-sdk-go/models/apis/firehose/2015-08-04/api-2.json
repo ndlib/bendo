@@ -103,6 +103,36 @@
         {"shape":"ServiceUnavailableException"}
       ]
     },
+    "StartDeliveryStreamEncryption":{
+      "name":"StartDeliveryStreamEncryption",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"StartDeliveryStreamEncryptionInput"},
+      "output":{"shape":"StartDeliveryStreamEncryptionOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ResourceInUseException"},
+        {"shape":"InvalidArgumentException"},
+        {"shape":"LimitExceededException"}
+      ]
+    },
+    "StopDeliveryStreamEncryption":{
+      "name":"StopDeliveryStreamEncryption",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"StopDeliveryStreamEncryptionInput"},
+      "output":{"shape":"StopDeliveryStreamEncryptionOutput"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ResourceInUseException"},
+        {"shape":"InvalidArgumentException"},
+        {"shape":"LimitExceededException"}
+      ]
+    },
     "TagDeliveryStream":{
       "name":"TagDeliveryStream",
       "http":{
@@ -185,7 +215,7 @@
     "ClusterJDBCURL":{
       "type":"string",
       "min":1,
-      "pattern":"jdbc:(redshift|postgresql)://((?!-)[A-Za-z0-9-]{1,63}(?<!-)\\.)+redshift\\.amazonaws\\.com:\\d{1,5}/[a-zA-Z0-9_$]+"
+      "pattern":"jdbc:(redshift|postgresql)://((?!-)[A-Za-z0-9-]{1,63}(?<!-)\\.)+redshift\\.([a-zA-Z0-9\\.]+):\\d{1,5}/[a-zA-Z0-9_$]+"
     },
     "ColumnToJsonKeyMappings":{
       "type":"map",
@@ -232,7 +262,8 @@
         "ExtendedS3DestinationConfiguration":{"shape":"ExtendedS3DestinationConfiguration"},
         "RedshiftDestinationConfiguration":{"shape":"RedshiftDestinationConfiguration"},
         "ElasticsearchDestinationConfiguration":{"shape":"ElasticsearchDestinationConfiguration"},
-        "SplunkDestinationConfiguration":{"shape":"SplunkDestinationConfiguration"}
+        "SplunkDestinationConfiguration":{"shape":"SplunkDestinationConfiguration"},
+        "Tags":{"shape":"TagDeliveryStreamInputTagList"}
       }
     },
     "CreateDeliveryStreamOutput":{
@@ -294,6 +325,7 @@
         "DeliveryStreamName":{"shape":"DeliveryStreamName"},
         "DeliveryStreamARN":{"shape":"DeliveryStreamARN"},
         "DeliveryStreamStatus":{"shape":"DeliveryStreamStatus"},
+        "DeliveryStreamEncryptionConfiguration":{"shape":"DeliveryStreamEncryptionConfiguration"},
         "DeliveryStreamType":{"shape":"DeliveryStreamType"},
         "VersionId":{"shape":"DeliveryStreamVersionId"},
         "CreateTimestamp":{"shape":"Timestamp"},
@@ -302,6 +334,21 @@
         "Destinations":{"shape":"DestinationDescriptionList"},
         "HasMoreDestinations":{"shape":"BooleanObject"}
       }
+    },
+    "DeliveryStreamEncryptionConfiguration":{
+      "type":"structure",
+      "members":{
+        "Status":{"shape":"DeliveryStreamEncryptionStatus"}
+      }
+    },
+    "DeliveryStreamEncryptionStatus":{
+      "type":"string",
+      "enum":[
+        "ENABLED",
+        "ENABLING",
+        "DISABLED",
+        "DISABLING"
+      ]
     },
     "DeliveryStreamName":{
       "type":"string",
@@ -400,18 +447,23 @@
       "max":100,
       "min":1
     },
+    "ElasticsearchClusterEndpoint":{
+      "type":"string",
+      "max":512,
+      "min":1,
+      "pattern":"https:.*"
+    },
     "ElasticsearchDestinationConfiguration":{
       "type":"structure",
       "required":[
         "RoleARN",
-        "DomainARN",
         "IndexName",
-        "TypeName",
         "S3Configuration"
       ],
       "members":{
         "RoleARN":{"shape":"RoleARN"},
         "DomainARN":{"shape":"ElasticsearchDomainARN"},
+        "ClusterEndpoint":{"shape":"ElasticsearchClusterEndpoint"},
         "IndexName":{"shape":"ElasticsearchIndexName"},
         "TypeName":{"shape":"ElasticsearchTypeName"},
         "IndexRotationPeriod":{"shape":"ElasticsearchIndexRotationPeriod"},
@@ -428,6 +480,7 @@
       "members":{
         "RoleARN":{"shape":"RoleARN"},
         "DomainARN":{"shape":"ElasticsearchDomainARN"},
+        "ClusterEndpoint":{"shape":"ElasticsearchClusterEndpoint"},
         "IndexName":{"shape":"ElasticsearchIndexName"},
         "TypeName":{"shape":"ElasticsearchTypeName"},
         "IndexRotationPeriod":{"shape":"ElasticsearchIndexRotationPeriod"},
@@ -444,6 +497,7 @@
       "members":{
         "RoleARN":{"shape":"RoleARN"},
         "DomainARN":{"shape":"ElasticsearchDomainARN"},
+        "ClusterEndpoint":{"shape":"ElasticsearchClusterEndpoint"},
         "IndexName":{"shape":"ElasticsearchIndexName"},
         "TypeName":{"shape":"ElasticsearchTypeName"},
         "IndexRotationPeriod":{"shape":"ElasticsearchIndexRotationPeriod"},
@@ -496,7 +550,7 @@
     "ElasticsearchTypeName":{
       "type":"string",
       "max":100,
-      "min":1
+      "min":0
     },
     "EncryptionConfiguration":{
       "type":"structure",
@@ -507,6 +561,7 @@
     },
     "ErrorCode":{"type":"string"},
     "ErrorMessage":{"type":"string"},
+    "ErrorOutputPrefix":{"type":"string"},
     "ExtendedS3DestinationConfiguration":{
       "type":"structure",
       "required":[
@@ -517,6 +572,7 @@
         "RoleARN":{"shape":"RoleARN"},
         "BucketARN":{"shape":"BucketARN"},
         "Prefix":{"shape":"Prefix"},
+        "ErrorOutputPrefix":{"shape":"ErrorOutputPrefix"},
         "BufferingHints":{"shape":"BufferingHints"},
         "CompressionFormat":{"shape":"CompressionFormat"},
         "EncryptionConfiguration":{"shape":"EncryptionConfiguration"},
@@ -540,6 +596,7 @@
         "RoleARN":{"shape":"RoleARN"},
         "BucketARN":{"shape":"BucketARN"},
         "Prefix":{"shape":"Prefix"},
+        "ErrorOutputPrefix":{"shape":"ErrorOutputPrefix"},
         "BufferingHints":{"shape":"BufferingHints"},
         "CompressionFormat":{"shape":"CompressionFormat"},
         "EncryptionConfiguration":{"shape":"EncryptionConfiguration"},
@@ -556,6 +613,7 @@
         "RoleARN":{"shape":"RoleARN"},
         "BucketARN":{"shape":"BucketARN"},
         "Prefix":{"shape":"Prefix"},
+        "ErrorOutputPrefix":{"shape":"ErrorOutputPrefix"},
         "BufferingHints":{"shape":"BufferingHints"},
         "CompressionFormat":{"shape":"CompressionFormat"},
         "EncryptionConfiguration":{"shape":"EncryptionConfiguration"},
@@ -889,6 +947,7 @@
       ],
       "members":{
         "FailedPutCount":{"shape":"NonNegativeIntegerObject"},
+        "Encrypted":{"shape":"BooleanObject"},
         "RequestResponses":{"shape":"PutRecordBatchResponseEntryList"}
       }
     },
@@ -927,7 +986,8 @@
       "type":"structure",
       "required":["RecordId"],
       "members":{
-        "RecordId":{"shape":"PutResponseRecordId"}
+        "RecordId":{"shape":"PutResponseRecordId"},
+        "Encrypted":{"shape":"BooleanObject"}
       }
     },
     "PutResponseRecordId":{
@@ -1058,6 +1118,7 @@
         "RoleARN":{"shape":"RoleARN"},
         "BucketARN":{"shape":"BucketARN"},
         "Prefix":{"shape":"Prefix"},
+        "ErrorOutputPrefix":{"shape":"ErrorOutputPrefix"},
         "BufferingHints":{"shape":"BufferingHints"},
         "CompressionFormat":{"shape":"CompressionFormat"},
         "EncryptionConfiguration":{"shape":"EncryptionConfiguration"},
@@ -1077,6 +1138,7 @@
         "RoleARN":{"shape":"RoleARN"},
         "BucketARN":{"shape":"BucketARN"},
         "Prefix":{"shape":"Prefix"},
+        "ErrorOutputPrefix":{"shape":"ErrorOutputPrefix"},
         "BufferingHints":{"shape":"BufferingHints"},
         "CompressionFormat":{"shape":"CompressionFormat"},
         "EncryptionConfiguration":{"shape":"EncryptionConfiguration"},
@@ -1089,6 +1151,7 @@
         "RoleARN":{"shape":"RoleARN"},
         "BucketARN":{"shape":"BucketARN"},
         "Prefix":{"shape":"Prefix"},
+        "ErrorOutputPrefix":{"shape":"ErrorOutputPrefix"},
         "BufferingHints":{"shape":"BufferingHints"},
         "CompressionFormat":{"shape":"CompressionFormat"},
         "EncryptionConfiguration":{"shape":"EncryptionConfiguration"},
@@ -1197,6 +1260,30 @@
         "FailedEventsOnly",
         "AllEvents"
       ]
+    },
+    "StartDeliveryStreamEncryptionInput":{
+      "type":"structure",
+      "required":["DeliveryStreamName"],
+      "members":{
+        "DeliveryStreamName":{"shape":"DeliveryStreamName"}
+      }
+    },
+    "StartDeliveryStreamEncryptionOutput":{
+      "type":"structure",
+      "members":{
+      }
+    },
+    "StopDeliveryStreamEncryptionInput":{
+      "type":"structure",
+      "required":["DeliveryStreamName"],
+      "members":{
+        "DeliveryStreamName":{"shape":"DeliveryStreamName"}
+      }
+    },
+    "StopDeliveryStreamEncryptionOutput":{
+      "type":"structure",
+      "members":{
+      }
     },
     "Tag":{
       "type":"structure",
