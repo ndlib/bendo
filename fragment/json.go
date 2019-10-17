@@ -2,6 +2,7 @@ package fragment
 
 import (
 	"encoding/json"
+	"log"
 
 	"github.com/ndlib/bendo/store"
 )
@@ -25,9 +26,15 @@ func (js JSONStore) Open(key string, value interface{}) error {
 	if err != nil {
 		return err
 	}
-	defer r.Close()
 	dec := json.NewDecoder(store.NewReader(r))
-	return dec.Decode(value)
+	err = dec.Decode(value)
+	err2 := r.Close()
+	if err == nil {
+		err = err2
+	} else {
+		log.Println(key, err2)
+	}
+	return err
 }
 
 // Create is a synonym for Save(). (Why do we have this?)
@@ -47,7 +54,13 @@ func (js JSONStore) Save(key string, value interface{}) error {
 	if err != nil {
 		return err
 	}
-	defer w.Close()
 	enc := json.NewEncoder(w)
-	return enc.Encode(value)
+	err = enc.Encode(value)
+	err2 := w.Close()
+	if err == nil {
+		err = err2
+	} else {
+		log.Println(key, err2)
+	}
+	return err
 }
