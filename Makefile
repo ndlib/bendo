@@ -5,7 +5,7 @@ VERSION:=$(shell git describe --always)
 PACKAGES:=$(shell go list ./... | grep -v /vendor/)
 GO15VENDOREXPERIMENT=1
 
-.PHONY: all test test-integration clean rpm $(BINARIES)
+.PHONY: all test test-integration clean rpm buildimage upload-buildimage $(BINARIES)
 
 all: $(BINARIES)
 
@@ -36,6 +36,14 @@ rpm: ./bin/bendo ./bin/bclient ./bin/butil
 		bin/bclient=/opt/bendo/bin/bclient \
 		bin/butil=/opt/bendo/bin/butil
 
+# make a new docker image for building bendo RPMs
+buildimage: ./docker/buildimage/install-ruby.sh ./docker/buildimage/install-go.sh
+	cd ./docker/buildimage/ && docker build . -t ndlib/bendo-buildimage -f Dockerfile
+
+# make a new buildimage container and push it to docker hub
+upload-buildimage: buildimage
+	docker login
+	docker push ndlib/bendo-buildimage
 
 # go will track changes in dependencies, so the makefile does not need to do
 # that. That means we always compile everything here.

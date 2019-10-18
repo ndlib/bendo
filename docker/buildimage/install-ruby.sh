@@ -17,6 +17,3 @@ curl -sO https://rubygems.org/rubygems/rubygems-$version.tgz
 tar zxvf rubygems-$version.tgz
 cd rubygems-$version
 /usr/local/bin/ruby setup.rb
-
-# chef-solo
-gem install bundler chef ruby-shadow --no-ri --no-rdoc
