@@ -26,7 +26,7 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:d0bd46c188ed61745fbe769daba6676c9d6db9122e73aed5c47be9c8631bc6bb"
+  digest = "1:46bdd58d4ceccd57199c9a42f2103a890811a44d4ef5bb9deac0525f13de928b"
   name = "github.com/aws/aws-sdk-go"
   packages = [
     "aws",
@@ -38,6 +38,7 @@
     "aws/credentials",
     "aws/credentials/ec2rolecreds",
     "aws/credentials/endpointcreds",
+    "aws/credentials/processcreds",
     "aws/credentials/stscreds",
     "aws/csm",
     "aws/defaults",
@@ -49,12 +50,14 @@
     "internal/ini",
     "internal/s3err",
     "internal/sdkio",
+    "internal/sdkmath",
     "internal/sdkrand",
     "internal/sdkuri",
     "internal/shareddefaults",
     "private/protocol",
     "private/protocol/eventstream",
     "private/protocol/eventstream/eventstreamapi",
+    "private/protocol/json/jsonutil",
     "private/protocol/query",
     "private/protocol/query/queryutil",
     "private/protocol/rest",
@@ -62,10 +65,11 @@
     "private/protocol/xml/xmlutil",
     "service/s3",
     "service/sts",
+    "service/sts/stsiface",
   ]
   pruneopts = ""
-  revision = "fa9217848bf00ff03c3c097e9c109cbe833ea130"
-  version = "v1.15.69"
+  revision = "15cbab53359072d0801eb32d16d0a406207e8716"
+  version = "v1.25.14"
 
 [[projects]]
   digest = "1:8722889ad027febfced94665914d1e7be8f1b703d31f2ef9461c59e4d40fe974"
@@ -77,47 +81,47 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:55189e6c0cfbd5d758fefc627278651ab12506d3a834aaa7e04338bcc3c31f1c"
+  digest = "1:d58f87f16ba95126d40c45e1926351320b4d0f31d1051c3bf203b8529575e9c9"
   name = "github.com/cznic/b"
   packages = ["."]
   pruneopts = ""
-  revision = "35e9bbe41f07452a183c517a5fc5f3c9f45eaa0f"
+  revision = "a26611c4d92dc9181cdb5e8d67fb712700fcd4a3"
 
 [[projects]]
   branch = "master"
-  digest = "1:46e7c78485d984e86ccb8038b96a270dfac8e77b09bab5c9d0aad40dcbaf300c"
+  digest = "1:5d92a0c9d10a33dd706188fb39207e3e49307f1e0aa29210703aa8a107a49f89"
   name = "github.com/cznic/db"
   packages = ["."]
   pruneopts = ""
-  revision = "9a9997a96c2231eb1be8c41ac26442c1a4b007a3"
+  revision = "661fca3aa13d7c6a866498ee35d2ccba2c7b5a6f"
 
 [[projects]]
   branch = "master"
-  digest = "1:3eed48334b3b96e70d2c8c4a2e2d4b18c002ff5fa9ad88e98579a7ff2510fc2f"
+  digest = "1:ec01f46420a1f8c11bc87a66ae13228f9b75e5212adbacebc97d2b54ea6e5d93"
   name = "github.com/cznic/file"
   packages = ["."]
   pruneopts = ""
-  revision = "c5b24a4c78ba2cfb4476ecd0b3ec94827839c3e7"
+  revision = "666493a488b5fc9d1e871b1a8e03fa962f6a9fa5"
 
 [[projects]]
   branch = "master"
-  digest = "1:051ec2da9db9819838d81f96c624201623cb5bbb44ff76b3228dd468eae31186"
+  digest = "1:5feb0cd632fa7e50c3ff50ea63e006316b43f378ee16ac35ccfc35fe3a7e6cd5"
   name = "github.com/cznic/fileutil"
   packages = ["."]
   pruneopts = ""
-  revision = "6a051e75936f623600b67c2b1116b6b6c0ffb936"
+  revision = "4d67cfea8c87a5ea35f02b7716ffe87753abb64a"
 
 [[projects]]
   branch = "master"
-  digest = "1:45fa602dc91a68efd99beaf39891dee7f931a08ac03ebb491a10d148e3c12232"
+  digest = "1:d2a0734920cf6afc1012eff15e084f246319231d0e55d47748151befe9ad2c29"
   name = "github.com/cznic/golex"
   packages = ["lex"]
   pruneopts = ""
-  revision = "4ab7c5e190e49208c823ce8ec803aa39e6a4b31a"
+  revision = "9c343928389cc59a56eb4494e0b781f1a9145ec0"
 
 [[projects]]
   branch = "master"
-  digest = "1:9bb0ec5dd641320a3135923779cfd03c5912edfc26f77e7afc92e561e502526d"
+  digest = "1:c19ef92c4bce973bcb4200ec4f89503de0fcc53188fa31d471a87ac7f2931fdb"
   name = "github.com/cznic/internal"
   packages = [
     "buffer",
@@ -125,7 +129,7 @@
     "slice",
   ]
   pruneopts = ""
-  revision = "f44710a21d00af8b5c8d1b3ff5f141fe5cb9b9eb"
+  revision = "3279554c546e0f1fa7eac9bb4d45cea926d141ea"
 
 [[projects]]
   digest = "1:9f7b82ce0d78b72a9412eb4c6f3e3780a69110bc9145e31e987e1e09142b3fd3"
@@ -137,15 +141,15 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:f91cdb5491e208407866f02e4018209385a06332f0bf24b44809047bb722c425"
+  digest = "1:94ce318e05eef6c746503a5b06f8c4c7679760d3a4b27b454400c4c52f3f70dd"
   name = "github.com/cznic/mathutil"
   packages = ["."]
   pruneopts = ""
-  revision = "eba54fb065b72d838b4b3481c6056998ead55e74"
+  revision = "297441e035482346a960053c9ea29669b13e1025"
 
 [[projects]]
   branch = "master"
-  digest = "1:9d884b12b08310dcec35249c23e3299a8f5b1f056a0e47b029c211bce5af2648"
+  digest = "1:c80f5d7b2ed6054e2057ff05790a2924c226e8db9b479e25211890b031834348"
   name = "github.com/cznic/ql"
   packages = [
     ".",
@@ -153,39 +157,39 @@
     "vendored/github.com/camlistore/go4/lock",
   ]
   pruneopts = ""
-  revision = "3a24a15b769132006481279fba26a5b6de695ec6"
+  revision = "b60735abf8a0c153d60b21634d650fbaa9e9a288"
 
 [[projects]]
   branch = "master"
-  digest = "1:71a57c92aaf785802e1a3f99d7302ca48c41f0b93696050830bcef0275d7cc84"
+  digest = "1:e3c4afa92053f38831a3611cccedd316c9f2b9699f4ad87fd59b5f3ee67957c2"
   name = "github.com/cznic/sortutil"
   packages = ["."]
   pruneopts = ""
-  revision = "4c7342852e65c2088c981288f2c5610d10b9f7f4"
+  revision = "f5f958428db822072e84a845d95c490468f5e96d"
 
 [[projects]]
   branch = "master"
-  digest = "1:10c156466dc5691a650ca4835325201de098f323ef91996d6d73844e1f4ec6ba"
+  digest = "1:d65621a6759c79527a789f56c5f46d50c4fa4e23daf4fd43d10a533c4277c244"
   name = "github.com/cznic/strutil"
   packages = ["."]
   pruneopts = ""
-  revision = "529a34b1c186b483642a7a230c67521d9aa4b0fb"
+  revision = "275e9034453778034cf2718cec00c840f5a34299"
 
 [[projects]]
   branch = "master"
-  digest = "1:f251144eadb9980c7058ab8073297dcd918ec2760a2e5383805c5f6b9deee996"
+  digest = "1:a731d57750456b7614504c50d1b163d7efc9d3d24edbbca97cb58474bfc4adf1"
   name = "github.com/cznic/zappy"
   packages = ["."]
   pruneopts = ""
-  revision = "2533cb5b45cc6c07421468ce262899ddc9d53fb7"
+  revision = "ca47d358d4b1fee03c89617b25fc2d7bac45a9a6"
 
 [[projects]]
-  branch = "master"
-  digest = "1:4c4a331124d70560f6da77d5088c10215e28a4b7fc1ee81eb4bc8400c86761cc"
+  digest = "1:cfe61b953a7ced7d574f8ad8511b5cb5fc344dc59b51fe8ae8f76b0ef14a4a30"
   name = "github.com/edsrzf/mmap-go"
   packages = ["."]
   pruneopts = ""
-  revision = "0bce6a6887123b67a60366d2c9fe2dfb74289d2e"
+  revision = "188cc3b666ba704534fa4f96e9e61f21f1e1ba7c"
+  version = "v1.0.0"
 
 [[projects]]
   branch = "master"
@@ -220,51 +224,62 @@
   version = "v0.2.0"
 
 [[projects]]
-  digest = "1:c07de423ca37dc2765396d6971599ab652a339538084b9b58c9f7fc533b28525"
+  digest = "1:e692d16fdfbddb94e9e4886aaf6c08bdbae5cb4ac80651445de9181b371c6e46"
   name = "github.com/go-sql-driver/mysql"
   packages = ["."]
   pruneopts = ""
-  revision = "d523deb1b23d913de5bdada721a6071e71283618"
-  version = "v1.4.0"
+  revision = "72cd26f257d44c1114970e19afddcd812016007e"
+  version = "v1.4.1"
 
 [[projects]]
-  digest = "1:6f49eae0c1e5dab1dafafee34b207aeb7a42303105960944828c2079b92fc88e"
+  digest = "1:13fe471d0ed891e8544eddfeeb0471fd3c9f2015609a1c000aefdedf52a19d40"
   name = "github.com/jmespath/go-jmespath"
   packages = ["."]
   pruneopts = ""
-  revision = "0b12d6b5"
+  revision = "c2b33e84"
 
 [[projects]]
-  digest = "1:deeb6536ebbcb66ab11213ecfaac9daadfcd004dd057446a4980ffd6c15c36e2"
+  digest = "1:4659313061ea46d02b76c94aeb0c11d9973cc45761eccbd50ed70f28e6d43f8f"
   name = "github.com/julienschmidt/httprouter"
   packages = ["."]
   pruneopts = ""
-  revision = "348b672cd90d8190f8240323e372ecd1e66b59dc"
-  version = "v1.2.0"
+  revision = "4eec211fa4e8df74ed978dc5681612131854144f"
+  version = "v1.3.0"
 
 [[projects]]
-  digest = "1:7365acd48986e205ccb8652cc746f09c8b7876030d53710ea6ef7d0bd0dcd7ca"
+  digest = "1:1d7e1867c49a6dd9856598ef7c3123604ea3daabf5b83f303ff457bcbc410b1d"
   name = "github.com/pkg/errors"
   packages = ["."]
   pruneopts = ""
-  revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
-  version = "v0.8.0"
+  revision = "ba968bfe8b2f7e042a574c888954fccecfa385b4"
+  version = "v0.8.1"
 
 [[projects]]
   branch = "master"
-  digest = "1:dcf3a76b4560e0eb5a4a2b6517b8e1f21a37aabee2535424f0d69cc817755ad6"
+  digest = "1:839ef66e10303d306070b79cb5f7c1be4030b6c6ae33afb4279cc53b618d9853"
   name = "github.com/remyoudompheng/bigfft"
   packages = ["."]
   pruneopts = ""
-  revision = "52369c62f4463a21c8ff8531194c5526322b8521"
+  revision = "6a916e37a237384e18eefa3270c09247db1ecf50"
 
 [[projects]]
-  digest = "1:77d3cff3a451d50be4b52db9c7766c0d8570ba47593f0c9dc72173adb208e788"
+  branch = "master"
+  digest = "1:055771f25c4d6493a840af5cbdb8da461be2ec1192049dbaebd6ae1a8cbcdea0"
+  name = "golang.org/x/sys"
+  packages = [
+    "unix",
+    "windows",
+  ]
+  pruneopts = ""
+  revision = "b09406accb4736d857a32bf9444cd7edae2ffa79"
+
+[[projects]]
+  digest = "1:c4404231035fad619a12f82ae3f0f8f9edc1cc7f34e7edad7a28ccac5336cc96"
   name = "google.golang.org/appengine"
   packages = ["cloudsql"]
   pruneopts = ""
-  revision = "4a4468ece617fc8205e99368fa2200e9d1fad421"
-  version = "v1.3.0"
+  revision = "971852bfffca25b069c31162ae8f247a3dba083b"
+  version = "v1.6.5"
 
 [solve-meta]
   analyzer-name = "dep"

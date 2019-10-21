@@ -94,7 +94,7 @@ The ability is only a proof-of-concept now, and entire bundle files are transfer
 If the Copy-on-Write ability is useful, the code should be rewritten so that
 only individual blobs are transferred between the two Bendo servers.
 
-Enable COW mode by setting the http address for the second Bendo server in the config file.
+Enable COW mode by setting the http address for the second Bendo server in the configuration file.
 If the second Bendo server is protected by a token, also give an access token.
 
     CowHost = "http://bendo.example.com:14000"
@@ -106,6 +106,15 @@ The second Bendo server supports the copying by default and does not need to be 
 # Deployment in Production
 
 TBD
+
+# Codebuild and the Docker buildimage container
+
+You can optionally configure codebuild to build RPM images.
+We use a docker image to do the compiling.
+The Dockerfile is `docker/buildimage/Dockerfile`.
+You can rebuild it locally using `make buildimage` in the root of the repository.
+
+Update the container image in Docker Hub by running `make upload-buildimage` in the root of the repository.
 
 # Contributions
 

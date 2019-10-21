@@ -159,7 +159,7 @@ func (c *Inspector) CreateAssessmentTargetRequest(input *CreateAssessmentTargetI
 // role to grant Amazon Inspector access to AWS Services needed to perform security
 // assessments. You can create up to 50 assessment targets per AWS account.
 // You can run up to 500 concurrent agents per AWS account. For more information,
-// see  Amazon Inspector Assessment Targets (http://docs.aws.amazon.com/inspector/latest/userguide/inspector_applications.html).
+// see Amazon Inspector Assessment Targets (https://docs.aws.amazon.com/inspector/latest/userguide/inspector_applications.html).
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -551,8 +551,7 @@ func (c *Inspector) DeleteAssessmentRunRequest(input *DeleteAssessmentRunInput) 
 
 	output = &DeleteAssessmentRunOutput{}
 	req = c.newRequest(op, input, output)
-	req.Handlers.Unmarshal.Remove(jsonrpc.UnmarshalHandler)
-	req.Handlers.Unmarshal.PushBackNamed(protocol.UnmarshalDiscardBodyHandler)
+	req.Handlers.Unmarshal.Swap(jsonrpc.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -651,8 +650,7 @@ func (c *Inspector) DeleteAssessmentTargetRequest(input *DeleteAssessmentTargetI
 
 	output = &DeleteAssessmentTargetOutput{}
 	req = c.newRequest(op, input, output)
-	req.Handlers.Unmarshal.Remove(jsonrpc.UnmarshalHandler)
-	req.Handlers.Unmarshal.PushBackNamed(protocol.UnmarshalDiscardBodyHandler)
+	req.Handlers.Unmarshal.Swap(jsonrpc.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -751,8 +749,7 @@ func (c *Inspector) DeleteAssessmentTemplateRequest(input *DeleteAssessmentTempl
 
 	output = &DeleteAssessmentTemplateOutput{}
 	req = c.newRequest(op, input, output)
-	req.Handlers.Unmarshal.Remove(jsonrpc.UnmarshalHandler)
-	req.Handlers.Unmarshal.PushBackNamed(protocol.UnmarshalDiscardBodyHandler)
+	req.Handlers.Unmarshal.Swap(jsonrpc.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -1691,7 +1688,7 @@ func (c *Inspector) GetExclusionsPreviewWithContext(ctx aws.Context, input *GetE
 //    // Example iterating over at most 3 pages of a GetExclusionsPreview operation.
 //    pageNum := 0
 //    err := client.GetExclusionsPreviewPages(params,
-//        func(page *GetExclusionsPreviewOutput, lastPage bool) bool {
+//        func(page *inspector.GetExclusionsPreviewOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -1929,7 +1926,7 @@ func (c *Inspector) ListAssessmentRunAgentsWithContext(ctx aws.Context, input *L
 //    // Example iterating over at most 3 pages of a ListAssessmentRunAgents operation.
 //    pageNum := 0
 //    err := client.ListAssessmentRunAgentsPages(params,
-//        func(page *ListAssessmentRunAgentsOutput, lastPage bool) bool {
+//        func(page *inspector.ListAssessmentRunAgentsOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -2076,7 +2073,7 @@ func (c *Inspector) ListAssessmentRunsWithContext(ctx aws.Context, input *ListAs
 //    // Example iterating over at most 3 pages of a ListAssessmentRuns operation.
 //    pageNum := 0
 //    err := client.ListAssessmentRunsPages(params,
-//        func(page *ListAssessmentRunsOutput, lastPage bool) bool {
+//        func(page *inspector.ListAssessmentRunsOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -2167,7 +2164,7 @@ func (c *Inspector) ListAssessmentTargetsRequest(input *ListAssessmentTargetsInp
 //
 // Lists the ARNs of the assessment targets within this AWS account. For more
 // information about assessment targets, see Amazon Inspector Assessment Targets
-// (http://docs.aws.amazon.com/inspector/latest/userguide/inspector_applications.html).
+// (https://docs.aws.amazon.com/inspector/latest/userguide/inspector_applications.html).
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -2220,7 +2217,7 @@ func (c *Inspector) ListAssessmentTargetsWithContext(ctx aws.Context, input *Lis
 //    // Example iterating over at most 3 pages of a ListAssessmentTargets operation.
 //    pageNum := 0
 //    err := client.ListAssessmentTargetsPages(params,
-//        func(page *ListAssessmentTargetsOutput, lastPage bool) bool {
+//        func(page *inspector.ListAssessmentTargetsOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -2367,7 +2364,7 @@ func (c *Inspector) ListAssessmentTemplatesWithContext(ctx aws.Context, input *L
 //    // Example iterating over at most 3 pages of a ListAssessmentTemplates operation.
 //    pageNum := 0
 //    err := client.ListAssessmentTemplatesPages(params,
-//        func(page *ListAssessmentTemplatesOutput, lastPage bool) bool {
+//        func(page *inspector.ListAssessmentTemplatesOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -2515,7 +2512,7 @@ func (c *Inspector) ListEventSubscriptionsWithContext(ctx aws.Context, input *Li
 //    // Example iterating over at most 3 pages of a ListEventSubscriptions operation.
 //    pageNum := 0
 //    err := client.ListEventSubscriptionsPages(params,
-//        func(page *ListEventSubscriptionsOutput, lastPage bool) bool {
+//        func(page *inspector.ListEventSubscriptionsOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -2661,7 +2658,7 @@ func (c *Inspector) ListExclusionsWithContext(ctx aws.Context, input *ListExclus
 //    // Example iterating over at most 3 pages of a ListExclusions operation.
 //    pageNum := 0
 //    err := client.ListExclusionsPages(params,
-//        func(page *ListExclusionsOutput, lastPage bool) bool {
+//        func(page *inspector.ListExclusionsOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -2808,7 +2805,7 @@ func (c *Inspector) ListFindingsWithContext(ctx aws.Context, input *ListFindings
 //    // Example iterating over at most 3 pages of a ListFindings operation.
 //    pageNum := 0
 //    err := client.ListFindingsPages(params,
-//        func(page *ListFindingsOutput, lastPage bool) bool {
+//        func(page *inspector.ListFindingsOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -2950,7 +2947,7 @@ func (c *Inspector) ListRulesPackagesWithContext(ctx aws.Context, input *ListRul
 //    // Example iterating over at most 3 pages of a ListRulesPackages operation.
 //    pageNum := 0
 //    err := client.ListRulesPackagesPages(params,
-//        func(page *ListRulesPackagesOutput, lastPage bool) bool {
+//        func(page *inspector.ListRulesPackagesOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -3191,7 +3188,7 @@ func (c *Inspector) PreviewAgentsWithContext(ctx aws.Context, input *PreviewAgen
 //    // Example iterating over at most 3 pages of a PreviewAgents operation.
 //    pageNum := 0
 //    err := client.PreviewAgentsPages(params,
-//        func(page *PreviewAgentsOutput, lastPage bool) bool {
+//        func(page *inspector.PreviewAgentsOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -3269,8 +3266,7 @@ func (c *Inspector) RegisterCrossAccountAccessRoleRequest(input *RegisterCrossAc
 
 	output = &RegisterCrossAccountAccessRoleOutput{}
 	req = c.newRequest(op, input, output)
-	req.Handlers.Unmarshal.Remove(jsonrpc.UnmarshalHandler)
-	req.Handlers.Unmarshal.PushBackNamed(protocol.UnmarshalDiscardBodyHandler)
+	req.Handlers.Unmarshal.Swap(jsonrpc.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -3460,8 +3456,7 @@ func (c *Inspector) SetTagsForResourceRequest(input *SetTagsForResourceInput) (r
 
 	output = &SetTagsForResourceOutput{}
 	req = c.newRequest(op, input, output)
-	req.Handlers.Unmarshal.Remove(jsonrpc.UnmarshalHandler)
-	req.Handlers.Unmarshal.PushBackNamed(protocol.UnmarshalDiscardBodyHandler)
+	req.Handlers.Unmarshal.Swap(jsonrpc.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -3663,8 +3658,7 @@ func (c *Inspector) StopAssessmentRunRequest(input *StopAssessmentRunInput) (req
 
 	output = &StopAssessmentRunOutput{}
 	req = c.newRequest(op, input, output)
-	req.Handlers.Unmarshal.Remove(jsonrpc.UnmarshalHandler)
-	req.Handlers.Unmarshal.PushBackNamed(protocol.UnmarshalDiscardBodyHandler)
+	req.Handlers.Unmarshal.Swap(jsonrpc.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -3758,8 +3752,7 @@ func (c *Inspector) SubscribeToEventRequest(input *SubscribeToEventInput) (req *
 
 	output = &SubscribeToEventOutput{}
 	req = c.newRequest(op, input, output)
-	req.Handlers.Unmarshal.Remove(jsonrpc.UnmarshalHandler)
-	req.Handlers.Unmarshal.PushBackNamed(protocol.UnmarshalDiscardBodyHandler)
+	req.Handlers.Unmarshal.Swap(jsonrpc.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -3858,8 +3851,7 @@ func (c *Inspector) UnsubscribeFromEventRequest(input *UnsubscribeFromEventInput
 
 	output = &UnsubscribeFromEventOutput{}
 	req = c.newRequest(op, input, output)
-	req.Handlers.Unmarshal.Remove(jsonrpc.UnmarshalHandler)
-	req.Handlers.Unmarshal.PushBackNamed(protocol.UnmarshalDiscardBodyHandler)
+	req.Handlers.Unmarshal.Swap(jsonrpc.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -3954,8 +3946,7 @@ func (c *Inspector) UpdateAssessmentTargetRequest(input *UpdateAssessmentTargetI
 
 	output = &UpdateAssessmentTargetOutput{}
 	req = c.newRequest(op, input, output)
-	req.Handlers.Unmarshal.Remove(jsonrpc.UnmarshalHandler)
-	req.Handlers.Unmarshal.PushBackNamed(protocol.UnmarshalDiscardBodyHandler)
+	req.Handlers.Unmarshal.Swap(jsonrpc.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -7011,7 +7002,7 @@ type GetAssessmentReportInput struct {
 
 	// Specifies the type of the assessment report that you want to generate. There
 	// are two types of assessment reports: a finding report and a full report.
-	// For more information, see Assessment Reports (http://docs.aws.amazon.com/inspector/latest/userguide/inspector_reports.html).
+	// For more information, see Assessment Reports (https://docs.aws.amazon.com/inspector/latest/userguide/inspector_reports.html).
 	//
 	// ReportType is a required field
 	ReportType *string `locationName:"reportType" type:"string" required:"true" enum:"ReportType"`

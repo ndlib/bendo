@@ -52,6 +52,7 @@ func (c *CloudDirectory) AddFacetToObjectRequest(input *AddFacetToObjectInput) (
 
 	output = &AddFacetToObjectOutput{}
 	req = c.newRequest(op, input, output)
+	req.Handlers.Unmarshal.Swap(restjson.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -416,6 +417,7 @@ func (c *CloudDirectory) AttachPolicyRequest(input *AttachPolicyInput) (req *req
 
 	output = &AttachPolicyOutput{}
 	req = c.newRequest(op, input, output)
+	req.Handlers.Unmarshal.Swap(restjson.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -1114,6 +1116,7 @@ func (c *CloudDirectory) CreateFacetRequest(input *CreateFacetInput) (req *reque
 
 	output = &CreateFacetOutput{}
 	req = c.newRequest(op, input, output)
+	req.Handlers.Unmarshal.Swap(restjson.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -1601,6 +1604,7 @@ func (c *CloudDirectory) CreateTypedLinkFacetRequest(input *CreateTypedLinkFacet
 
 	output = &CreateTypedLinkFacetOutput{}
 	req = c.newRequest(op, input, output)
+	req.Handlers.Unmarshal.Swap(restjson.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -1833,6 +1837,7 @@ func (c *CloudDirectory) DeleteFacetRequest(input *DeleteFacetInput) (req *reque
 
 	output = &DeleteFacetOutput{}
 	req = c.newRequest(op, input, output)
+	req.Handlers.Unmarshal.Swap(restjson.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -1948,6 +1953,7 @@ func (c *CloudDirectory) DeleteObjectRequest(input *DeleteObjectInput) (req *req
 
 	output = &DeleteObjectOutput{}
 	req = c.newRequest(op, input, output)
+	req.Handlers.Unmarshal.Swap(restjson.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -2177,6 +2183,7 @@ func (c *CloudDirectory) DeleteTypedLinkFacetRequest(input *DeleteTypedLinkFacet
 
 	output = &DeleteTypedLinkFacetOutput{}
 	req = c.newRequest(op, input, output)
+	req.Handlers.Unmarshal.Swap(restjson.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -2518,6 +2525,7 @@ func (c *CloudDirectory) DetachPolicyRequest(input *DetachPolicyInput) (req *req
 
 	output = &DetachPolicyOutput{}
 	req = c.newRequest(op, input, output)
+	req.Handlers.Unmarshal.Swap(restjson.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -2631,8 +2639,7 @@ func (c *CloudDirectory) DetachTypedLinkRequest(input *DetachTypedLinkInput) (re
 
 	output = &DetachTypedLinkOutput{}
 	req = c.newRequest(op, input, output)
-	req.Handlers.Unmarshal.Remove(restjson.UnmarshalHandler)
-	req.Handlers.Unmarshal.PushBackNamed(protocol.UnmarshalDiscardBodyHandler)
+	req.Handlers.Unmarshal.Swap(restjson.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -3950,7 +3957,7 @@ func (c *CloudDirectory) ListAppliedSchemaArnsWithContext(ctx aws.Context, input
 //    // Example iterating over at most 3 pages of a ListAppliedSchemaArns operation.
 //    pageNum := 0
 //    err := client.ListAppliedSchemaArnsPages(params,
-//        func(page *ListAppliedSchemaArnsOutput, lastPage bool) bool {
+//        func(page *clouddirectory.ListAppliedSchemaArnsOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -4116,7 +4123,7 @@ func (c *CloudDirectory) ListAttachedIndicesWithContext(ctx aws.Context, input *
 //    // Example iterating over at most 3 pages of a ListAttachedIndices operation.
 //    pageNum := 0
 //    err := client.ListAttachedIndicesPages(params,
-//        func(page *ListAttachedIndicesOutput, lastPage bool) bool {
+//        func(page *clouddirectory.ListAttachedIndicesOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -4282,7 +4289,7 @@ func (c *CloudDirectory) ListDevelopmentSchemaArnsWithContext(ctx aws.Context, i
 //    // Example iterating over at most 3 pages of a ListDevelopmentSchemaArns operation.
 //    pageNum := 0
 //    err := client.ListDevelopmentSchemaArnsPages(params,
-//        func(page *ListDevelopmentSchemaArnsOutput, lastPage bool) bool {
+//        func(page *clouddirectory.ListDevelopmentSchemaArnsOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -4445,7 +4452,7 @@ func (c *CloudDirectory) ListDirectoriesWithContext(ctx aws.Context, input *List
 //    // Example iterating over at most 3 pages of a ListDirectories operation.
 //    pageNum := 0
 //    err := client.ListDirectoriesPages(params,
-//        func(page *ListDirectoriesOutput, lastPage bool) bool {
+//        func(page *clouddirectory.ListDirectoriesOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -4614,7 +4621,7 @@ func (c *CloudDirectory) ListFacetAttributesWithContext(ctx aws.Context, input *
 //    // Example iterating over at most 3 pages of a ListFacetAttributes operation.
 //    pageNum := 0
 //    err := client.ListFacetAttributesPages(params,
-//        func(page *ListFacetAttributesOutput, lastPage bool) bool {
+//        func(page *clouddirectory.ListFacetAttributesOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -4780,7 +4787,7 @@ func (c *CloudDirectory) ListFacetNamesWithContext(ctx aws.Context, input *ListF
 //    // Example iterating over at most 3 pages of a ListFacetNames operation.
 //    pageNum := 0
 //    err := client.ListFacetNamesPages(params,
-//        func(page *ListFacetNamesOutput, lastPage bool) bool {
+//        func(page *clouddirectory.ListFacetNamesOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -5075,7 +5082,7 @@ func (c *CloudDirectory) ListIndexWithContext(ctx aws.Context, input *ListIndexI
 //    // Example iterating over at most 3 pages of a ListIndex operation.
 //    pageNum := 0
 //    err := client.ListIndexPages(params,
-//        func(page *ListIndexOutput, lastPage bool) bool {
+//        func(page *clouddirectory.ListIndexOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -5231,7 +5238,7 @@ func (c *CloudDirectory) ListManagedSchemaArnsWithContext(ctx aws.Context, input
 //    // Example iterating over at most 3 pages of a ListManagedSchemaArns operation.
 //    pageNum := 0
 //    err := client.ListManagedSchemaArnsPages(params,
-//        func(page *ListManagedSchemaArnsOutput, lastPage bool) bool {
+//        func(page *clouddirectory.ListManagedSchemaArnsOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -5404,7 +5411,7 @@ func (c *CloudDirectory) ListObjectAttributesWithContext(ctx aws.Context, input 
 //    // Example iterating over at most 3 pages of a ListObjectAttributes operation.
 //    pageNum := 0
 //    err := client.ListObjectAttributesPages(params,
-//        func(page *ListObjectAttributesOutput, lastPage bool) bool {
+//        func(page *clouddirectory.ListObjectAttributesOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -5578,7 +5585,7 @@ func (c *CloudDirectory) ListObjectChildrenWithContext(ctx aws.Context, input *L
 //    // Example iterating over at most 3 pages of a ListObjectChildren operation.
 //    pageNum := 0
 //    err := client.ListObjectChildrenPages(params,
-//        func(page *ListObjectChildrenOutput, lastPage bool) bool {
+//        func(page *clouddirectory.ListObjectChildrenOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -5757,7 +5764,7 @@ func (c *CloudDirectory) ListObjectParentPathsWithContext(ctx aws.Context, input
 //    // Example iterating over at most 3 pages of a ListObjectParentPaths operation.
 //    pageNum := 0
 //    err := client.ListObjectParentPathsPages(params,
-//        func(page *ListObjectParentPathsOutput, lastPage bool) bool {
+//        func(page *clouddirectory.ListObjectParentPathsOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -5930,7 +5937,7 @@ func (c *CloudDirectory) ListObjectParentsWithContext(ctx aws.Context, input *Li
 //    // Example iterating over at most 3 pages of a ListObjectParents operation.
 //    pageNum := 0
 //    err := client.ListObjectParentsPages(params,
-//        func(page *ListObjectParentsOutput, lastPage bool) bool {
+//        func(page *clouddirectory.ListObjectParentsOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -6099,7 +6106,7 @@ func (c *CloudDirectory) ListObjectPoliciesWithContext(ctx aws.Context, input *L
 //    // Example iterating over at most 3 pages of a ListObjectPolicies operation.
 //    pageNum := 0
 //    err := client.ListObjectPoliciesPages(params,
-//        func(page *ListObjectPoliciesOutput, lastPage bool) bool {
+//        func(page *clouddirectory.ListObjectPoliciesOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -6390,7 +6397,7 @@ func (c *CloudDirectory) ListPolicyAttachmentsWithContext(ctx aws.Context, input
 //    // Example iterating over at most 3 pages of a ListPolicyAttachments operation.
 //    pageNum := 0
 //    err := client.ListPolicyAttachmentsPages(params,
-//        func(page *ListPolicyAttachmentsOutput, lastPage bool) bool {
+//        func(page *clouddirectory.ListPolicyAttachmentsOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -6558,7 +6565,7 @@ func (c *CloudDirectory) ListPublishedSchemaArnsWithContext(ctx aws.Context, inp
 //    // Example iterating over at most 3 pages of a ListPublishedSchemaArns operation.
 //    pageNum := 0
 //    err := client.ListPublishedSchemaArnsPages(params,
-//        func(page *ListPublishedSchemaArnsOutput, lastPage bool) bool {
+//        func(page *clouddirectory.ListPublishedSchemaArnsOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -6728,7 +6735,7 @@ func (c *CloudDirectory) ListTagsForResourceWithContext(ctx aws.Context, input *
 //    // Example iterating over at most 3 pages of a ListTagsForResource operation.
 //    pageNum := 0
 //    err := client.ListTagsForResourcePages(params,
-//        func(page *ListTagsForResourceOutput, lastPage bool) bool {
+//        func(page *clouddirectory.ListTagsForResourceOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -6898,7 +6905,7 @@ func (c *CloudDirectory) ListTypedLinkFacetAttributesWithContext(ctx aws.Context
 //    // Example iterating over at most 3 pages of a ListTypedLinkFacetAttributes operation.
 //    pageNum := 0
 //    err := client.ListTypedLinkFacetAttributesPages(params,
-//        func(page *ListTypedLinkFacetAttributesOutput, lastPage bool) bool {
+//        func(page *clouddirectory.ListTypedLinkFacetAttributesOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -7065,7 +7072,7 @@ func (c *CloudDirectory) ListTypedLinkFacetNamesWithContext(ctx aws.Context, inp
 //    // Example iterating over at most 3 pages of a ListTypedLinkFacetNames operation.
 //    pageNum := 0
 //    err := client.ListTypedLinkFacetNamesPages(params,
-//        func(page *ListTypedLinkFacetNamesOutput, lastPage bool) bool {
+//        func(page *clouddirectory.ListTypedLinkFacetNamesOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -7240,7 +7247,7 @@ func (c *CloudDirectory) LookupPolicyWithContext(ctx aws.Context, input *LookupP
 //    // Example iterating over at most 3 pages of a LookupPolicy operation.
 //    pageNum := 0
 //    err := client.LookupPolicyPages(params,
-//        func(page *LookupPolicyOutput, lastPage bool) bool {
+//        func(page *clouddirectory.LookupPolicyOutput, lastPage bool) bool {
 //            pageNum++
 //            fmt.Println(page)
 //            return pageNum <= 3
@@ -7541,6 +7548,7 @@ func (c *CloudDirectory) RemoveFacetFromObjectRequest(input *RemoveFacetFromObje
 
 	output = &RemoveFacetFromObjectOutput{}
 	req = c.newRequest(op, input, output)
+	req.Handlers.Unmarshal.Swap(restjson.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -7655,6 +7663,7 @@ func (c *CloudDirectory) TagResourceRequest(input *TagResourceInput) (req *reque
 
 	output = &TagResourceOutput{}
 	req = c.newRequest(op, input, output)
+	req.Handlers.Unmarshal.Swap(restjson.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -7767,6 +7776,7 @@ func (c *CloudDirectory) UntagResourceRequest(input *UntagResourceInput) (req *r
 
 	output = &UntagResourceOutput{}
 	req = c.newRequest(op, input, output)
+	req.Handlers.Unmarshal.Swap(restjson.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -7879,6 +7889,7 @@ func (c *CloudDirectory) UpdateFacetRequest(input *UpdateFacetInput) (req *reque
 
 	output = &UpdateFacetOutput{}
 	req = c.newRequest(op, input, output)
+	req.Handlers.Unmarshal.Swap(restjson.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -8005,13 +8016,14 @@ func (c *CloudDirectory) UpdateLinkAttributesRequest(input *UpdateLinkAttributes
 
 	output = &UpdateLinkAttributesOutput{}
 	req = c.newRequest(op, input, output)
+	req.Handlers.Unmarshal.Swap(restjson.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
 // UpdateLinkAttributes API operation for Amazon CloudDirectory.
 //
-// Updates a given typed link’s attributes. Attributes to be updated must not
-// contribute to the typed link’s identity, as defined by its IdentityAttributeOrder.
+// Updates a given typed link’s attributes. Attributes to be updated must
+// not contribute to the typed link’s identity, as defined by its IdentityAttributeOrder.
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -8346,6 +8358,7 @@ func (c *CloudDirectory) UpdateTypedLinkFacetRequest(input *UpdateTypedLinkFacet
 
 	output = &UpdateTypedLinkFacetOutput{}
 	req = c.newRequest(op, input, output)
+	req.Handlers.Unmarshal.Swap(restjson.UnmarshalHandler.Name, protocol.UnmarshalDiscardBodyHandler)
 	return
 }
 
@@ -9652,8 +9665,8 @@ func (s *BatchAttachObjectResponse) SetAttachedObjectIdentifier(v string) *Batch
 	return s
 }
 
-// Attaches a policy object to a regular object inside a BatchRead operation. For
-// more information, see AttachPolicy and BatchReadRequest$Operations.
+// Attaches a policy object to a regular object inside a BatchRead operation.
+// For more information, see AttachPolicy and BatchReadRequest$Operations.
 type BatchAttachPolicy struct {
 	_ struct{} `type:"structure"`
 
