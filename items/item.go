@@ -94,6 +94,8 @@ var (
 	// ErrNoStore occurs when useStore has been set to false-
 	// backing store is unavailable.
 	ErrNoStore = errors.New("no item, item store unavailable")
+	// ErrDeleted occurs when content that has been deleted is requested
+	ErrDeleted = errors.New("Blob has been deleted")
 )
 
 // Item loads and return an item's metadata info. This will block until the
@@ -163,11 +165,20 @@ func (s *Store) Blob(id string, bid BlobID) (io.ReadCloser, int64, error) {
 	}
 	if b.Bundle == 0 {
 		// blob has been deleted
-		return nil, 0, fmt.Errorf("Blob has been deleted")
+		return nil, 0, ErrDeleted
 	}
 	sname := fmt.Sprintf("blob/%d", bid)
 	stream, err := OpenBundleStream(s.S, sugar(id, b.Bundle), sname)
 	return stream, b.Size, err
+}
+
+type NoBlobError struct {
+	ID  string
+	BID BlobID
+}
+
+func (err NoBlobError) Error() string {
+	return fmt.Sprintf("No blob (%s, %d)", err.ID, err.BID)
 }
 
 // BlobInfo returns a pointer to a Blob structure containing information
@@ -181,7 +192,7 @@ func (s *Store) BlobInfo(id string, bid BlobID) (*Blob, error) {
 	}
 	b := item.blobByID(bid)
 	if b == nil {
-		return nil, fmt.Errorf("No blob (%s, %d)", id, bid)
+		return nil, NoBlobError{ID: id, BID: bid}
 	}
 	return b, nil
 }

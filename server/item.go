@@ -9,6 +9,8 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"sync"
+	"time"
 
 	raven "github.com/getsentry/raven-go"
 	"github.com/julienschmidt/httprouter"
@@ -76,84 +78,276 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 	s.getblob(w, r, id, items.BlobID(bid))
 }
 
+// getblob will find the given blob, either in the cache or on
+// tape, and then send it as a response. If there is an error, it
+// will return an error response.
 func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, bid items.BlobID) {
 	key := fmt.Sprintf("%s+%04d", id, bid)
-	cacheContents, length, err := s.Cache.Get(key)
-	if err != nil {
+	firsttime := true
+retry:
+	content, err := s.findContent(key, id, bid, r.Method == "GET")
+	if err == items.ErrNoStore {
+		w.WriteHeader(503)
+		fmt.Fprintln(w, err)
+		return
+	} else if err == items.ErrDeleted {
+		w.WriteHeader(404)
+		fmt.Fprintln(w, err)
+		return
+	} else if _, ok := err.(items.NoBlobError); ok {
+		w.WriteHeader(404)
+		fmt.Fprintln(w, err)
+		return
+	} else if err != nil {
+		log.Println("getblob", key, err)
 		w.WriteHeader(500)
 		fmt.Fprintln(w, err)
 		return
 	}
-	var src io.Reader
-	if cacheContents != nil {
-		nCacheHit.Add(1)
-		log.Printf("Cache Hit %s", key)
-		w.Header().Set("X-Cached", "1")
-		defer cacheContents.Close()
-		// need to wrap this since Cache.Get returns a ReadAtCloser
-		src = store.NewReader(cacheContents)
-	} else {
-		// cache miss...load from main store, AND put into cache
+	switch content.status {
+	case ContentCached:
+		if firsttime {
+			nCacheHit.Add(1)
+			log.Println("Cache Hit", key)
+			w.Header().Set("X-Cached", "1")
+		}
+		defer content.r.Close()
+	case ContentLarge:
+		log.Println("Cache Miss (too large)", key)
+		w.Header().Set("X-Cached", "2")
+		defer content.r.Close()
+	case ContentWaiting:
+		if !firsttime {
+			// why are we waiting for content a second time?
+			log.Println("getblob", key, "unexpectedly waiting for content a second time")
+			w.WriteHeader(500)
+			fmt.Fprintln(w, "The file cannot be accessed at this time")
+			return
+		}
 		nCacheMiss.Add(1)
-		log.Printf("Cache Miss %s", key)
-
-		// If Item Store Use disabled, and not in cache, return 503
-		if !s.useTape {
-			w.WriteHeader(503)
-			fmt.Fprintln(w, items.ErrNoStore)
+		log.Println("Cache Miss", key)
+		w.Header().Set("X-Cached", "0")
+		// Since content is not cached to satisfy non-GET requests, don't wait
+		// for it to be cached.
+		if r.Method != "GET" {
+			break
+		}
+		select {
+		case <-content.done:
+			log.Println("Waiting for content is done, trying again", key)
+			firsttime = false
+			goto retry
+		case <-time.After(60 * time.Second):
+			log.Println("getblob", key, "timeout")
+			w.WriteHeader(504)
+			fmt.Fprintln(w, "timeout")
 			return
 		}
-
-		blobinfo, err := s.Items.BlobInfo(id, bid)
-		if err != nil {
-			w.WriteHeader(404)
-			fmt.Fprintln(w, err)
-			return
-		}
-		length = blobinfo.Size
-		// cache this item if it is not too large.
-		// doing 1/8th of the cache size is arbitrary.
-		// not sure what a good cutoff would be.
-		// (remember maxsize == 0 means infinite)
-		cacheMaxSize := s.Cache.MaxSize()
-		if cacheMaxSize == 0 || length < cacheMaxSize/8 {
-			w.Header().Set("X-Cached", "0")
-			if r.Method == "GET" {
-				go s.copyBlobIntoCache(key, id, bid)
-			}
-		} else {
-			// item is too large to be cached
-			w.Header().Set("X-Cached", "2")
-		}
-
-		// If this is a GET, retrieve the blob- if it's a HEAD, don't
-		if r.Method == "GET" {
-			realContents, _, err := s.Items.Blob(id, bid)
-			if err != nil {
-				w.WriteHeader(404)
-				fmt.Fprintln(w, err)
-				return
-			}
-			defer realContents.Close()
-			src = realContents
-		}
-	}
-	w.Header().Set("ETag", fmt.Sprintf(`"%d"`, bid))
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", length))
-
-	// if it's a GET, copy the data into the response- if it's a HEAD, don't
-	if r.Method == "HEAD" {
+	default:
+		log.Println("getblob received status", content.status)
+		w.WriteHeader(500)
+		fmt.Fprintln(w, "received status", content.status)
 		return
 	}
-	n, err := io.Copy(w, src)
+
+	w.Header().Set("ETag", fmt.Sprintf(`"%d"`, bid))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", content.size))
+
+	// all the headers have been set, now do we need to copy bits?
+	if r.Method != "GET" {
+		return
+	}
+	n, err := io.Copy(w, content.r)
 	if err != nil {
 		log.Printf("getblob (%s,%d) %d,%s", id, bid, n, err.Error())
 	}
 }
 
+// contentSource is either a ReadCloser that contains the requested data, or it is a promise of a future data stream, which is ready when the done channel is closed.
+type contentSource struct {
+	status ContentStatus
+	r      io.ReadCloser   // valid if status is Cached or Large
+	size   int64           // valid if status is Cached, Large, or Waiting
+	done   <-chan struct{} // valid if status is Waiting
+}
+
+type ContentStatus int
+
+const (
+	ContentUnknown ContentStatus = iota
+	ContentCached                // the content was sourced from the cache
+	ContentLarge                 // the content was very big and is not cached
+	ContentWaiting               // the content is being copied into the cache
+)
+
+type singleFlight struct {
+	m     sync.Mutex
+	chans map[string]chan struct{}
+}
+
+// lookup sees if key has already been created, and if so returns the
+// channel for it. Otherwise it makes a new channel and returns that.
+// The bool is true if the key was already present, and false if it wasn't.
+// Keys are only removed by calling remove().
+// This function is goroutine safe.
+func (s *singleFlight) lookup(key string) (chan struct{}, bool) {
+	s.m.Lock()
+	if s.chans == nil {
+		s.chans = make(map[string]chan struct{})
+	}
+	c, exists := s.chans[key]
+	if !exists {
+		c = make(chan struct{})
+		s.chans[key] = c
+	}
+	s.m.Unlock()
+	return c, exists
+}
+
+func (s *singleFlight) remove(key string) {
+	s.m.Lock()
+	delete(s.chans, key)
+	s.m.Unlock()
+}
+
+// An errorlist is a simple goroutine safe map that expires entries
+// based on time.
+type errorlist struct {
+	m sync.Mutex
+
+	// since not many errors are expected, use a list instead of a map since it
+	// is simpler, and ordering entries by time makes it easier to prune old
+	// entries.
+	errs []errorentry
+}
+
+type errorentry struct {
+	key     string
+	err     error
+	expires time.Time
+}
+
+func (e *errorlist) add(key string, err error) {
+	e.m.Lock()
+	e.errs = append(e.errs, errorentry{
+		key:     key,
+		err:     err,
+		expires: time.Now().Add(30 * time.Second),
+	})
+	e.m.Unlock()
+}
+
+// find scans the list for an unexpired error for the given  key. It returns
+// either the most recent error or nil.
+func (e *errorlist) find(key string) error {
+	var result error
+	now := time.Now()
+	e.m.Lock()
+	// scan the list backward for an entry having the key,
+	// so we can stop once we hit an expired entry.
+	i := len(e.errs) - 1
+	for ; i >= 0; i-- {
+		if e.errs[i].expires.Before(now) {
+			// entries are sorted by expire times, so the rest
+			// of the list has expired.
+			break
+		}
+		if e.errs[i].key == key {
+			result = e.errs[i].err
+			goto out
+		}
+	}
+	// didn't find a match for key. Remove any expired entires.
+	if i >= 0 {
+		e.errs = e.errs[i+1:]
+	}
+out:
+	e.m.Unlock()
+	return result
+}
+
+var (
+	// copyChannels tracks whether a blob is being copied into the cache. If
+	// one is, then we track a channel that is closed either when the blob has
+	// been copied or when there is an error. Others can wait on this channel.
+	// When the channel closes, calling findContent() again will return either
+	// a reader for the blob or the error that happened while copying it into
+	// the cache.
+	copyChannels singleFlight
+
+	// errorledger tracks the errors that happen when copying blobs into the
+	// cache. The errors are only kept for a short amount of time (at least
+	// long enough that others waiting on the channel can call findContent
+	// again to get the error).
+	errorledger errorlist
+)
+
+// findContent will look in the cache and on tape for the given blob. If
+// it is not in the cache, it will load it into the cache, if doLoad is true.
+// (This is to facilitate HEAD requests that shouldn't recall content).
+func (s *RESTServer) findContent(key string, id string, bid items.BlobID, doLoad bool) (contentSource, error) {
+	var result contentSource
+	cacheContents, length, err := s.Cache.Get(key)
+	if err != nil {
+		return result, err
+	}
+	if cacheContents != nil {
+		// item was cached
+		result.status = ContentCached
+		result.r = NewReadCloser(cacheContents)
+		result.size = length
+		return result, nil
+	}
+	// need to source the content from tape
+	if !s.useTape {
+		return result, items.ErrNoStore
+	}
+	blobinfo, err := s.Items.BlobInfo(id, bid)
+	if err != nil {
+		return result, err
+	}
+	length = blobinfo.Size
+	result.size = length
+	if !doLoad {
+		result.status = ContentWaiting
+		return result, nil
+	}
+	// were there previous errors when caching this blob?
+	err = errorledger.find(key)
+	if err != nil {
+		return result, err
+	}
+	// cache this item if it is not too large.
+	// doing 1/8th of the cache size is arbitrary.
+	// not sure what a good cutoff would be.
+	// (remember maxsize == 0 means infinite)
+	cacheMaxSize := s.Cache.MaxSize()
+	if cacheMaxSize == 0 || length < cacheMaxSize/8 {
+		// try to single flight the requests
+		c, exists := copyChannels.lookup(key)
+		if !exists {
+			go s.copyBlobIntoCache(c, key, id, bid)
+		}
+		result.status = ContentWaiting
+		result.done = c
+		return result, nil
+	}
+	// item is too large to be cached
+	// get it directly from tape
+	realContents, _, err := s.Items.Blob(id, bid)
+	if err != nil {
+		return result, err
+	}
+	result.status = ContentLarge
+	result.r = realContents
+	return result, nil
+}
+
 // copyBlobIntoCache copies the given blob of the item id into s's blobcache
-// under the given key.
-func (s *RESTServer) copyBlobIntoCache(key, id string, bid items.BlobID) {
+// under the given key. Closes the given channel when the item is copied or if
+// there was an error. Errors are added to the errorledger.
+func (s *RESTServer) copyBlobIntoCache(done chan struct{}, key, id string, bid items.BlobID) {
+	starttime := time.Now()
 	var keepcopy bool
 	// defer this first so it is the last to run at exit.
 	// because cw needs to be Closed() before the Delete().
@@ -162,30 +356,74 @@ func (s *RESTServer) copyBlobIntoCache(key, id string, bid items.BlobID) {
 		if !keepcopy {
 			s.Cache.Delete(key)
 		}
+		log.Println("copyblob finished", key, time.Now().Sub(starttime))
+		copyChannels.remove(key)
+		close(done) // signal that we are done
 	}()
 	cw, err := s.Cache.Put(key)
 	if err != nil {
+		// since there is a gaurd around calling copyBlobIntoCache() we
+		// shouldn't be receiving ErrPutPending errors here...
 		log.Printf("cache put %s: %s", key, err.Error())
 		keepcopy = true // in case someone else added a copy already
 		return
 	}
-	defer cw.Close()
+	defer func() {
+		err := cw.Close()
+		if err != nil {
+			// also want to also put this into the errorlog, but don't want to
+			// potentially shadow any earlier errors that may have been put
+			// there in this effort. So for now we just log it.
+			log.Println("cache close", key, err)
+			keepcopy = false
+		}
+	}()
 	cr, length, err := s.Items.Blob(id, bid)
 	if err != nil {
 		log.Printf("cache items get %s: %s", key, err.Error())
+		errorledger.add(key, err)
 		return
 	}
 	defer cr.Close()
+	// should we put a timeout on the copy?
 	n, err := io.Copy(cw, cr)
 	if err != nil {
 		log.Printf("cache copy %s: %s", key, err.Error())
+		errorledger.add(key, err)
 		return
 	}
 	if n != length {
-		log.Printf("cache length mismatch: read %d, expected %d", n, length)
+		err = fmt.Errorf("cache length mismatch: read %d, expected %d", n, length)
+		log.Println(err)
+		errorledger.add(key, err)
 		return
 	}
 	keepcopy = true
+}
+
+// NewReadCloser converts a ReadAtCloser into a ReadCloser.
+func NewReadCloser(r store.ReadAtCloser) io.ReadCloser {
+	return &readcloser{r: r}
+}
+
+type readcloser struct {
+	r   store.ReadAtCloser
+	off int64
+}
+
+func (r *readcloser) Read(p []byte) (n int, err error) {
+	n, err = r.r.ReadAt(p, r.off)
+	r.off += int64(n)
+	if err == io.EOF && n > 0 {
+		// reading less than a full buffer is not an error for
+		// an io.Reader
+		err = nil
+	}
+	return
+}
+
+func (r *readcloser) Close() error {
+	return r.r.Close()
 }
 
 // ItemHandler handles requests to GET /item/:id
