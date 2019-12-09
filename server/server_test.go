@@ -88,7 +88,7 @@ func TestTransactionCommands(t *testing.T) {
 	if text != "hello world" {
 		t.Errorf("Received %#v, expected %#v", text, "hello world")
 	}
-	text = getbody(t, "GET", "/item/"+itemid+"/@blob/2", 404)
+	text = getbody(t, "GET", "/item/"+itemid+"/@blob/2", 410)
 	if text != "Blob has been deleted\n" {
 		t.Errorf("Received %#v, expected %#v", text, "Blob has been deleted\n")
 	}
