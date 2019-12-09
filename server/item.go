@@ -91,7 +91,7 @@ retry:
 		fmt.Fprintln(w, err)
 		return
 	} else if err == items.ErrDeleted {
-		w.WriteHeader(404)
+		w.WriteHeader(410)
 		fmt.Fprintln(w, err)
 		return
 	} else if _, ok := err.(items.NoBlobError); ok {
