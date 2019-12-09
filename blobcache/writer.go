@@ -41,8 +41,12 @@ func (w *writer) Write(p []byte) (int, error) {
 		}
 		return 0, err
 	}
-	// w.size will be >= the actual item size since we don't use the actual
-	// amount written. Perhaps that does need to be tracked.
-	w.size += int64(n)
-	return w.w.Write(p)
+	x, err := w.w.Write(p)
+	w.size += int64(x)
+	if err != nil {
+		// Since there was a write error, remove this entry from the
+		// cache when the time comes.
+		w.deleteOnClose = true
+	}
+	return x, err
 }
