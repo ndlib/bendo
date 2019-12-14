@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path"
@@ -15,10 +16,11 @@ import (
 
 // Exported errors
 var (
-	ErrNotFound       = errors.New("Item Not Found in Bendo")
-	ErrNotAuthorized  = errors.New("Access Denied")
-	ErrUnexpectedResp = errors.New("Unexpected Response Code")
-	ErrReadFailed     = errors.New("Read Failed")
+	ErrNotFound         = errors.New("Item Not Found in Bendo")
+	ErrNotAuthorized    = errors.New("Access Denied")
+	ErrUnexpectedResp   = errors.New("Unexpected Response Code")
+	ErrReadFailed       = errors.New("Read Failed")
+	ErrChecksumMismatch = errors.New("Checksum mismatch")
 )
 
 func (ia *ItemAttributes) GetItemInfo() (*jason.Object, error) {
@@ -48,7 +50,7 @@ func (ia *ItemAttributes) downLoad(fileName string, pathPrefix string) error {
 		r.Body.Close()
 		switch r.StatusCode {
 		case 404:
-			fmt.Printf("%s returned 404\n", httpPath)
+			log.Printf("%s returned 404\n", httpPath)
 			return ErrNotFound
 		case 401:
 			return ErrNotAuthorized
@@ -65,14 +67,14 @@ func (ia *ItemAttributes) downLoad(fileName string, pathPrefix string) error {
 	err = os.MkdirAll(targetDir, 0755)
 
 	if err != nil {
-		fmt.Printf("Error: could not create directory %s\n%s\n", targetDir, err.Error())
+		log.Println("Error: could not create directory", targetDir, err)
 		return err
 	}
 
 	filePtr, err := os.Create(targetFile)
 
 	if err != nil {
-		fmt.Printf("Error: could not create file %s\n%s\n", targetFile, err.Error())
+		log.Println("Error: could not create file", targetFile, err)
 		return err
 	}
 	defer filePtr.Close()
@@ -82,7 +84,7 @@ func (ia *ItemAttributes) downLoad(fileName string, pathPrefix string) error {
 	return err
 }
 
-func (ia *ItemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []byte, mimetype string, fileId string) (fileid string, err error) {
+func (ia *ItemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []byte, mimetype string, fileId string) error {
 
 	var path = ia.bendoServer + "/upload/" + fileId
 
@@ -100,13 +102,24 @@ func (ia *ItemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5su
 	resp, err := http.DefaultClient.Do(req)
 
 	if err != nil {
-		return fileId, err
+		return err
 	}
-	resp.Body.Close()
-	if resp.StatusCode != 200 {
-		fmt.Printf("Received HTTP status %d for %s\n", resp.StatusCode, path)
+
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case 200:
+		break
+	case 412:
+		return ErrChecksumMismatch
+	default:
+		message := make([]byte, 512)
+		resp.Body.Read(message)
+		log.Printf("Received HTTP status %d for %s\n", resp.StatusCode, path)
+		log.Println(string(message))
+		return errors.New(string(message))
 	}
-	return fileId, nil
+	return nil
 }
 
 // Not well named - sets a POST /item/:id/transaction
@@ -127,7 +140,7 @@ func (ia *ItemAttributes) CreateTransaction(cmdlist []byte) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 202 {
-		fmt.Printf("Received HTTP status %d for POST %s", resp.StatusCode, path)
+		log.Printf("Received HTTP status %d for POST %s", resp.StatusCode, path)
 		return "", ErrUnexpectedResp
 	}
 
