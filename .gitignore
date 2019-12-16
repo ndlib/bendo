@@ -8,3 +8,5 @@ ql.db
 bendo_storage/*
 bendo_cache/*
 config.local
+.DS_Store
+.*.sw?

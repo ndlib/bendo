@@ -82,6 +82,7 @@ func (c *Connection) upload(uploadname string, r io.ReadSeeker, info FileInfo) e
 		chunk = make([]byte, c.ChunkSize)
 	}
 	defer c.chunkpool.Put(chunk)
+
 bigloop:
 	for {
 		n, err := r.Read(chunk)

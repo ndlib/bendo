@@ -53,20 +53,20 @@ Available actions:
 
     upload Flags:
 
-    -chunksize    ( defaults to 10) Size (in MB) of chunks bclient will use for upload  
+    -chunksize    ( defaults to 10) Size (in MB) of chunks bclient will use for upload
     -creator      ( defaults to bclient) owner of upload in bendo
     -numuploaders ( defaults to 2) number of upload threads
     -v            ( defaults to false) Provide verbose upload information for troubleshooting
     -wait         ( defaults to true)  Wait for Upload Transaction to complte before exiting
 
-    ls Flags:	  
+    ls Flags:
 
-    -longV        ( defaults to false) show blob id, size, date created, and creator of each file in item 
+    -longV        ( defaults to false) show blob id, size, date created, and creator of each file in item
 
     get Flags:
     -stub         (defaults to false)  retrieve file tree of item, create zero-length stub for each file
 
-    
+
 	`
 )
 
@@ -161,19 +161,18 @@ func doGet(item string, files []string) int {
 	pathPrefix := path.Join(*fileroot, item)
 
 	// set up communication to the bendo server, and init local and remote filelists
-
 	conn := &bclientapi.Connection{
 		HostURL:   *server,
 		ChunkSize: *chunksize,
 		Token:     *token,
 	}
+
 	fileLists := NewLists(*fileroot)
 
 	// Fetch Item Info from bclientapi
 	json, err := conn.ItemInfo(item)
 
 	// If not found or error, we're done
-
 	switch {
 	case err == bclientapi.ErrNotFound:
 		fmt.Printf("\n Item %s was not found on server %s\n", item, *server)
@@ -199,7 +198,7 @@ func doGet(item string, files []string) int {
 
 	errorChan := make(chan error, 1)
 
-	//Spin off desire number of upload workers
+	//Spin off desired number of parallel downloads
 	for cnt := int(0); cnt < *numuploaders; cnt++ {
 		go func() {
 			defer getFileDone.Done()
@@ -265,7 +264,6 @@ func doGetStub(item string) int {
 	}
 
 	// fetch info about this item from the bendo server
-
 	conn := &bclientapi.Connection{
 		HostURL:   *server,
 		ChunkSize: *chunksize,

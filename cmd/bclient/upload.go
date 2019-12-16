@@ -5,13 +5,11 @@ import (
 	"bytes"
 	"crypto/md5"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -30,6 +28,7 @@ func doUpload(item string, file string) int {
 		ChunkSize: *chunksize,
 		Token:     *token,
 	}
+
 	var localfiles *FileList
 	var remotefiles *FileList
 
@@ -84,7 +83,8 @@ func doUpload(item string, file string) int {
 	}
 
 	// chunks uploaded- submit transaction to add FileIDs to item
-	transaction, err := PostTransaction(item, conn, todo)
+	actions := taskToAction(item, todo)
+	transaction, err := conn.StartTransaction(item, actions)
 
 	if err != nil {
 		fmt.Println(err)
@@ -96,8 +96,7 @@ func doUpload(item string, file string) int {
 	}
 
 	if *wait {
-		txid := path.Base(transaction)
-		err = conn.WaitTransaction(txid)
+		err = conn.WaitTransaction(transaction)
 		if err != nil {
 			fmt.Println(err)
 			return 1
@@ -257,17 +256,21 @@ func ParseManifest(root string, manifest string, out chan<- File) error {
 	return scanner.Err()
 }
 
-type ActionKind int
+type TaskKind int
 
 const (
-	AUnknown ActionKind = iota
-	ANewBlob
-	AUpdateMimeType
-	AUpdateFile
+	TUnknown        TaskKind = iota
+	TNewBlob                 // upload new content
+	TUpdateMimeType          // update mimetype for given blob
+	TUpdateFile              // associate given slot name with uploaded content
 )
 
-type Action struct {
-	What ActionKind
+// A Task lets us track all the things we need to do: files to upload,
+// files to rename, metadata to update. We build a Task list, do the things,
+// and then translate it to a bclientapi.Action list and send that to the
+// server for the final transaction processing.
+type Task struct {
+	What TaskKind
 	// the exact fields used depends on What.
 	Source   string // absolute path of file to upload
 	MD5      []byte // checksum of Source
@@ -276,29 +279,10 @@ type Action struct {
 	Name     string // the name for the file on server
 }
 
-func (a Action) String() string {
-	switch a.What {
-	case ANewBlob:
-		return fmt.Sprintf("<Action ANewBlob, Source=%s, MimeType=%s>",
-			a.Source,
-			a.MimeType)
-	case AUpdateMimeType:
-		return fmt.Sprintf("<Action AUpdateMimeType, Blob=%d, MimeType=%s>",
-			a.BlobID,
-			a.MimeType)
-	case AUpdateFile:
-		return fmt.Sprintf("<Action AUpdateFile, Name=%s, Blob=%d, MD5=%x>",
-			a.Name,
-			a.BlobID,
-			a.MD5)
-	}
-	return fmt.Sprintf("<Action AUnknown>")
-}
-
 // ResolveLocalBlobs compares the local to the remote file lists and returns
 // a list of actions to do to update the remote tree.
-func ResolveLocalBlobs(local, remote *FileList) []Action {
-	var todo []Action
+func ResolveLocalBlobs(local, remote *FileList) []Task {
+	var todo []Task
 
 	for localfile, localinfo := range local.Files {
 		hexMD5 := hex.EncodeToString(localinfo.MD5)
@@ -311,8 +295,8 @@ func ResolveLocalBlobs(local, remote *FileList) []Action {
 				// See if mime type needs to be updated.
 				if localinfo.MimeType != "" &&
 					localinfo.MimeType != remoteinfo.MimeType {
-					todo = append(todo, Action{
-						What:     AUpdateMimeType,
+					todo = append(todo, Task{
+						What:     TUpdateMimeType,
 						BlobID:   remoteinfo.BlobID,
 						MimeType: localinfo.MimeType,
 					})
@@ -323,8 +307,8 @@ func ResolveLocalBlobs(local, remote *FileList) []Action {
 			// are there any other matching blobs on the server?
 			id := remote.Blobs[hexMD5]
 			if id > 0 {
-				todo = append(todo, Action{
-					What:   AUpdateFile,
+				todo = append(todo, Task{
+					What:   TUpdateFile,
 					Name:   localfile,
 					BlobID: id,
 				})
@@ -337,8 +321,8 @@ func ResolveLocalBlobs(local, remote *FileList) []Action {
 		if id == 0 {
 			// there is not an existing local blob, so upload this file
 			local.Blobs[hexMD5] = -1 // mark this blob as known
-			todo = append(todo, Action{
-				What:     ANewBlob,
+			todo = append(todo, Task{
+				What:     TNewBlob,
 				Source:   localinfo.AbsPath,
 				MD5:      localinfo.MD5,
 				MimeType: localinfo.MimeType,
@@ -346,8 +330,8 @@ func ResolveLocalBlobs(local, remote *FileList) []Action {
 		}
 		// TODO(dbrower): if there is a matching blob, see if it needs a mime type
 		// now update this file entry to point to the uploaded blob
-		todo = append(todo, Action{
-			What: AUpdateFile,
+		todo = append(todo, Task{
+			What: TUpdateFile, // consolodate?
 			MD5:  localinfo.MD5,
 			Name: localfile,
 		})
@@ -356,12 +340,12 @@ func ResolveLocalBlobs(local, remote *FileList) []Action {
 	return todo
 }
 
-// UploadBlobs will go through a FileList and send any new blobs to the server
-// given by Connection. The first error is returned.
-func UploadBlobs(conn *bclientapi.Connection, item string, todo []Action) error {
+// UploadBlobs will go through a Task list and send any new blobs to the server
+// given by ItemAttributes. The first error is returned.
+func UploadBlobs(conn *bclientapi.Connection, item string, todo []Task) error {
 	var wg sync.WaitGroup
 
-	c := make(chan Action)
+	c := make(chan Task)
 	errorchan := make(chan error, 1)
 
 	//Spin off desired number of upload workers
@@ -395,7 +379,7 @@ func UploadBlobs(conn *bclientapi.Connection, item string, todo []Action) error 
 	var err error
 loop:
 	for _, t := range todo {
-		if t.What != ANewBlob {
+		if t.What != TNewBlob {
 			continue
 		}
 		select {
@@ -418,35 +402,32 @@ loop:
 	return err
 }
 
-func PostTransaction(item string, conn *bclientapi.Connection, todo []Action) (string, error) {
-	cmdlist := MakeTransactionCommands(item, todo)
-	buf, _ := json.Marshal(cmdlist)
-	return conn.CreateTransaction(item, buf)
-}
-
-// MakeTransactionCommands turns an Action list into a list of transaction
-// commands to send to the bendo server.
-func MakeTransactionCommands(item string, todo []Action) [][]string {
-	var cmdlist [][]string
-
+func taskToAction(item string, todo []Task) []bclientapi.Action {
+	var result []bclientapi.Action
 	for _, t := range todo {
 		switch t.What {
-		case ANewBlob:
-			fileID := item + "-" + hex.EncodeToString(t.MD5)
-			cmdlist = append(cmdlist, []string{"add", fileID})
-		case AUpdateMimeType:
-			id := strconv.FormatInt(t.BlobID, 10)
-			cmdlist = append(cmdlist, []string{"mimetype", id, t.MimeType})
-		case AUpdateFile:
-			var fileID string
-			// are we using a remote blob or a newly uploaded one?
-			if t.BlobID > 0 {
-				fileID = strconv.FormatInt(t.BlobID, 10)
-			} else {
-				fileID = item + "-" + hex.EncodeToString(t.MD5)
+		case TNewBlob:
+			result = append(result, bclientapi.Action{
+				What:     bclientapi.ANewBlob,
+				UploadID: item + "-" + hex.EncodeToString(t.MD5),
+			})
+		case TUpdateMimeType:
+			result = append(result, bclientapi.Action{
+				What:     bclientapi.AUpdateMimeType,
+				BlobID:   t.BlobID,
+				MimeType: t.MimeType,
+			})
+		case TUpdateFile:
+			var remotekey string
+			if t.BlobID == 0 {
+				remotekey = item + "-" + hex.EncodeToString(t.MD5)
 			}
-			cmdlist = append(cmdlist, []string{"slot", t.Name, fileID})
+			result = append(result, bclientapi.Action{
+				What:     bclientapi.AUpdateFile,
+				BlobID:   t.BlobID,
+				UploadID: remotekey,
+			})
 		}
 	}
-	return cmdlist
+	return result
 }
