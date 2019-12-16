@@ -3,6 +3,7 @@ package bclientapi
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"errors"
 	"io"
 	"os"
 	"path"
@@ -54,7 +55,18 @@ func (ia *ItemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, mime
 		}
 		needSendEmptyChunk = false
 		chMd5 := md5.Sum(chunk[:n])
-		fileID, err = ia.PostUpload(chunk[:n], chMd5[:], srcFileMd5, mimetype, fileID)
+		// try to upload a chunk at most 5 times
+		var retryCount = 0
+	retry:
+		if retryCount >= 5 {
+			err = errors.New("Too many attempts to upload chunk")
+			break
+		}
+		err = ia.PostUpload(chunk[:n], chMd5[:], srcFileMd5, mimetype, fileID)
+		if err == ErrChecksumMismatch {
+			retryCount++
+			goto retry
+		}
 		if err != nil {
 			break
 		}
