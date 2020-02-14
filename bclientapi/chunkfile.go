@@ -63,7 +63,7 @@ func (ia *ItemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, mime
 			break
 		}
 		err = ia.PostUpload(chunk[:n], chMd5[:], srcFileMd5, mimetype, fileID)
-		if err == ErrChecksumMismatch {
+		if err == ErrChecksumMismatch || err == ErrServerError {
 			retryCount++
 			goto retry
 		}
