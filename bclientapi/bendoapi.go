@@ -21,6 +21,7 @@ var (
 	ErrUnexpectedResp   = errors.New("Unexpected Response Code")
 	ErrReadFailed       = errors.New("Read Failed")
 	ErrChecksumMismatch = errors.New("Checksum mismatch")
+	ErrServerError      = errors.New("Server Error")
 )
 
 func (ia *ItemAttributes) GetItemInfo() (*jason.Object, error) {
@@ -112,12 +113,18 @@ func (ia *ItemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5su
 		break
 	case 412:
 		return ErrChecksumMismatch
+	case 500:
+		err = ErrServerError
+		fallthrough
 	default:
 		message := make([]byte, 512)
 		resp.Body.Read(message)
 		log.Printf("Received HTTP status %d for %s\n", resp.StatusCode, path)
 		log.Println(string(message))
-		return errors.New(string(message))
+		if err == nil {
+			err = errors.New(string(message))
+		}
+		return err
 	}
 	return nil
 }
