@@ -89,16 +89,19 @@ The token needs the "Reader" role for this request to succeed. (NOTE: this is
 currently (March 2016) not enforced.)
 
 There is a slight difference between the `GET` and `HEAD` form of the requests:
-the `GET` request will retreive the item from tape if it is not already in
-bendo's cache, whereas the `HEAD` request will **not** retreive an item from tape.
-To force an item to be recalled from tape, but with no desire to read the content yet,
-use a GET request and then close the connection. The file will still be cached.
+a `GET` request will retrieve the item from tape if it is not already cached,
+whereas a `HEAD` request by default will not retrieve an item from tape. To
+force an item to be recalled from tape, but with no desire to read the content,
+use a `HEAD` request with the header `Request-Cache` set to any value. The file
+will then be cached in the background, and the `HEAD` request will return
+immediately.
 
 For a `GET`, the response will be either the content and a 200 status code, a
-206 status if a range was requested. If the item doesn't exist or the path
-doesn't exit for the version specisified (not specisify a version defaults to
-the newest version) a 404 response is returned. It the blob has been deleted a
-410 status will be returned.
+206 status if a range was requested, or a 504 timeout error if recalling the
+file from tape took longer than 60 seconds. If the item doesn't exist or the
+path doesn't exit for the version specified (defaults to the newest version)
+a 404 response is returned. It the blob has been deleted a 410 status will be
+returned.
 
 Metadata for the given blob is returned in the response headers. Some metadata
 describes the blob itself, other metadata is runtime information about the
@@ -116,6 +119,7 @@ Request Headers:
 
     If-None-Match - For ETag validation
     Range - Use for range requests.
+    Request-Cache - Indicates a `HEAD` request should cache file content
     X-Api-Key - (required)
     X-Webhook - URL to hit when the content is loaded, if the content is not cached to begin with. (not implemented)
 
