@@ -82,10 +82,13 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 // tape, and then send it as a response. If there is an error, it
 // will return an error response.
 func (s *RESTServer) getblob(w http.ResponseWriter, r *http.Request, id string, bid items.BlobID) {
+	// GET requests always cache content. HEAD requests cache content only if
+	// the Request-Cache header is passed (with any value)
+	docache := r.Method == "GET" || r.Header.Get("Request-Cache") != ""
 	key := fmt.Sprintf("%s+%04d", id, bid)
 	firsttime := true
 retry:
-	content, err := s.findContent(key, id, bid, r.Method == "GET")
+	content, err := s.findContent(key, id, bid, docache)
 	if err == items.ErrNoStore {
 		w.WriteHeader(503)
 		fmt.Fprintln(w, err)
@@ -127,7 +130,7 @@ retry:
 		nCacheMiss.Add(1)
 		log.Println("Cache Miss", key)
 		w.Header().Set("X-Cached", "0")
-		// Since content is not cached to satisfy non-GET requests, don't wait
+		// Since content is not returned for non-GET requests, don't wait
 		// for it to be cached.
 		if r.Method != "GET" {
 			break
