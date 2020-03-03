@@ -146,6 +146,7 @@ func TestHeadCacheSHA(t *testing.T) {
 
 	const fileContent = "We choose do do these things"
 	const fileShaHexSum = "2b04a7382010d4c172156664d2c5caaa4d550a32b0655427192dd92ce168c833"
+	const fileMd5HexSum = "669fbedf139be4fb091840dcb3ddfd60"
 
 	t.Log("Testing HEAD item request")
 
@@ -181,6 +182,10 @@ func TestHeadCacheSHA(t *testing.T) {
 	if shaHexSum != fileShaHexSum {
 		t.Errorf("X-Content-Sha256 expected %s, received %s", fileShaHexSum, shaHexSum)
 	}
+	md5HexSum := resp.Header.Get("X-Content-Md5")
+	if md5HexSum != fileMd5HexSum {
+		t.Errorf("X-Content-Md5 expected %s, received %s", fileMd5HexSum, md5HexSum)
+	}
 
 	// get file twice and see if second time was cached
 	resp = checkRoute(t, "GET", "/item/"+itemid+"/testFile1", 200)
@@ -198,6 +203,10 @@ func TestHeadCacheSHA(t *testing.T) {
 	shaHexSum = resp.Header.Get("X-Content-Sha256")
 	if shaHexSum != fileShaHexSum {
 		t.Errorf("X-Content-Sha256 expected %s, received %s", fileShaHexSum, shaHexSum)
+	}
+	md5HexSum = resp.Header.Get("X-Content-Md5")
+	if md5HexSum != fileMd5HexSum {
+		t.Errorf("X-Content-Md5 expected %s, received %s", fileMd5HexSum, md5HexSum)
 	}
 }
 

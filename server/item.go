@@ -74,6 +74,7 @@ func (s *RESTServer) SlotHandler(w http.ResponseWriter, r *http.Request, ps http
 		return
 	}
 	w.Header().Set("X-Content-Sha256", hex.EncodeToString(item.Blobs[bid-1].SHA256))
+	w.Header().Set("X-Content-Md5", hex.EncodeToString(item.Blobs[bid-1].MD5))
 	w.Header().Set("Location", fmt.Sprintf("/item/%s/@blob/%d", id, bid))
 	s.getblob(w, r, id, items.BlobID(bid))
 }
