@@ -11,3 +11,23 @@ Replace `$apikey` with your bendo key and `$bendo` with the url to your bendo se
 ```bash
 curl -u ":$apikey" "$bendo:14000/bundle/list/" | jq -r 'map(.|sub("-.*$";""))|unique|.[]' > bendo-inventory
 ```
+
+## How to get metadata for a single item
+
+You can view the information for a single item as html by visiting the URL `$bendo:14000/item/$itemid`
+
+You can get the metadata formatted as JSON as well.
+
+```
+curl -u ":$apikey" "$bendo:14000/item/$itemid?format=json"
+```
+
+## How to get metadata for a list of items
+
+This puts the previous answer into a loop. It is assumed the file `bendo-inventory` contains a list of bendo IDs, with ID one per line.
+
+```
+for itemid in $(cat bendo-inventory); do
+    curl -s -u ":$apikey" "$bendo:14000/item/$itemid?format=json"
+done > bendo-items.json
+```
