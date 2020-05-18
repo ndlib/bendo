@@ -2,7 +2,7 @@
 // The fragment cache lets files be uploaded in pieces, and then be copied
 // to tape as a single unit. Files are intended to be uploaded as consecutive
 // pieces, of arbitrary size. If a fragment upload does not complete or has
-// and error, that fragment is deleted, and the upload can try again.
+// an error, that fragment is deleted and the upload can be tried again.
 package fragment
 
 import (

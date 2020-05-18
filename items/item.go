@@ -163,13 +163,21 @@ func (s *Store) Blob(id string, bid BlobID) (io.ReadCloser, int64, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	if b.Bundle == 0 {
+	return s.BlobByBlob(id, b)
+}
+
+// BlobByBlob returns an io.ReadCloser containing the given blob's contents
+// and the blob's size. It will block until the blob is loaded from the backing
+// store. The difference between BlobByBlob() and Blob() is that BlobByBlob does
+// not need to load the item first.
+func (s *Store) BlobByBlob(id string, binfo *Blob) (io.ReadCloser, int64, error) {
+	if binfo.Bundle == 0 {
 		// blob has been deleted
 		return nil, 0, ErrDeleted
 	}
-	sname := fmt.Sprintf("blob/%d", bid)
-	stream, err := OpenBundleStream(s.S, sugar(id, b.Bundle), sname)
-	return stream, b.Size, err
+	sname := fmt.Sprintf("blob/%d", binfo.ID)
+	stream, err := OpenBundleStream(s.S, sugar(id, binfo.Bundle), sname)
+	return stream, binfo.Size, err
 }
 
 type NoBlobError struct {
@@ -206,45 +214,29 @@ func (item Item) blobByID(id BlobID) *Blob {
 	return nil
 }
 
-// BlobByVersionSlot returns the blob corresponding to the given version
-// identifier and slot name. It returns 0 if the (version id, slot) pair do
-// not resolve to anything.
-func (item Item) BlobByVersionSlot(vid VersionID, slot string) BlobID {
-	var ver *Version
-	for _, v := range item.Versions {
-		if v.ID == vid {
-			ver = v
-			break
-		}
-	}
-	if ver == nil {
-		return 0
-	}
-	return ver.Slots[slot]
-}
-
-// BlobByExtendedSlot return the blob idenfifer for the given extended slot
+// BlobByExtendedSlot returns the blob identifier for the given extended slot
 // name. An extended slot name is a slot name with an optional "@nnn/" prefix,
 // where nnn is the version number of the item to use (in decimal). If a
 // version prefix is not present, the most recent version of the item is used.
 // Like BlobByVersionSlot, 0 is returned if the slot path does not
 // resolve to anything.
 func (item Item) BlobByExtendedSlot(slot string) BlobID {
-	var vid VersionID
+	// handle "@blob/nnn" path
+	if strings.HasPrefix(slot, "@blob/") {
+		// try to parse the blob number
+		b, err := strconv.ParseInt(slot[6:], 10, 0)
+		if err != nil || b <= 0 || b > int64(len(item.Blobs)) {
+			return 0
+		}
+		return BlobID(b)
+	}
 	var vmax = item.Versions[len(item.Versions)-1].ID
+	var vid VersionID = vmax
 	// is this a special slot name?
 	if len(slot) >= 1 && slot[0] == '@' {
-		// handle "@blob/nnn" path
-		if strings.HasPrefix(slot, "@blob/") {
-			// try to parse the blob number
-			b, err := strconv.ParseInt(slot[6:], 10, 0)
-			if err != nil || b <= 0 || b > int64(len(item.Blobs)) {
-				return 0
-			}
-			return BlobID(b)
-		}
 		// handle "@nnn/path/to/file" paths
 		var err error
+		vid = 0
 		j := strings.Index(slot, "/")
 		if j >= 1 {
 			var v int64
@@ -257,10 +249,13 @@ func (item Item) BlobByExtendedSlot(slot string) BlobID {
 			return 0
 		}
 		slot = slot[j+1:]
-	} else {
-		vid = vmax
 	}
-	return item.BlobByVersionSlot(vid, slot)
+	for _, v := range item.Versions {
+		if v.ID == vid {
+			return v.Slots[slot]
+		}
+	}
+	return 0
 }
 
 // used to implement a no-op cache

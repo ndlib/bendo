@@ -268,14 +268,8 @@ func checkslots(t *testing.T, s *Store, id string, table []slotTriple) {
 		t.Fatalf("Unexpected error %s", err.Error())
 	}
 	for _, triple := range table {
-		target := itm.BlobByVersionSlot(triple.version, triple.slot)
-		t.Logf("found (%d, %s) = %d", triple.version, triple.slot, target)
-		if target != triple.expectedBid {
-			t.Errorf("Received %d, expected %d", target, triple.expectedBid)
-		}
-
 		extslot := fmt.Sprintf("@%d/%s", triple.version, triple.slot)
-		target = itm.BlobByExtendedSlot(extslot)
+		target := itm.BlobByExtendedSlot(extslot)
 		t.Logf("found (%s) = %d", extslot, target)
 		if target != triple.expectedBid {
 			t.Errorf("Received %d, expected %d", target, triple.expectedBid)
