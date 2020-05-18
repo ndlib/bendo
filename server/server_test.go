@@ -109,6 +109,7 @@ func TestUploadHash(t *testing.T) {
 	uppath := "/upload"
 	uploadstringhash(t, "POST", uppath, "hello world", "", 400)
 	uploadstringhash(t, "POST", uppath, "hello world", "nothexnumber", 400)
+	// this will create a new upload, but then roll back the initial content on checksum mismatch
 	firstpath := uploadstringhash(t, "POST", uppath, "hello world", "abcdef0123456789", 412)
 	secondpath := uploadstringhash(t, "POST", uppath, "hello world", "5eb63bbbe01eeed093cb22bb8f5acdc3", 200)
 	t.Log("firstpath = ", firstpath)

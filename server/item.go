@@ -24,6 +24,27 @@ var (
 	nCacheMiss = expvar.NewInt("cache.miss")
 )
 
+// blobDB are the methods we need to interact with the new item metadata caching.
+// This interface is expected to grow as more functionality is moved to the database.
+//
+// The goal is to remove the original database Cache interface along with its hooks into the
+// item package.
+type blobDB interface {
+	// Look up the metadata for the given item+blob id. Returns error if error encountered.
+	// returns nil,nil if the blob was not found in the index.
+	FindBlob(item string, blobid int) (*items.Blob, error)
+
+	// Look up blob metadata using an item+version+slot name combo. Returns error if one
+	// happened. Returns nil,nil if no such blob is in the index, so a missing item is not an error.
+	// The slot name needs to be exact, no wildcard expansion is done.
+	// Use version = 0 to refer to the most recent version of the item.
+	FindBlobBySlot(item string, version int, slot string) (*items.Blob, error)
+
+	// Index the given item using the given id.
+	// (The item id should already be in the item structure. can that parameter be removed?)
+	IndexItem(itemid string, item *items.Item) error
+}
+
 // BlobHandler handles requests to GET /blob/:id/:bid
 func (s *RESTServer) BlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
