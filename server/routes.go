@@ -85,6 +85,11 @@ type RESTServer struct {
 	// Cache keeps smallish blobs retreived from tape.
 	Cache blobcache.T
 
+	// BlobDB holds the item/version/slot/blob information in a structured way
+	// so we can query it without needing to read and parse the JSON structures
+	// describing items.
+	BlobDB blobDB
+
 	// Fixity stores the records tracking past and future fixity checks.
 	FixityDatabase FixityDB
 	DisableFixity  bool
@@ -173,6 +178,7 @@ func (s *RESTServer) Run() error {
 	var db interface {
 		FixityDB
 		items.ItemCache
+		blobDB
 	}
 	var err error
 	if s.MySQL != "" {
@@ -195,6 +201,7 @@ func (s *RESTServer) Run() error {
 		panic("problem setting up database")
 	}
 	s.Items.SetCache(db)
+	s.BlobDB = db
 
 	// init tapeuse
 	s.EnableTapeUse()

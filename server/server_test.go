@@ -333,13 +333,14 @@ func waitTransaction(t *testing.T, txpath string) {
 var testServer *httptest.Server
 
 func init() {
-	db, _ := NewQlCache("memory--server")
+	db, _ := NewQlCache("mem--server")
 	server := &RESTServer{
 		Validator:      NobodyValidator{},
 		Items:          items.NewWithCache(store.NewMemory(), items.NewMemoryCache()),
 		TxStore:        transaction.New(store.NewMemory()),
 		FileStore:      fragment.New(store.NewMemory()),
 		Cache:          blobcache.NewLRU(store.NewMemory(), 400),
+		BlobDB:         db,
 		FixityDatabase: db,
 		useTape:        true,
 	}
