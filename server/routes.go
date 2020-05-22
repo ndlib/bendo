@@ -101,8 +101,8 @@ type RESTServer struct {
 	useTape  bool            // Is Bendo reading/writing from tape?
 }
 
-// the number of transaction commits to tape we allow at a given time. If there are more
-// they will wait in a queue.
+// MaxConcurrentCommits is the number of transaction commits to tape we allow at
+// a given time. If there are more they will wait in a queue.
 const MaxConcurrentCommits = 2
 
 // getcachestore will use the value of s.CacheDir and return an approporate

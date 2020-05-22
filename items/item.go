@@ -218,8 +218,7 @@ func (item Item) blobByID(id BlobID) *Blob {
 // name. An extended slot name is a slot name with an optional "@nnn/" prefix,
 // where nnn is the version number of the item to use (in decimal). If a
 // version prefix is not present, the most recent version of the item is used.
-// Like BlobByVersionSlot, 0 is returned if the slot path does not
-// resolve to anything.
+// If the slot path does not resolve to anything, 0 is returned.
 func (item Item) BlobByExtendedSlot(slot string) BlobID {
 	// handle "@blob/nnn" path
 	if strings.HasPrefix(slot, "@blob/") {
