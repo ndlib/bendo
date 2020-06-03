@@ -25,7 +25,14 @@ func doUpload(item string, file string) int {
 		root = root + "/"
 	}
 
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait, *token)
+	thisItem := &bclientapi.Connection{
+		HostURL:   *server,
+		Item:      item,
+		Fileroot:  *fileroot,
+		ChunkSize: *chunksize,
+		Wait:      *wait,
+		Token:     *token,
+	}
 	var localfiles *FileList
 	var remotefiles *FileList
 
@@ -352,8 +359,8 @@ func ResolveLocalBlobs(local, remote *FileList) []Action {
 }
 
 // UploadBlobs will go through a FileList and send any new blobs to the server
-// given by ItemAttributes. The first error is returned.
-func UploadBlobs(ia *bclientapi.ItemAttributes, todo []Action) error {
+// given by Connection. The first error is returned.
+func UploadBlobs(conn *bclientapi.Connection, todo []Action) error {
 	var wg sync.WaitGroup
 
 	c := make(chan Action)
@@ -368,7 +375,7 @@ func UploadBlobs(ia *bclientapi.ItemAttributes, todo []Action) error {
 				if *verbose {
 					fmt.Println("Uploading", t.Source)
 				}
-				err := ia.UploadFile(t.Source, t.MD5, t.MimeType)
+				err := conn.UploadFile(t.Source, t.MD5, t.MimeType)
 				if err != nil {
 					select {
 					case errorchan <- err:
@@ -405,10 +412,10 @@ loop:
 	return err
 }
 
-func PostTransaction(item string, ia *bclientapi.ItemAttributes, todo []Action) (string, error) {
+func PostTransaction(item string, conn *bclientapi.Connection, todo []Action) (string, error) {
 	cmdlist := MakeTransactionCommands(item, todo)
 	buf, _ := json.Marshal(cmdlist)
-	return ia.CreateTransaction(buf)
+	return conn.CreateTransaction(buf)
 }
 
 // MakeTransactionCommands turns an Action list into a list of transaction

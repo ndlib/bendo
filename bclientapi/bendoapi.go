@@ -24,23 +24,23 @@ var (
 	ErrServerError      = errors.New("Server Error")
 )
 
-func (ia *ItemAttributes) GetItemInfo() (*jason.Object, error) {
-	return ia.doJasonGet("/item/" + ia.item)
+func (c *Connection) GetItemInfo() (*jason.Object, error) {
+	return c.doJasonGet("/item/" + c.Item)
 }
 
 // get upload metadata (if it exists) . Assumes that the upload fileid is item#-filemd5sum
 // returns json of metadata if successful, error otherwise
 
-func (ia *ItemAttributes) getUploadMeta(fileId string) (*jason.Object, error) {
-	return ia.doJasonGet("/upload/" + fileId + "/metadata")
+func (c *Connection) getUploadMeta(fileId string) (*jason.Object, error) {
+	return c.doJasonGet("/upload/" + fileId + "/metadata")
 }
 
-func (ia *ItemAttributes) downLoad(fileName string, pathPrefix string) error {
-	var httpPath = ia.bendoServer + "/item/" + ia.item + "/" + fileName
+func (c *Connection) downLoad(fileName string, pathPrefix string) error {
+	var httpPath = c.HostURL + "/item/" + c.Item + "/" + fileName
 
 	req, _ := http.NewRequest("GET", httpPath, nil)
-	if ia.token != "" {
-		req.Header.Add("X-Api-Key", ia.token)
+	if c.Token != "" {
+		req.Header.Add("X-Api-Key", c.Token)
 	}
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -85,14 +85,14 @@ func (ia *ItemAttributes) downLoad(fileName string, pathPrefix string) error {
 	return err
 }
 
-func (ia *ItemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []byte, mimetype string, fileId string) error {
+func (c *Connection) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []byte, mimetype string, fileId string) error {
 
-	var path = ia.bendoServer + "/upload/" + fileId
+	var path = c.HostURL + "/upload/" + fileId
 
 	req, _ := http.NewRequest("POST", path, bytes.NewReader(chunk))
 	req.Header.Set("X-Upload-Md5", hex.EncodeToString(chunkmd5sum))
-	if ia.token != "" {
-		req.Header.Add("X-Api-Key", ia.token)
+	if c.Token != "" {
+		req.Header.Add("X-Api-Key", c.Token)
 	}
 	if mimetype != "" {
 		req.Header.Add("Content-Type", mimetype)
@@ -131,13 +131,13 @@ func (ia *ItemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5su
 
 // Not well named - sets a POST /item/:id/transaction
 
-func (ia *ItemAttributes) CreateTransaction(cmdlist []byte) (string, error) {
+func (c *Connection) CreateTransaction(cmdlist []byte) (string, error) {
 
-	var path = ia.bendoServer + "/item/" + ia.item + "/transaction"
+	var path = c.HostURL + "/item/" + c.Item + "/transaction"
 
 	req, _ := http.NewRequest("POST", path, bytes.NewReader(cmdlist))
-	if ia.token != "" {
-		req.Header.Add("X-Api-Key", ia.token)
+	if c.Token != "" {
+		req.Header.Add("X-Api-Key", c.Token)
 	}
 	resp, err := http.DefaultClient.Do(req)
 
@@ -156,12 +156,12 @@ func (ia *ItemAttributes) CreateTransaction(cmdlist []byte) (string, error) {
 	return transaction, nil
 }
 
-func (ia *ItemAttributes) getTransactionStatus(transaction string) (*jason.Object, error) {
-	return ia.doJasonGet("/transaction/" + transaction)
+func (c *Connection) getTransactionStatus(transaction string) (*jason.Object, error) {
+	return c.doJasonGet("/transaction/" + transaction)
 }
 
-func (ia *ItemAttributes) doJasonGet(path string) (*jason.Object, error) {
-	path = ia.bendoServer + path
+func (c *Connection) doJasonGet(path string) (*jason.Object, error) {
+	path = c.HostURL + path
 
 	req, err := http.NewRequest("GET", path, nil)
 
@@ -170,8 +170,8 @@ func (ia *ItemAttributes) doJasonGet(path string) (*jason.Object, error) {
 	}
 
 	req.Header.Set("Accept-Encoding", "application/json")
-	if ia.token != "" {
-		req.Header.Add("X-Api-Key", ia.token)
+	if c.Token != "" {
+		req.Header.Add("X-Api-Key", c.Token)
 	}
 
 	resp, err := http.DefaultClient.Do(req)

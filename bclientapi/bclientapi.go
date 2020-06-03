@@ -9,37 +9,26 @@ import (
 	"github.com/ndlib/bendo/transaction"
 )
 
-// common attributes
+// A Connection represents a connection with a Bendo Service.
+// It can be shared between multiple goroutines.
+type Connection struct {
+	// The bendo server this connection is to
+	HostURL string
 
-type ItemAttributes struct {
-	fileroot    string
-	item        string
-	bendoServer string
-	chunkSize   int
-	wait        bool
-	token       string
-}
-
-func New(server string, item string, fileroot string, chunkSize int, wait bool, token string) *ItemAttributes {
-
-	thisItem := new(ItemAttributes)
-	thisItem.bendoServer = server
-	thisItem.item = item
-	thisItem.chunkSize = chunkSize
-	thisItem.fileroot = fileroot
-	thisItem.wait = wait
-	thisItem.token = token
-
-	return thisItem
+	Fileroot  string
+	Item      string
+	ChunkSize int
+	Wait      bool
+	Token     string
 }
 
 // serve file requests from the server for  a get
 // If the file Get fails, close the channel and exit
 
-func (ia *ItemAttributes) GetFiles(fileQueue chan string, pathPrefix string) error {
+func (c *Connection) GetFiles(fileQueue chan string, pathPrefix string) error {
 
 	for filename := range fileQueue {
-		err := ia.downLoad(filename, pathPrefix)
+		err := c.downLoad(filename, pathPrefix)
 
 		if err != nil {
 			fmt.Printf("Error: GetFile return %s\n", err.Error())
@@ -52,14 +41,14 @@ func (ia *ItemAttributes) GetFiles(fileQueue chan string, pathPrefix string) err
 
 // upload the give file to the bendo server
 
-func (ia *ItemAttributes) UploadFile(filename string, uploadMd5 []byte, mimetype string) error {
-	_, err := ia.chunkAndUpload(filename, uploadMd5, mimetype)
+func (c *Connection) UploadFile(filename string, uploadMd5 []byte, mimetype string) error {
+	_, err := c.chunkAndUpload(filename, uploadMd5, mimetype)
 
 	// If an error occurred, report it, and return
 
 	if err != nil {
 		// add api call to delete fileid uploads
-		fmt.Printf("Error: unable to upload file %s for item %s, %s\n", filename, ia.item, err)
+		fmt.Printf("Error: unable to upload file %s for item %s, %s\n", filename, c.Item, err)
 		return err
 	}
 
@@ -76,7 +65,7 @@ var (
 // It will return an error if the transaction had an error.
 // It will poll the server for up to 12 hours, and then return
 // a timeout error.
-func (ia *ItemAttributes) WaitForCommitFinish(txpath string) error {
+func (c *Connection) WaitForCommitFinish(txpath string) error {
 	txid := path.Base(txpath)
 
 	fmt.Printf("Waiting on transaction %s:", txid)
@@ -89,7 +78,7 @@ func (ia *ItemAttributes) WaitForCommitFinish(txpath string) error {
 		fmt.Printf(".")
 		time.Sleep(delay)
 
-		v, err := ia.getTransactionStatus(txid)
+		v, err := c.getTransactionStatus(txid)
 		if err == nil {
 			status, err = v.GetInt64("Status")
 		}

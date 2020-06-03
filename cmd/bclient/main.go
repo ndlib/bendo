@@ -165,7 +165,14 @@ func doGet(item string, files []string) int {
 
 	// set up communication to the bendo server, and init local and remote filelists
 
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait, *token)
+	thisItem := &bclientapi.Connection{
+		HostURL:   *server,
+		Item:      item,
+		Fileroot:  *fileroot,
+		ChunkSize: *chunksize,
+		Wait:      *wait,
+		Token:     *token,
+	}
 	fileLists := NewLists(*fileroot)
 
 	// Fetch Item Info from bclientapi
@@ -247,7 +254,14 @@ func doGetStub(item string) int {
 
 	// fetch info about this item from the bendo server
 
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait, *token)
+	thisItem := &bclientapi.Connection{
+		HostURL:   *server,
+		Item:      item,
+		Fileroot:  *fileroot,
+		ChunkSize: *chunksize,
+		Wait:      *wait,
+		Token:     *token,
+	}
 
 	// Fetch Item Info from bclientapi
 	json, jsonFetchErr = thisItem.GetItemInfo()
@@ -272,7 +286,14 @@ func doHistory(item string) int {
 	var json *jason.Object
 	var jsonFetchErr error
 
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait, *token)
+	thisItem := &bclientapi.Connection{
+		HostURL:   *server,
+		Item:      item,
+		Fileroot:  *fileroot,
+		ChunkSize: *chunksize,
+		Wait:      *wait,
+		Token:     *token,
+	}
 
 	// Fetch Item Info from bclientapi
 	json, jsonFetchErr = thisItem.GetItemInfo()
@@ -297,7 +318,14 @@ func doLs(item string) int {
 	var json *jason.Object
 	var jsonFetchErr error
 
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait, *token)
+	thisItem := &bclientapi.Connection{
+		HostURL:   *server,
+		Item:      item,
+		Fileroot:  *fileroot,
+		ChunkSize: *chunksize,
+		Wait:      *wait,
+		Token:     *token,
+	}
 
 	// Fetch Item Info from bclientapi
 	json, jsonFetchErr = thisItem.GetItemInfo()

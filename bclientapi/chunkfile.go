@@ -9,13 +9,13 @@ import (
 	"path"
 )
 
-func (ia *ItemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, mimetype string) (string, error) {
-	var fileID = ia.item + "-" + hex.EncodeToString(srcFileMd5)
+func (c *Connection) chunkAndUpload(srcFile string, srcFileMd5 []byte, mimetype string) (string, error) {
+	var fileID = c.Item + "-" + hex.EncodeToString(srcFileMd5)
 
 	// check to see if metadata exists for this fileID
 	// if so, get size of data already uploaded
 	var offset int64
-	json, err := ia.getUploadMeta(fileID)
+	json, err := c.getUploadMeta(fileID)
 	if err == nil {
 		offset, _ = json.GetInt64("Size")
 	}
@@ -32,7 +32,7 @@ func (ia *ItemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, mime
 		return "", err
 	}
 
-	chunk := make([]byte, ia.chunkSize)
+	chunk := make([]byte, c.ChunkSize)
 
 	// upload the file in chunks
 
@@ -62,7 +62,7 @@ func (ia *ItemAttributes) chunkAndUpload(srcFile string, srcFileMd5 []byte, mime
 			err = errors.New("Too many attempts to upload chunk")
 			break
 		}
-		err = ia.PostUpload(chunk[:n], chMd5[:], srcFileMd5, mimetype, fileID)
+		err = c.PostUpload(chunk[:n], chMd5[:], srcFileMd5, mimetype, fileID)
 		if err == ErrChecksumMismatch || err == ErrServerError {
 			retryCount++
 			goto retry
