@@ -44,7 +44,7 @@ func doUpload(item string, file string) int {
 
 	// While checksums are going, try to get remote tree
 	fmt.Println("Looking up item", item, "on remote server")
-	json, err := conn.GetItemInfo(item)
+	json, err := conn.ItemInfo(item)
 	if err == nil {
 		remotefiles = New(root)
 		remotefiles.BuildListFromJSON(json)
@@ -55,7 +55,7 @@ func doUpload(item string, file string) int {
 	// Wait for scan to finish
 	wg.Wait()
 	if err != nil {
-		// If GetItemInfo returns other error, bendo unvavailable for upload- abort!
+		// If ItemInfo returns other error, bendo unvavailable for upload- abort!
 		fmt.Println(err)
 		return 1
 	}

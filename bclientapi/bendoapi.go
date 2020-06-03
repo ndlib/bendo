@@ -25,7 +25,7 @@ var (
 	ErrServerError      = errors.New("Server Error")
 )
 
-func (c *Connection) GetItemInfo(item string) (*jason.Object, error) {
+func (c *Connection) ItemInfo(item string) (*jason.Object, error) {
 	return c.doJasonGet("/item/" + item)
 }
 

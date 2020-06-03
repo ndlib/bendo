@@ -170,7 +170,7 @@ func doGet(item string, files []string) int {
 	fileLists := NewLists(*fileroot)
 
 	// Fetch Item Info from bclientapi
-	json, err := conn.GetItemInfo(item)
+	json, err := conn.ItemInfo(item)
 
 	// If not found or error, we're done
 
@@ -273,7 +273,7 @@ func doGetStub(item string) int {
 	}
 
 	// Fetch Item Info from bclientapi
-	json, err := conn.GetItemInfo(item)
+	json, err := conn.ItemInfo(item)
 
 	// If not found or error, we're done; otherwise, create Item Stub
 
@@ -298,7 +298,7 @@ func doHistory(item string) int {
 	}
 
 	// Fetch Item Info from bclientapi
-	json, err := conn.GetItemInfo(item)
+	json, err := conn.ItemInfo(item)
 
 	switch {
 	case err == bclientapi.ErrNotFound:
@@ -322,7 +322,7 @@ func doLs(item string) int {
 	}
 
 	// Fetch Item Info from bclientapi
-	json, err := conn.GetItemInfo(item)
+	json, err := conn.ItemInfo(item)
 
 	switch {
 	case err == bclientapi.ErrNotFound:
