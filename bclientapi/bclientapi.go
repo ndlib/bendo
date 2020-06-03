@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path"
 	"sync"
 	"time"
 
@@ -53,38 +52,37 @@ var (
 	ErrTimeout     = errors.New("timeout processing transaction")
 )
 
-// WaitForCommitFinish waits for the given transaction to finish.
+// WaitTransaction waits for the given transaction to finish.
 // It will return an error if the transaction had an error.
 // It will poll the server for up to 12 hours, and then return
 // a timeout error.
-func (c *Connection) WaitForCommitFinish(txpath string) error {
-	txid := path.Base(txpath)
-
+func (c *Connection) WaitTransaction(txid string) error {
 	fmt.Printf("Waiting on transaction %s:", txid)
 
 	// loop for at most 12 hours
 	const delay = 5 * time.Second
-	for i := 0; i < int(12*time.Hour/delay); i++ {
-		var status int64
-
+	const maxloop = int(12 * time.Hour / delay)
+	nerr := 0
+	for i := 0; i < maxloop; i++ {
 		fmt.Printf(".")
 		time.Sleep(delay)
 
-		v, err := c.getTransactionStatus(txid)
-		if err == nil {
-			status, err = v.GetInt64("Status")
-		}
+		v, err := c.TransactionStatus(txid)
 		if err != nil {
-			return err
+			fmt.Println(err)
+			nerr++
+			if nerr > 5 {
+				return err
+			}
+			continue
 		}
 
-		switch transaction.Status(status) {
+		switch v.Status {
 		case transaction.StatusFinished:
 			return nil
 		case transaction.StatusError:
 			fmt.Println("Error")
-			errlist, _ := v.GetStringArray("Err")
-			for _, e := range errlist {
+			for _, e := range v.Errors {
 				fmt.Println(e)
 			}
 			return ErrTransaction

@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/antonholmquist/jason"
+
+	"github.com/ndlib/bendo/transaction"
 )
 
 // Exported errors
@@ -109,8 +111,26 @@ func (c *Connection) CreateTransaction(item string, cmdlist []byte) (string, err
 	return transaction, nil
 }
 
-func (c *Connection) getTransactionStatus(transaction string) (*jason.Object, error) {
-	return c.doJasonGet("/transaction/" + transaction)
+type TransactionInfo struct {
+	Status transaction.Status
+	Errors []string
+}
+
+// TransactionStatus returns info on the given transaction ID. If the transaction
+// is being processed, it does not wait for the transaction to finish. The status
+// is an integer as given by transaction.TransactionStatus.
+func (c *Connection) TransactionStatus(txid string) (TransactionInfo, error) {
+	var result TransactionInfo
+	v, err := c.doJasonGet("/transaction/" + txid)
+	if err != nil {
+		return result, err
+	}
+	x, err := v.GetInt64("Status")
+	if err == nil {
+		result.Status = transaction.Status(x)
+	}
+	result.Errors, _ = v.GetStringArray("Err")
+	return result, err
 }
 
 func (c *Connection) doJasonGet(path string) (*jason.Object, error) {

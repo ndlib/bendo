@@ -96,7 +96,8 @@ func doUpload(item string, file string) int {
 	}
 
 	if *wait {
-		err = conn.WaitForCommitFinish(transaction)
+		txid := path.Base(transaction)
+		err = conn.WaitTransaction(txid)
 		if err != nil {
 			fmt.Println(err)
 			return 1
