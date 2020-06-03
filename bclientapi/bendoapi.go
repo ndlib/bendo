@@ -2,7 +2,7 @@ package bclientapi
 
 import (
 	"bytes"
-	"encoding/hex"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -27,11 +27,20 @@ func (c *Connection) GetItemInfo(item string) (*jason.Object, error) {
 	return c.doJasonGet("/item/" + item)
 }
 
-// get upload metadata (if it exists) . Assumes that the upload fileid is item#-filemd5sum
-// returns json of metadata if successful, error otherwise
-
-func (c *Connection) getUploadMeta(fileId string) (*jason.Object, error) {
-	return c.doJasonGet("/upload/" + fileId + "/metadata")
+// getUploadInfo returns information for an uploaded file, if it exists.
+// returns information if successful, error otherwise.
+func (c *Connection) getUploadInfo(uploadname string) (FileInfo, error) {
+	var result FileInfo
+	v, err := c.doJasonGet("/upload/" + uploadname + "/metadata")
+	if err != nil {
+		return result, err
+	}
+	result.Size, _ = v.GetInt64("Size")
+	if vv, _ := v.GetString("MD5"); vv != "" {
+		result.MD5, _ = base64.StdEncoding.DecodeString(vv)
+	}
+	result.Mimetype, _ = v.GetString("MimeType")
+	return result, nil
 }
 
 // Download copies the given (item, filename) pair from bendo to the given io.Writer.
@@ -74,47 +83,6 @@ func (c *Connection) do(req *http.Request) (*http.Response, error) {
 		}
 	}
 	return c.client.Do(req)
-}
-
-func (c *Connection) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []byte, mimetype string, fileId string) error {
-
-	var path = c.HostURL + "/upload/" + fileId
-
-	req, _ := http.NewRequest("POST", path, bytes.NewReader(chunk))
-	req.Header.Set("X-Upload-Md5", hex.EncodeToString(chunkmd5sum))
-	if mimetype != "" {
-		req.Header.Add("Content-Type", mimetype)
-	}
-	if len(filemd5sum) > 0 {
-		req.Header.Add("X-Content-MD5", hex.EncodeToString(filemd5sum))
-	}
-	resp, err := c.do(req)
-
-	if err != nil {
-		return err
-	}
-
-	defer resp.Body.Close()
-
-	switch resp.StatusCode {
-	case 200:
-		break
-	case 412:
-		return ErrChecksumMismatch
-	case 500:
-		err = ErrServerError
-		fallthrough
-	default:
-		message := make([]byte, 512)
-		resp.Body.Read(message)
-		log.Printf("Received HTTP status %d for %s\n", resp.StatusCode, path)
-		log.Println(string(message))
-		if err == nil {
-			err = errors.New(string(message))
-		}
-		return err
-	}
-	return nil
 }
 
 // Not well named - sets a POST /item/:id/transaction

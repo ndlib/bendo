@@ -3,8 +3,10 @@ package bclientapi
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"path"
+	"sync"
 	"time"
 
 	"github.com/ndlib/bendo/transaction"
@@ -16,28 +18,34 @@ type Connection struct {
 	// The bendo server this connection is to
 	HostURL string
 
+	// The chunk size to use for uploading files.
+	// If 0, defaults to 10485760 bytes = 10 MB.
 	ChunkSize int
-	Token     string
+
+	// An API key to use when interacting with the server.
+	Token string
 
 	// use this to make http requests. It is configured with a timeout.
 	client *http.Client
+
+	// keep a list of unused buffers so we can amortize allocation cost.
+	chunkpool *sync.Pool
 }
 
-// upload the give file to the bendo server
+type FileInfo struct {
+	Size     int64  // the size of this file
+	MD5      []byte // the md5 hash for the entire file being uploaded
+	Mimetype string // the mimetype of this file
+}
 
-func (c *Connection) UploadFile(item string, filename string, uploadMd5 []byte, mimetype string) error {
-	_, err := c.chunkAndUpload(item, filename, uploadMd5, mimetype)
-
-	// If an error occurred, report it, and return
-
-	if err != nil {
-		// add api call to delete fileid uploads
-		fmt.Printf("Error: unable to upload file %s for item %s, %s\n", filename, item, err)
-		return err
-	}
-
-	return nil
-
+// Upload copies r to the bendo server, storing it under the name uploadname. r
+// must support seeking since that is used to determine the length of the
+// content and if the md5 sum is not set in info, this function will first read
+// r to compute it and then seek back to the beginning to then copy r to the
+// server. Upload() will resume a partial upload if only part of r is on the
+// server.
+func (c *Connection) Upload(uploadname string, r io.ReadSeeker, info FileInfo) error {
+	return c.upload(uploadname, r, info)
 }
 
 var (

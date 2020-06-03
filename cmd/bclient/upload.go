@@ -372,8 +372,16 @@ func UploadBlobs(conn *bclientapi.Connection, item string, todo []Action) error 
 				if *verbose {
 					fmt.Println("Uploading", t.Source)
 				}
-				err := conn.UploadFile(item, t.Source, t.MD5, t.MimeType)
+				f, err := os.Open(t.Source)
+				if err == nil {
+					remotekey := item + "-" + hex.EncodeToString(t.MD5)
+					err = conn.Upload(remotekey, f, bclientapi.FileInfo{
+						MD5:      t.MD5,
+						Mimetype: t.MimeType})
+					f.Close()
+				}
 				if err != nil {
+					fmt.Printf("Error uploading %s, %s\n", t.Source, err)
 					select {
 					case errorchan <- err:
 					default:
