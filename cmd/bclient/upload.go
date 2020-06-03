@@ -25,9 +25,8 @@ func doUpload(item string, file string) int {
 		root = root + "/"
 	}
 
-	thisItem := &bclientapi.Connection{
+	conn := &bclientapi.Connection{
 		HostURL:   *server,
-		Item:      item,
 		Fileroot:  *fileroot,
 		ChunkSize: *chunksize,
 		Wait:      *wait,
@@ -47,7 +46,7 @@ func doUpload(item string, file string) int {
 
 	// While checksums are going, try to get remote tree
 	fmt.Println("Looking up item", item, "on remote server")
-	json, err := thisItem.GetItemInfo()
+	json, err := conn.GetItemInfo(item)
 	if err == nil {
 		remotefiles = New(root)
 		remotefiles.BuildListFromJSON(json)
@@ -80,14 +79,14 @@ func doUpload(item string, file string) int {
 	}
 	// Upload Any blobs
 	fmt.Println("Uploading files")
-	err = UploadBlobs(thisItem, todo)
+	err = UploadBlobs(conn, item, todo)
 	if err != nil {
 		fmt.Println("error:", err)
 		return 1
 	}
 
 	// chunks uploaded- submit transaction to add FileIDs to item
-	transaction, err := PostTransaction(item, thisItem, todo)
+	transaction, err := PostTransaction(item, conn, todo)
 
 	if err != nil {
 		fmt.Println(err)
@@ -99,7 +98,7 @@ func doUpload(item string, file string) int {
 	}
 
 	if *wait {
-		err = thisItem.WaitForCommitFinish(transaction)
+		err = conn.WaitForCommitFinish(transaction)
 		if err != nil {
 			fmt.Println(err)
 			return 1
@@ -360,7 +359,7 @@ func ResolveLocalBlobs(local, remote *FileList) []Action {
 
 // UploadBlobs will go through a FileList and send any new blobs to the server
 // given by Connection. The first error is returned.
-func UploadBlobs(conn *bclientapi.Connection, todo []Action) error {
+func UploadBlobs(conn *bclientapi.Connection, item string, todo []Action) error {
 	var wg sync.WaitGroup
 
 	c := make(chan Action)
@@ -375,7 +374,7 @@ func UploadBlobs(conn *bclientapi.Connection, todo []Action) error {
 				if *verbose {
 					fmt.Println("Uploading", t.Source)
 				}
-				err := conn.UploadFile(t.Source, t.MD5, t.MimeType)
+				err := conn.UploadFile(item, t.Source, t.MD5, t.MimeType)
 				if err != nil {
 					select {
 					case errorchan <- err:
@@ -415,7 +414,7 @@ loop:
 func PostTransaction(item string, conn *bclientapi.Connection, todo []Action) (string, error) {
 	cmdlist := MakeTransactionCommands(item, todo)
 	buf, _ := json.Marshal(cmdlist)
-	return conn.CreateTransaction(buf)
+	return conn.CreateTransaction(item, buf)
 }
 
 // MakeTransactionCommands turns an Action list into a list of transaction

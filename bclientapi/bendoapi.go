@@ -24,8 +24,8 @@ var (
 	ErrServerError      = errors.New("Server Error")
 )
 
-func (c *Connection) GetItemInfo() (*jason.Object, error) {
-	return c.doJasonGet("/item/" + c.Item)
+func (c *Connection) GetItemInfo(item string) (*jason.Object, error) {
+	return c.doJasonGet("/item/" + item)
 }
 
 // get upload metadata (if it exists) . Assumes that the upload fileid is item#-filemd5sum
@@ -35,8 +35,8 @@ func (c *Connection) getUploadMeta(fileId string) (*jason.Object, error) {
 	return c.doJasonGet("/upload/" + fileId + "/metadata")
 }
 
-func (c *Connection) downLoad(fileName string, pathPrefix string) error {
-	var httpPath = c.HostURL + "/item/" + c.Item + "/" + fileName
+func (c *Connection) downLoad(item string, fileName string, pathPrefix string) error {
+	var httpPath = c.HostURL + "/item/" + item + "/" + fileName
 
 	req, _ := http.NewRequest("GET", httpPath, nil)
 	if c.Token != "" {
@@ -131,9 +131,9 @@ func (c *Connection) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []b
 
 // Not well named - sets a POST /item/:id/transaction
 
-func (c *Connection) CreateTransaction(cmdlist []byte) (string, error) {
+func (c *Connection) CreateTransaction(item string, cmdlist []byte) (string, error) {
 
-	var path = c.HostURL + "/item/" + c.Item + "/transaction"
+	var path = c.HostURL + "/item/" + item + "/transaction"
 
 	req, _ := http.NewRequest("POST", path, bytes.NewReader(cmdlist))
 	if c.Token != "" {

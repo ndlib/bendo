@@ -9,8 +9,8 @@ import (
 	"path"
 )
 
-func (c *Connection) chunkAndUpload(srcFile string, srcFileMd5 []byte, mimetype string) (string, error) {
-	var fileID = c.Item + "-" + hex.EncodeToString(srcFileMd5)
+func (c *Connection) chunkAndUpload(item string, srcFile string, srcFileMd5 []byte, mimetype string) (string, error) {
+	var fileID = item + "-" + hex.EncodeToString(srcFileMd5)
 
 	// check to see if metadata exists for this fileID
 	// if so, get size of data already uploaded

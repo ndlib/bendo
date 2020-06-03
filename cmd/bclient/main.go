@@ -165,9 +165,8 @@ func doGet(item string, files []string) int {
 
 	// set up communication to the bendo server, and init local and remote filelists
 
-	thisItem := &bclientapi.Connection{
+	conn := &bclientapi.Connection{
 		HostURL:   *server,
-		Item:      item,
 		Fileroot:  *fileroot,
 		ChunkSize: *chunksize,
 		Wait:      *wait,
@@ -176,7 +175,7 @@ func doGet(item string, files []string) int {
 	fileLists := NewLists(*fileroot)
 
 	// Fetch Item Info from bclientapi
-	json, jsonFetchErr = thisItem.GetItemInfo()
+	json, jsonFetchErr = conn.GetItemInfo(item)
 
 	// If not found or error, we're done
 
@@ -209,7 +208,7 @@ func doGet(item string, files []string) int {
 	for cnt := int(0); cnt < *numuploaders; cnt++ {
 		go func() {
 			defer getFileDone.Done()
-			err := thisItem.GetFiles(filesToGet, pathPrefix)
+			err := conn.GetFiles(item, filesToGet, pathPrefix)
 			if err != nil {
 				// try to send error back without blocking
 				select {
@@ -254,9 +253,8 @@ func doGetStub(item string) int {
 
 	// fetch info about this item from the bendo server
 
-	thisItem := &bclientapi.Connection{
+	conn := &bclientapi.Connection{
 		HostURL:   *server,
-		Item:      item,
 		Fileroot:  *fileroot,
 		ChunkSize: *chunksize,
 		Wait:      *wait,
@@ -264,7 +262,7 @@ func doGetStub(item string) int {
 	}
 
 	// Fetch Item Info from bclientapi
-	json, jsonFetchErr = thisItem.GetItemInfo()
+	json, jsonFetchErr = conn.GetItemInfo(item)
 
 	// If not found or error, we're done; otherwise, create Item Stub
 
@@ -286,9 +284,8 @@ func doHistory(item string) int {
 	var json *jason.Object
 	var jsonFetchErr error
 
-	thisItem := &bclientapi.Connection{
+	conn := &bclientapi.Connection{
 		HostURL:   *server,
-		Item:      item,
 		Fileroot:  *fileroot,
 		ChunkSize: *chunksize,
 		Wait:      *wait,
@@ -296,7 +293,7 @@ func doHistory(item string) int {
 	}
 
 	// Fetch Item Info from bclientapi
-	json, jsonFetchErr = thisItem.GetItemInfo()
+	json, jsonFetchErr = conn.GetItemInfo(item)
 
 	switch {
 	case jsonFetchErr == bclientapi.ErrNotFound:
@@ -318,9 +315,8 @@ func doLs(item string) int {
 	var json *jason.Object
 	var jsonFetchErr error
 
-	thisItem := &bclientapi.Connection{
+	conn := &bclientapi.Connection{
 		HostURL:   *server,
-		Item:      item,
 		Fileroot:  *fileroot,
 		ChunkSize: *chunksize,
 		Wait:      *wait,
@@ -328,7 +324,7 @@ func doLs(item string) int {
 	}
 
 	// Fetch Item Info from bclientapi
-	json, jsonFetchErr = thisItem.GetItemInfo()
+	json, jsonFetchErr = conn.GetItemInfo(item)
 
 	switch {
 	case jsonFetchErr == bclientapi.ErrNotFound:

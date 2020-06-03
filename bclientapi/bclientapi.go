@@ -16,7 +16,6 @@ type Connection struct {
 	HostURL string
 
 	Fileroot  string
-	Item      string
 	ChunkSize int
 	Wait      bool
 	Token     string
@@ -25,10 +24,10 @@ type Connection struct {
 // serve file requests from the server for  a get
 // If the file Get fails, close the channel and exit
 
-func (c *Connection) GetFiles(fileQueue chan string, pathPrefix string) error {
+func (c *Connection) GetFiles(item string, fileQueue chan string, pathPrefix string) error {
 
 	for filename := range fileQueue {
-		err := c.downLoad(filename, pathPrefix)
+		err := c.downLoad(item, filename, pathPrefix)
 
 		if err != nil {
 			fmt.Printf("Error: GetFile return %s\n", err.Error())
@@ -41,14 +40,14 @@ func (c *Connection) GetFiles(fileQueue chan string, pathPrefix string) error {
 
 // upload the give file to the bendo server
 
-func (c *Connection) UploadFile(filename string, uploadMd5 []byte, mimetype string) error {
-	_, err := c.chunkAndUpload(filename, uploadMd5, mimetype)
+func (c *Connection) UploadFile(item string, filename string, uploadMd5 []byte, mimetype string) error {
+	_, err := c.chunkAndUpload(item, filename, uploadMd5, mimetype)
 
 	// If an error occurred, report it, and return
 
 	if err != nil {
 		// add api call to delete fileid uploads
-		fmt.Printf("Error: unable to upload file %s for item %s, %s\n", filename, c.Item, err)
+		fmt.Printf("Error: unable to upload file %s for item %s, %s\n", filename, item, err)
 		return err
 	}
 
