@@ -24,6 +24,9 @@ func resetMysql(mc *MsqlCache) {
 	mc.db.Exec("DROP TABLE fixity")
 	mc.db.Exec("DROP TABLE items")
 	mc.db.Exec("DROP TABLE migration_version")
+	mc.db.Exec("DROP TABLE blobs")
+	mc.db.Exec("DROP TABLE slots")
+	mc.db.Exec("DROP TABLE versions")
 }
 
 func TestMySQLItemCache(t *testing.T) {
