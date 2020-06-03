@@ -15,9 +15,7 @@ type Connection struct {
 	// The bendo server this connection is to
 	HostURL string
 
-	Fileroot  string
 	ChunkSize int
-	Wait      bool
 	Token     string
 }
 

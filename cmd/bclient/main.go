@@ -167,9 +167,7 @@ func doGet(item string, files []string) int {
 
 	conn := &bclientapi.Connection{
 		HostURL:   *server,
-		Fileroot:  *fileroot,
 		ChunkSize: *chunksize,
-		Wait:      *wait,
 		Token:     *token,
 	}
 	fileLists := NewLists(*fileroot)
@@ -276,9 +274,7 @@ func doGetStub(item string) int {
 
 	conn := &bclientapi.Connection{
 		HostURL:   *server,
-		Fileroot:  *fileroot,
 		ChunkSize: *chunksize,
-		Wait:      *wait,
 		Token:     *token,
 	}
 
@@ -307,9 +303,7 @@ func doHistory(item string) int {
 
 	conn := &bclientapi.Connection{
 		HostURL:   *server,
-		Fileroot:  *fileroot,
 		ChunkSize: *chunksize,
-		Wait:      *wait,
 		Token:     *token,
 	}
 
@@ -338,9 +332,7 @@ func doLs(item string) int {
 
 	conn := &bclientapi.Connection{
 		HostURL:   *server,
-		Fileroot:  *fileroot,
 		ChunkSize: *chunksize,
-		Wait:      *wait,
 		Token:     *token,
 	}
 

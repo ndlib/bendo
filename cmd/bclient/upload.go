@@ -27,9 +27,7 @@ func doUpload(item string, file string) int {
 
 	conn := &bclientapi.Connection{
 		HostURL:   *server,
-		Fileroot:  *fileroot,
 		ChunkSize: *chunksize,
-		Wait:      *wait,
 		Token:     *token,
 	}
 	var localfiles *FileList
