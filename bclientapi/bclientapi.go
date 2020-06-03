@@ -21,23 +21,6 @@ type Connection struct {
 	Token     string
 }
 
-// serve file requests from the server for  a get
-// If the file Get fails, close the channel and exit
-
-func (c *Connection) GetFiles(item string, fileQueue chan string, pathPrefix string) error {
-
-	for filename := range fileQueue {
-		err := c.downLoad(item, filename, pathPrefix)
-
-		if err != nil {
-			fmt.Printf("Error: GetFile return %s\n", err.Error())
-			return err
-		}
-	}
-
-	return nil
-}
-
 // upload the give file to the bendo server
 
 func (c *Connection) UploadFile(item string, filename string, uploadMd5 []byte, mimetype string) error {

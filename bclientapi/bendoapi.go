@@ -8,8 +8,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"path"
 
 	"github.com/antonholmquist/jason"
 )
@@ -35,10 +33,11 @@ func (c *Connection) getUploadMeta(fileId string) (*jason.Object, error) {
 	return c.doJasonGet("/upload/" + fileId + "/metadata")
 }
 
-func (c *Connection) downLoad(item string, fileName string, pathPrefix string) error {
-	var httpPath = c.HostURL + "/item/" + item + "/" + fileName
+// Download copies the given (item, filename) pair from bendo to the given io.Writer.
+func (c *Connection) Download(w io.Writer, item string, filename string) error {
+	var path = c.HostURL + "/item/" + item + "/" + filename
 
-	req, _ := http.NewRequest("GET", httpPath, nil)
+	req, _ := http.NewRequest("GET", path, nil)
 	if c.Token != "" {
 		req.Header.Add("X-Api-Key", c.Token)
 	}
@@ -47,40 +46,19 @@ func (c *Connection) downLoad(item string, fileName string, pathPrefix string) e
 		return err
 	}
 	defer r.Body.Close()
-	if r.StatusCode != 200 {
-		r.Body.Close()
-		switch r.StatusCode {
-		case 404:
-			log.Printf("%s returned 404\n", httpPath)
-			return ErrNotFound
-		case 401:
-			return ErrNotAuthorized
-		default:
-			return fmt.Errorf("Received status %d from Bendo", r.StatusCode)
-		}
+	switch r.StatusCode {
+	case 200:
+		break
+	case 404:
+		log.Println("returned 404", path)
+		return ErrNotFound
+	case 401:
+		return ErrNotAuthorized
+	default:
+		return fmt.Errorf("Received status %d from Bendo", r.StatusCode)
 	}
 
-	// How do we handle large downloads?
-
-	targetFile := path.Join(pathPrefix, fileName)
-	targetDir, _ := path.Split(targetFile)
-
-	err = os.MkdirAll(targetDir, 0755)
-
-	if err != nil {
-		log.Println("Error: could not create directory", targetDir, err)
-		return err
-	}
-
-	filePtr, err := os.Create(targetFile)
-
-	if err != nil {
-		log.Println("Error: could not create file", targetFile, err)
-		return err
-	}
-	defer filePtr.Close()
-
-	_, err = io.Copy(filePtr, r.Body)
+	_, err = io.Copy(w, r.Body)
 
 	return err
 }

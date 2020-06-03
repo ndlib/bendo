@@ -208,14 +208,12 @@ func doGet(item string, files []string) int {
 	for cnt := int(0); cnt < *numuploaders; cnt++ {
 		go func() {
 			defer getFileDone.Done()
-			err := conn.GetFiles(item, filesToGet, pathPrefix)
-			if err != nil {
-				// try to send error back without blocking
-				select {
-				case errorChan <- err:
-				default:
+			for filename := range filesToGet {
+				err := download(conn, item, filename, pathPrefix)
+				if err != nil {
+					errorChan <- err
+					return
 				}
-				return
 			}
 		}()
 	}
@@ -232,6 +230,29 @@ func doGet(item string, files []string) int {
 	}
 
 	return 0
+}
+
+// download copies an (item, filename) pair to the local filesystem at pathPrefix+filename
+// filename can contain '/' characters.
+func download(conn *bclientapi.Connection, item string, filename string, pathPrefix string) error {
+	targetFilename := path.Join(pathPrefix, filename)
+	targetDir, _ := path.Split(targetFilename)
+
+	err := os.MkdirAll(targetDir, 0755)
+	if err != nil {
+		log.Println("Error: could not create directory", targetDir, err)
+		return err
+	}
+
+	f, err := os.Create(targetFilename)
+	if err != nil {
+		log.Println("Error: could not create file", targetFilename, err)
+		return err
+	}
+	defer f.Close()
+
+	err = conn.Download(f, item, filename)
+	return err
 }
 
 // doGetStub builds an empty skeleton of an item, with zero length files
