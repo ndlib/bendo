@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/antonholmquist/jason"
 )
@@ -38,15 +39,12 @@ func (c *Connection) Download(w io.Writer, item string, filename string) error {
 	var path = c.HostURL + "/item/" + item + "/" + filename
 
 	req, _ := http.NewRequest("GET", path, nil)
-	if c.Token != "" {
-		req.Header.Add("X-Api-Key", c.Token)
-	}
-	r, err := http.DefaultClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return err
 	}
-	defer r.Body.Close()
-	switch r.StatusCode {
+	defer resp.Body.Close()
+	switch resp.StatusCode {
 	case 200:
 		break
 	case 404:
@@ -55,12 +53,27 @@ func (c *Connection) Download(w io.Writer, item string, filename string) error {
 	case 401:
 		return ErrNotAuthorized
 	default:
-		return fmt.Errorf("Received status %d from Bendo", r.StatusCode)
+		return fmt.Errorf("Received status %d from Bendo", resp.StatusCode)
 	}
 
-	_, err = io.Copy(w, r.Body)
+	_, err = io.Copy(w, resp.Body)
 
 	return err
+}
+
+// do performs an http request using our client with a timeout. The
+// timeout is arbitrary, and is just there so we don't hang indefinitely
+// should the server never close the connection.
+func (c *Connection) do(req *http.Request) (*http.Response, error) {
+	if c.Token != "" {
+		req.Header.Add("X-Api-Key", c.Token)
+	}
+	if c.client == nil {
+		c.client = &http.Client{
+			Timeout: 10 * time.Minute, // arbitrary
+		}
+	}
+	return c.client.Do(req)
 }
 
 func (c *Connection) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []byte, mimetype string, fileId string) error {
@@ -69,16 +82,13 @@ func (c *Connection) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []b
 
 	req, _ := http.NewRequest("POST", path, bytes.NewReader(chunk))
 	req.Header.Set("X-Upload-Md5", hex.EncodeToString(chunkmd5sum))
-	if c.Token != "" {
-		req.Header.Add("X-Api-Key", c.Token)
-	}
 	if mimetype != "" {
 		req.Header.Add("Content-Type", mimetype)
 	}
 	if len(filemd5sum) > 0 {
 		req.Header.Add("X-Content-MD5", hex.EncodeToString(filemd5sum))
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.do(req)
 
 	if err != nil {
 		return err
@@ -114,10 +124,7 @@ func (c *Connection) CreateTransaction(item string, cmdlist []byte) (string, err
 	var path = c.HostURL + "/item/" + item + "/transaction"
 
 	req, _ := http.NewRequest("POST", path, bytes.NewReader(cmdlist))
-	if c.Token != "" {
-		req.Header.Add("X-Api-Key", c.Token)
-	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.do(req)
 
 	if err != nil {
 		return "", err
@@ -148,11 +155,7 @@ func (c *Connection) doJasonGet(path string) (*jason.Object, error) {
 	}
 
 	req.Header.Set("Accept-Encoding", "application/json")
-	if c.Token != "" {
-		req.Header.Add("X-Api-Key", c.Token)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.do(req)
 
 	if err != nil {
 		return nil, err

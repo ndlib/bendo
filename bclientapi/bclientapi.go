@@ -3,6 +3,7 @@ package bclientapi
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"path"
 	"time"
 
@@ -17,6 +18,9 @@ type Connection struct {
 
 	ChunkSize int
 	Token     string
+
+	// use this to make http requests. It is configured with a timeout.
+	client *http.Client
 }
 
 // upload the give file to the bendo server
