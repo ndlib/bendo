@@ -12,7 +12,6 @@ import (
 	"runtime/pprof"
 	"sync"
 
-	"github.com/antonholmquist/jason"
 	"github.com/ndlib/bendo/bclientapi"
 )
 
@@ -155,8 +154,6 @@ func main() {
 //  Given one or more files in the item, it returns only them
 
 func doGet(item string, files []string) int {
-	var json *jason.Object
-	var jsonFetchErr error
 	filesToGet := make(chan string)
 	var getFileDone sync.WaitGroup
 
@@ -165,20 +162,24 @@ func doGet(item string, files []string) int {
 
 	// set up communication to the bendo server, and init local and remote filelists
 
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait, *token)
+	conn := &bclientapi.Connection{
+		HostURL:   *server,
+		ChunkSize: *chunksize,
+		Token:     *token,
+	}
 	fileLists := NewLists(*fileroot)
 
 	// Fetch Item Info from bclientapi
-	json, jsonFetchErr = thisItem.GetItemInfo()
+	json, err := conn.ItemInfo(item)
 
 	// If not found or error, we're done
 
 	switch {
-	case jsonFetchErr == bclientapi.ErrNotFound:
+	case err == bclientapi.ErrNotFound:
 		fmt.Printf("\n Item %s was not found on server %s\n", item, *server)
 		return 1
-	case jsonFetchErr != nil:
-		fmt.Println(jsonFetchErr)
+	case err != nil:
+		fmt.Println(err)
 		return 1
 	}
 
@@ -202,14 +203,12 @@ func doGet(item string, files []string) int {
 	for cnt := int(0); cnt < *numuploaders; cnt++ {
 		go func() {
 			defer getFileDone.Done()
-			err := thisItem.GetFiles(filesToGet, pathPrefix)
-			if err != nil {
-				// try to send error back without blocking
-				select {
-				case errorChan <- err:
-				default:
+			for filename := range filesToGet {
+				err := download(conn, item, filename, pathPrefix)
+				if err != nil {
+					errorChan <- err
+					return
 				}
-				return
 			}
 		}()
 	}
@@ -228,12 +227,32 @@ func doGet(item string, files []string) int {
 	return 0
 }
 
+// download copies an (item, filename) pair to the local filesystem at pathPrefix+filename
+// filename can contain '/' characters.
+func download(conn *bclientapi.Connection, item string, filename string, pathPrefix string) error {
+	targetFilename := path.Join(pathPrefix, filename)
+	targetDir, _ := path.Split(targetFilename)
+
+	err := os.MkdirAll(targetDir, 0755)
+	if err != nil {
+		log.Println("Error: could not create directory", targetDir, err)
+		return err
+	}
+
+	f, err := os.Create(targetFilename)
+	if err != nil {
+		log.Println("Error: could not create file", targetFilename, err)
+		return err
+	}
+	defer f.Close()
+
+	err = conn.Download(f, item, filename)
+	return err
+}
+
 // doGetStub builds an empty skeleton of an item, with zero length files
 
 func doGetStub(item string) int {
-	var json *jason.Object
-	var jsonFetchErr error
-
 	// if file or dir exists in target path named after the item, give error mesg and exit
 	pathPrefix := path.Join(*fileroot, item)
 
@@ -247,18 +266,22 @@ func doGetStub(item string) int {
 
 	// fetch info about this item from the bendo server
 
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait, *token)
+	conn := &bclientapi.Connection{
+		HostURL:   *server,
+		ChunkSize: *chunksize,
+		Token:     *token,
+	}
 
 	// Fetch Item Info from bclientapi
-	json, jsonFetchErr = thisItem.GetItemInfo()
+	json, err := conn.ItemInfo(item)
 
 	// If not found or error, we're done; otherwise, create Item Stub
 
 	switch {
-	case jsonFetchErr == bclientapi.ErrNotFound:
+	case err == bclientapi.ErrNotFound:
 		fmt.Printf("\n Item %s was not found on server %s\n", item, *server)
-	case jsonFetchErr != nil:
-		fmt.Println(jsonFetchErr)
+	case err != nil:
+		fmt.Println(err)
 		return 1
 	default:
 		MakeStubFromJSON(json, item, pathPrefix)
@@ -268,45 +291,44 @@ func doGetStub(item string) int {
 }
 
 func doHistory(item string) int {
-
-	var json *jason.Object
-	var jsonFetchErr error
-
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait, *token)
+	conn := &bclientapi.Connection{
+		HostURL:   *server,
+		ChunkSize: *chunksize,
+		Token:     *token,
+	}
 
 	// Fetch Item Info from bclientapi
-	json, jsonFetchErr = thisItem.GetItemInfo()
+	json, err := conn.ItemInfo(item)
 
 	switch {
-	case jsonFetchErr == bclientapi.ErrNotFound:
+	case err == bclientapi.ErrNotFound:
 		fmt.Printf("\n Item %s was not found on server %s\n", item, *server)
 		return 0
-	case jsonFetchErr != nil:
-		fmt.Println(jsonFetchErr)
+	case err != nil:
+		fmt.Println(err)
 		return 1
 	default:
 		PrintListFromJSON(json)
 	}
 
 	return 0
-
 }
 
 func doLs(item string) int {
-
-	var json *jason.Object
-	var jsonFetchErr error
-
-	thisItem := bclientapi.New(*server, item, *fileroot, *chunksize, *wait, *token)
+	conn := &bclientapi.Connection{
+		HostURL:   *server,
+		ChunkSize: *chunksize,
+		Token:     *token,
+	}
 
 	// Fetch Item Info from bclientapi
-	json, jsonFetchErr = thisItem.GetItemInfo()
+	json, err := conn.ItemInfo(item)
 
 	switch {
-	case jsonFetchErr == bclientapi.ErrNotFound:
+	case err == bclientapi.ErrNotFound:
 		fmt.Printf("\n Item %s was not found on server %s\n", item, *server)
-	case jsonFetchErr != nil:
-		fmt.Println(jsonFetchErr)
+	case err != nil:
+		fmt.Println(err)
 		return 1
 	default:
 		PrintLsFromJSON(json, *version, *longV, *blobs, item)

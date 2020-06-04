@@ -2,16 +2,17 @@ package bclientapi
 
 import (
 	"bytes"
-	"encoding/hex"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"path"
+	"time"
 
 	"github.com/antonholmquist/jason"
+
+	"github.com/ndlib/bendo/transaction"
 )
 
 // Exported errors
@@ -24,122 +25,76 @@ var (
 	ErrServerError      = errors.New("Server Error")
 )
 
-func (ia *ItemAttributes) GetItemInfo() (*jason.Object, error) {
-	return ia.doJasonGet("/item/" + ia.item)
+func (c *Connection) ItemInfo(item string) (*jason.Object, error) {
+	return c.doJasonGet("/item/" + item)
 }
 
-// get upload metadata (if it exists) . Assumes that the upload fileid is item#-filemd5sum
-// returns json of metadata if successful, error otherwise
-
-func (ia *ItemAttributes) getUploadMeta(fileId string) (*jason.Object, error) {
-	return ia.doJasonGet("/upload/" + fileId + "/metadata")
+// getUploadInfo returns information for an uploaded file, if it exists.
+// returns information if successful, error otherwise.
+func (c *Connection) getUploadInfo(uploadname string) (FileInfo, error) {
+	var result FileInfo
+	v, err := c.doJasonGet("/upload/" + uploadname + "/metadata")
+	if err != nil {
+		return result, err
+	}
+	result.Size, _ = v.GetInt64("Size")
+	if vv, _ := v.GetString("MD5"); vv != "" {
+		result.MD5, _ = base64.StdEncoding.DecodeString(vv)
+	}
+	result.Mimetype, _ = v.GetString("MimeType")
+	return result, nil
 }
 
-func (ia *ItemAttributes) downLoad(fileName string, pathPrefix string) error {
-	var httpPath = ia.bendoServer + "/item/" + ia.item + "/" + fileName
+// Download copies the given (item, filename) pair from bendo to the given io.Writer.
+func (c *Connection) Download(w io.Writer, item string, filename string) error {
+	var path = c.HostURL + "/item/" + item + "/" + filename
 
-	req, _ := http.NewRequest("GET", httpPath, nil)
-	if ia.token != "" {
-		req.Header.Add("X-Api-Key", ia.token)
-	}
-	r, err := http.DefaultClient.Do(req)
+	req, _ := http.NewRequest("GET", path, nil)
+	resp, err := c.do(req)
 	if err != nil {
 		return err
 	}
-	defer r.Body.Close()
-	if r.StatusCode != 200 {
-		r.Body.Close()
-		switch r.StatusCode {
-		case 404:
-			log.Printf("%s returned 404\n", httpPath)
-			return ErrNotFound
-		case 401:
-			return ErrNotAuthorized
-		default:
-			return fmt.Errorf("Received status %d from Bendo", r.StatusCode)
-		}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case 200:
+		break
+	case 404:
+		log.Println("returned 404", path)
+		return ErrNotFound
+	case 401:
+		return ErrNotAuthorized
+	default:
+		return fmt.Errorf("Received status %d from Bendo", resp.StatusCode)
 	}
 
-	// How do we handle large downloads?
-
-	targetFile := path.Join(pathPrefix, fileName)
-	targetDir, _ := path.Split(targetFile)
-
-	err = os.MkdirAll(targetDir, 0755)
-
-	if err != nil {
-		log.Println("Error: could not create directory", targetDir, err)
-		return err
-	}
-
-	filePtr, err := os.Create(targetFile)
-
-	if err != nil {
-		log.Println("Error: could not create file", targetFile, err)
-		return err
-	}
-	defer filePtr.Close()
-
-	_, err = io.Copy(filePtr, r.Body)
+	_, err = io.Copy(w, resp.Body)
 
 	return err
 }
 
-func (ia *ItemAttributes) PostUpload(chunk []byte, chunkmd5sum []byte, filemd5sum []byte, mimetype string, fileId string) error {
-
-	var path = ia.bendoServer + "/upload/" + fileId
-
-	req, _ := http.NewRequest("POST", path, bytes.NewReader(chunk))
-	req.Header.Set("X-Upload-Md5", hex.EncodeToString(chunkmd5sum))
-	if ia.token != "" {
-		req.Header.Add("X-Api-Key", ia.token)
+// do performs an http request using our client with a timeout. The
+// timeout is arbitrary, and is just there so we don't hang indefinitely
+// should the server never close the connection.
+func (c *Connection) do(req *http.Request) (*http.Response, error) {
+	if c.Token != "" {
+		req.Header.Add("X-Api-Key", c.Token)
 	}
-	if mimetype != "" {
-		req.Header.Add("Content-Type", mimetype)
-	}
-	if len(filemd5sum) > 0 {
-		req.Header.Add("X-Content-MD5", hex.EncodeToString(filemd5sum))
-	}
-	resp, err := http.DefaultClient.Do(req)
-
-	if err != nil {
-		return err
-	}
-
-	defer resp.Body.Close()
-
-	switch resp.StatusCode {
-	case 200:
-		break
-	case 412:
-		return ErrChecksumMismatch
-	case 500:
-		err = ErrServerError
-		fallthrough
-	default:
-		message := make([]byte, 512)
-		resp.Body.Read(message)
-		log.Printf("Received HTTP status %d for %s\n", resp.StatusCode, path)
-		log.Println(string(message))
-		if err == nil {
-			err = errors.New(string(message))
+	if c.client == nil {
+		c.client = &http.Client{
+			Timeout: 10 * time.Minute, // arbitrary
 		}
-		return err
 	}
-	return nil
+	return c.client.Do(req)
 }
 
 // Not well named - sets a POST /item/:id/transaction
 
-func (ia *ItemAttributes) CreateTransaction(cmdlist []byte) (string, error) {
+func (c *Connection) CreateTransaction(item string, cmdlist []byte) (string, error) {
 
-	var path = ia.bendoServer + "/item/" + ia.item + "/transaction"
+	var path = c.HostURL + "/item/" + item + "/transaction"
 
 	req, _ := http.NewRequest("POST", path, bytes.NewReader(cmdlist))
-	if ia.token != "" {
-		req.Header.Add("X-Api-Key", ia.token)
-	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.do(req)
 
 	if err != nil {
 		return "", err
@@ -156,12 +111,30 @@ func (ia *ItemAttributes) CreateTransaction(cmdlist []byte) (string, error) {
 	return transaction, nil
 }
 
-func (ia *ItemAttributes) getTransactionStatus(transaction string) (*jason.Object, error) {
-	return ia.doJasonGet("/transaction/" + transaction)
+type TransactionInfo struct {
+	Status transaction.Status
+	Errors []string
 }
 
-func (ia *ItemAttributes) doJasonGet(path string) (*jason.Object, error) {
-	path = ia.bendoServer + path
+// TransactionStatus returns info on the given transaction ID. If the transaction
+// is being processed, it does not wait for the transaction to finish. The status
+// is an integer as given by transaction.TransactionStatus.
+func (c *Connection) TransactionStatus(txid string) (TransactionInfo, error) {
+	var result TransactionInfo
+	v, err := c.doJasonGet("/transaction/" + txid)
+	if err != nil {
+		return result, err
+	}
+	x, err := v.GetInt64("Status")
+	if err == nil {
+		result.Status = transaction.Status(x)
+	}
+	result.Errors, _ = v.GetStringArray("Err")
+	return result, err
+}
+
+func (c *Connection) doJasonGet(path string) (*jason.Object, error) {
+	path = c.HostURL + path
 
 	req, err := http.NewRequest("GET", path, nil)
 
@@ -170,11 +143,7 @@ func (ia *ItemAttributes) doJasonGet(path string) (*jason.Object, error) {
 	}
 
 	req.Header.Set("Accept-Encoding", "application/json")
-	if ia.token != "" {
-		req.Header.Add("X-Api-Key", ia.token)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.do(req)
 
 	if err != nil {
 		return nil, err
