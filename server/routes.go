@@ -303,6 +303,10 @@ func (s *RESTServer) initCommitQueue() {
 	}
 }
 
+func (s *RESTServer) Handler() http.Handler {
+	return s.addRoutes()
+}
+
 func (s *RESTServer) addRoutes() http.Handler {
 	var routes = []struct {
 		method  string
