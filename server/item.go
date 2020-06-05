@@ -493,19 +493,29 @@ var (
 tbody tr:nth-child(even) { background-color: #eeeeee; }
 </style></head><body>
 <h1>Item {{ .ID }}</h1>
+<table>
+	<thead><tr>
+		<th>Version</th>
+		<th>Date</th>
+		<th>Creator</th>
+		<th>Note</th>
+	</tr></thead><tbody>
+{{ range .Versions }}
+	<tr>
+		<td>{{ .ID }}</td>
+		<td>{{ .SaveDate }}</td>
+		<td>{{ .Creator }}</td>
+		<td>{{ .Note }}</td>
+	</tr>
+{{ end }}
+</tbody></table>
 <dl>
-<dt>Created</dt><dd>{{ (index .Versions 0).SaveDate }}</dd>
 <dt>MaxBundle</dt><dd>{{ .MaxBundle }}</dd>
 </dl>
 {{ $blobs := .Blobs }}
 {{ $id := .ID }}
 {{ with index .Versions (len .Versions | minus1) }}
 	<h2>Version {{ .ID }}</h2>
-	<dl>
-	<dt>SaveDate</dt><dd>{{ .SaveDate }}</dd>
-	<dt>Creator</dt><dd>{{ .Creator }}</dd>
-	<dt>Note</dt><dd>{{ .Note }}</dd>
-	</dl>
 	<table><thead><tr>
 		<th>Bundle</th>
 		<th>Blob</th>
