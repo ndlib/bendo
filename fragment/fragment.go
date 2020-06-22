@@ -244,17 +244,6 @@ func (f *file) Append() (io.WriteCloser, error) {
 		return nil, err
 	}
 	frag := &fragment{ID: fragkey}
-	f.Children = append(f.Children, frag)
-	err = f.save()
-	if err != nil {
-		log.Println(f.ID, err)
-		f.Children = f.Children[:len(f.Children)-1]
-		err2 := w.Close()
-		if err2 != nil {
-			log.Println(err2)
-		}
-		return nil, err
-	}
 	return &fragwriter{frag: frag, parent: f, w: w}, nil
 }
 
@@ -279,6 +268,7 @@ func (fw *fragwriter) Close() error {
 		fw.parent.m.Lock()
 		fw.parent.Size += fw.size
 		fw.frag.Size = fw.size
+		fw.parent.Children = append(fw.parent.Children, fw.frag)
 		err = fw.parent.save()
 		fw.parent.m.Unlock()
 	}

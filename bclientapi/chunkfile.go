@@ -44,7 +44,7 @@ func (c *Connection) upload(uploadname string, r io.ReadSeeker, info FileInfo) e
 		// TODO(dbrower): delete and upload from beginning
 		return ErrUnexpectedResp
 	}
-	if remoteinfo.Size == info.Size {
+	if info.Size > 0 && remoteinfo.Size == info.Size {
 		// it is already uploaded
 		return nil
 	}
