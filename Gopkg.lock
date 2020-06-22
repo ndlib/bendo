@@ -252,6 +252,25 @@
   version = "v1.3.0"
 
 [[projects]]
+  branch = "master"
+  digest = "1:4d5f1b411d3418eb4106bdffadafe85c0ab123863080da03cd1e40ea4ccb4eaf"
+  name = "github.com/motemen/go-loghttp"
+  packages = [
+    ".",
+    "global",
+  ]
+  pruneopts = ""
+  revision = "974ac5ceac271576caabe1c0bddf2b7eed471f67"
+
+[[projects]]
+  branch = "master"
+  digest = "1:c4491903c1c3cc7e9288a7ec026aa4c4bdcb8c323617764999561c84f0532e4a"
+  name = "github.com/motemen/go-nuts"
+  packages = ["roundtime"]
+  pruneopts = ""
+  revision = "3df31f16cb2f92fcef3b728bb0291e42443b2db6"
+
+[[projects]]
   digest = "1:1d7e1867c49a6dd9856598ef7c3123604ea3daabf5b83f303ff457bcbc410b1d"
   name = "github.com/pkg/errors"
   packages = ["."]
@@ -302,6 +321,7 @@
     "github.com/getsentry/raven-go",
     "github.com/go-sql-driver/mysql",
     "github.com/julienschmidt/httprouter",
+    "github.com/motemen/go-loghttp/global",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

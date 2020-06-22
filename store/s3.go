@@ -15,6 +15,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	raven "github.com/getsentry/raven-go"
+
+	_ "github.com/motemen/go-loghttp/global"
 )
 
 // A S3 store represents a store that is kept on AWS S3 storage.
@@ -57,8 +59,8 @@ func (s *S3) List() <-chan string {
 				return !lastpage
 			})
 		if err != nil {
-			log.Println("List:", err)
-			raven.CaptureError(err, nil)
+			log.Println("S3 List:", s.Prefix, err)
+			raven.CaptureError(err, map[string]string{"Bucket": s.Bucket, "Prefix": s.Prefix})
 		}
 	}()
 	return out
@@ -79,6 +81,10 @@ func (s *S3) ListPrefix(prefix string) ([]string, error) {
 			}
 			return !lastpage
 		})
+	if err != nil {
+		log.Println("S3 ListPrefix:", s.Prefix, prefix, err)
+		raven.CaptureError(err, map[string]string{"Bucket": s.Bucket, "Prefix": s.Prefix, "Pattern": prefix})
+	}
 	return result, err
 }
 
@@ -114,6 +120,8 @@ func (s *S3) Create(key string) (io.WriteCloser, error) {
 		Key:    aws.String(fullkey),
 	})
 	if err != nil {
+		log.Println("S3 Create:", s.Prefix, key, err)
+		raven.CaptureError(err, map[string]string{"Bucket": s.Bucket, "Prefix": s.Prefix, "Key": key})
 		return nil, err
 	}
 	return &s3WriteCloser{
@@ -131,6 +139,10 @@ func (s *S3) Delete(key string) error {
 		Bucket: aws.String(s.Bucket),
 		Key:    aws.String(s.Prefix + key),
 	})
+	if err != nil {
+		log.Println("S3 Delete:", s.Prefix, key, err)
+		raven.CaptureError(err, map[string]string{"Bucket": s.Bucket, "Prefix": s.Prefix, "Key": key})
+	}
 	return err
 }
 
@@ -144,6 +156,8 @@ func (s *S3) stat(key string) (int64, error) {
 	}
 	info, err := s.svc.HeadObject(input)
 	if err != nil {
+		log.Println("S3 stat:", s.Prefix, key, err)
+		//raven.CaptureError(err, map[string]string{"Bucket": s.Bucket, "Prefix": s.Prefix, "Key": key})
 		return 0, err
 	}
 	return *info.ContentLength, nil
@@ -261,6 +275,7 @@ func (rac *s3ReadAtCloser) loadpage(offset int64) (s3Page, error) {
 	}
 	output, err := rac.svc.GetObject(input)
 	if err != nil {
+		log.Println("S3 loadpage:", rac, offset, err)
 		// if we get an invalid range error then we have gone too far
 		e, ok := err.(awserr.RequestFailure)
 		if ok && e.StatusCode() == http.StatusRequestedRangeNotSatisfiable {
@@ -384,6 +399,9 @@ func (wc *s3WriteCloser) Close() error {
 			Key:      aws.String(wc.key),
 			UploadId: aws.String(wc.uploadID),
 		})
+		if err2 != nil {
+			log.Println("S3 Abort Close:", wc, err2)
+		}
 		// if there was not a previous error, send whatever this one is
 		if err == nil {
 			err = err2
@@ -410,6 +428,9 @@ func (wc *s3WriteCloser) Close() error {
 				Parts: completed,
 			},
 		})
+	if err != nil {
+		log.Println("S3 Complete Close:", wc, err)
+	}
 	return err
 }
 
@@ -436,10 +457,11 @@ func (wc *s3WriteCloser) uploadpart(partno int, buf *bytes.Buffer) error {
 	buf.Reset() // mark the buffer as empty. Invalidates earlier pointer from buf.Bytes()
 	// can we detect and retry in event of transient errors?
 	if err != nil {
+		log.Println("S3 uploadpart:", wc, partno+1, err)
 		return err
 	}
 	if output.ETag == nil {
-		log.Println("nil ETag for part", partno, "key=", wc.key)
+		log.Println("S3 nil ETag for part", partno, "key=", wc.key)
 		return ErrNoETag
 	}
 	wc.etags = append(wc.etags, *output.ETag)

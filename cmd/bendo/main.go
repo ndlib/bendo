@@ -58,6 +58,8 @@ func main() {
 		}
 	}
 
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+
 	log.Printf("Using storage dir %s\n", config.StoreDir)
 	log.Printf("Using cache dir %s\n", config.CacheDir)
 	log.Printf("Using cache timeout %s\n", config.CacheTimeout)
