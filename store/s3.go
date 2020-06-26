@@ -30,8 +30,13 @@ type S3 struct {
 
 type head struct {
 	ttl  int   // time to live in hours
-	size int64 // size of item. 0 = ?, -1 = doesn't exist
+	size int64 // size of item. 0 = ?, -1 = doesn't exist. see constant below
 }
+
+const (
+	// constants for head.size. Indicates that the given key is deleted.
+	sizeDeleted int64 = -1 // any negative number will work
+)
 
 // NewS3 creates a new S3 store. It will use the given bucket and will prepend
 // prefix to all keys. This is to allow for a bucket to be used for more than
@@ -143,7 +148,7 @@ func (s *S3) Delete(key string) error {
 		log.Println("S3 Delete:", s.Prefix, key, err)
 		raven.CaptureError(err, map[string]string{"Bucket": s.Bucket, "Prefix": s.Prefix, "Key": key})
 	} else {
-		s.setkeysize(key, -1)
+		s.setkeysize(key, sizeDeleted)
 	}
 	return err
 }
@@ -166,12 +171,8 @@ func (s *S3) stat(key string) (int64, error) {
 	}
 	// key is not cached, so do the HEAD request
 	size, err := s.stat0(key)
-	if err != nil {
-		s.cache[key] = head{ttl: defaultMissTTL, size: size}
-		return 0, err
-	}
-	s.cache[key] = head{ttl: defaultHitTTL, size: size}
-	return size, nil
+	s.setkeysize0(key, size)
+	return size, err
 }
 
 // stat0 implements the actual HEAD request to s3. Returns either an error
@@ -194,10 +195,18 @@ const (
 )
 
 // setkeysize caches a size to use for the given key.
-// use -1 to mark the key as missing.
+// use sizeDeleted to mark the key as missing.
 //
 // Do not hold the s.m lock when calling this.
 func (s *S3) setkeysize(key string, size int64) {
+	s.m.Lock()
+	s.setkeysize0(key, size)
+	s.m.Unlock()
+}
+
+// setkeysize0 is just like setkeysize but assumes caller already has a lock
+// on s.m
+func (s *S3) setkeysize0(key string, size int64) {
 	ttl := defaultHitTTL
 	switch {
 	case size < 0:
@@ -205,9 +214,7 @@ func (s *S3) setkeysize(key string, size int64) {
 	case size == 0:
 		ttl = 0
 	}
-	s.m.Lock()
 	s.cache[key] = head{ttl: ttl, size: size}
-	s.m.Unlock()
 }
 
 // ageSizeCache will age all the cache entries, and remove the ones that have
