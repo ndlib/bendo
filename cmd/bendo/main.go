@@ -12,6 +12,8 @@ import (
 	"github.com/ndlib/bendo/items"
 	"github.com/ndlib/bendo/server"
 	"github.com/ndlib/bendo/store"
+	// logs all http requests. useful for debugging S3
+	//	_ "github.com/motemen/go-loghttp/global"
 )
 
 //Config info needed for Bendo
@@ -57,6 +59,8 @@ func main() {
 			return
 		}
 	}
+
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
 	log.Printf("Using storage dir %s\n", config.StoreDir)
 	log.Printf("Using cache dir %s\n", config.CacheDir)

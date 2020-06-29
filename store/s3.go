@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -23,19 +24,34 @@ type S3 struct {
 	svc    *s3.S3
 	Bucket string
 	Prefix string
+	m      sync.RWMutex    // protects everything below
+	cache  map[string]head // cache for item sizes
 }
+
+type head struct {
+	ttl  int   // time to live in hours
+	size int64 // size of item. 0 = ?, -1 = doesn't exist. see constant below
+}
+
+const (
+	// constants for head.size. Indicates that the given key is deleted.
+	sizeDeleted int64 = -1 // any negative number will work
+)
 
 // NewS3 creates a new S3 store. It will use the given bucket and will prepend
 // prefix to all keys. This is to allow for a bucket to be used for more than
 // one store. For example if prefix were "cache/" then an Open("hello") would
 // look for the key "cache/hello" in the bucket. The authorization method and
 // credentials in the session are used for all accesses.
-func NewS3(bucket, prefix string, s *session.Session) *S3 {
-	return &S3{
+func NewS3(bucket, prefix string, awsSession *session.Session) *S3 {
+	s := &S3{
 		Bucket: bucket,
 		Prefix: prefix,
-		svc:    s3.New(s),
+		svc:    s3.New(awsSession),
+		cache:  make(map[string]head),
 	}
+	go s.background()
+	return s
 }
 
 // List returns a list of all the keys in this store. It will only return ones
@@ -57,8 +73,8 @@ func (s *S3) List() <-chan string {
 				return !lastpage
 			})
 		if err != nil {
-			log.Println("List:", err)
-			raven.CaptureError(err, nil)
+			log.Println("S3 List:", s.Prefix, err)
+			raven.CaptureError(err, map[string]string{"Bucket": s.Bucket, "Prefix": s.Prefix})
 		}
 	}()
 	return out
@@ -79,6 +95,10 @@ func (s *S3) ListPrefix(prefix string) ([]string, error) {
 			}
 			return !lastpage
 		})
+	if err != nil {
+		log.Println("S3 ListPrefix:", s.Prefix, prefix, err)
+		raven.CaptureError(err, map[string]string{"Bucket": s.Bucket, "Prefix": s.Prefix, "Pattern": prefix})
+	}
 	return result, err
 }
 
@@ -108,19 +128,12 @@ func (s *S3) Create(key string) (io.WriteCloser, error) {
 	if err == nil {
 		return nil, ErrKeyExists
 	}
+	s.setkeysize(key, 0) // make 0 in case this key was previously deleted
 	fullkey := s.Prefix + key
-	result, err := s.svc.CreateMultipartUpload(&s3.CreateMultipartUploadInput{
-		Bucket: aws.String(s.Bucket),
-		Key:    aws.String(fullkey),
-	})
-	if err != nil {
-		return nil, err
-	}
 	return &s3WriteCloser{
-		svc:      s.svc,
-		bucket:   s.Bucket,
-		key:      fullkey,
-		uploadID: *result.UploadId,
+		svc:    s.svc,
+		bucket: s.Bucket,
+		key:    fullkey,
 	}, nil
 }
 
@@ -131,6 +144,12 @@ func (s *S3) Delete(key string) error {
 		Bucket: aws.String(s.Bucket),
 		Key:    aws.String(s.Prefix + key),
 	})
+	if err != nil {
+		log.Println("S3 Delete:", s.Prefix, key, err)
+		raven.CaptureError(err, map[string]string{"Bucket": s.Bucket, "Prefix": s.Prefix, "Key": key})
+	} else {
+		s.setkeysize(key, sizeDeleted)
+	}
 	return err
 }
 
@@ -138,6 +157,27 @@ func (s *S3) Delete(key string) error {
 // does not exist an error is returned. The prefix is added to the key before
 // checking.
 func (s *S3) stat(key string) (int64, error) {
+	// Cache the key sizes as we see them. This drastically cuts down on the
+	// number of HEAD requests.
+	s.m.Lock()
+	defer s.m.Unlock()
+	entry := s.cache[key]
+	if entry.size > 0 {
+		return entry.size, nil
+	}
+	if entry.size < 0 {
+		// we have previously determined this key does not exist
+		return 0, ErrNotExist
+	}
+	// key is not cached, so do the HEAD request
+	size, err := s.stat0(key)
+	s.setkeysize0(key, size)
+	return size, err
+}
+
+// stat0 implements the actual HEAD request to s3. Returns either an error
+// or the size. You probably want to call stat().
+func (s *S3) stat0(key string) (int64, error) {
 	input := &s3.HeadObjectInput{
 		Bucket: aws.String(s.Bucket),
 		Key:    aws.String(s.Prefix + key),
@@ -147,6 +187,60 @@ func (s *S3) stat(key string) (int64, error) {
 		return 0, err
 	}
 	return *info.ContentLength, nil
+}
+
+const (
+	defaultMissTTL = 3   // 3 hours
+	defaultHitTTL  = 240 // 10 days
+)
+
+// setkeysize caches a size to use for the given key.
+// use sizeDeleted to mark the key as missing.
+//
+// Do not hold the s.m lock when calling this.
+func (s *S3) setkeysize(key string, size int64) {
+	s.m.Lock()
+	s.setkeysize0(key, size)
+	s.m.Unlock()
+}
+
+// setkeysize0 is just like setkeysize but assumes caller already has a lock
+// on s.m
+func (s *S3) setkeysize0(key string, size int64) {
+	ttl := defaultHitTTL
+	switch {
+	case size < 0:
+		ttl = defaultMissTTL
+	case size == 0:
+		ttl = 0
+	}
+	s.cache[key] = head{ttl: ttl, size: size}
+}
+
+// ageSizeCache will age all the cache entries, and remove the ones that have
+// become too old. It holds m the entire time.
+func (s *S3) ageSizeCache() {
+	s.m.Lock()
+	defer s.m.Unlock()
+	for k, v := range s.cache {
+		v.ttl--
+		if v.ttl < 0 {
+			delete(s.cache, k) // remove aged entries
+		} else {
+			s.cache[k] = v
+		}
+	}
+}
+
+func (s *S3) background() {
+	for {
+		time.Sleep(time.Hour) // arbitrary length
+
+		log.Println("Start S3 ageSizeCache", s.Bucket, s.Prefix)
+		start := time.Now()
+		s.ageSizeCache()
+		log.Println("End S3 ageSizeCache", s.Bucket, s.Prefix, time.Now().Sub(start))
+	}
 }
 
 // s3ReadAtCloser adapts the Reader we get for loading content via s3
@@ -166,7 +260,7 @@ type s3ReadAtCloser struct {
 	bucket string
 	key    string
 	pages  []s3Page // cache of data we've downloaded
-	size   int64    // 0 == unknown size, otherwise will be >= actual size
+	size   int64
 }
 
 type s3Page struct {
@@ -180,7 +274,7 @@ func (rac *s3ReadAtCloser) ReadAt(p []byte, offset int64) (int, error) {
 	var err error
 	startOffset := offset
 	for len(p) > 0 {
-		if rac.size > 0 && offset >= rac.size {
+		if offset >= rac.size {
 			break
 		}
 		var page s3Page
@@ -261,14 +355,11 @@ func (rac *s3ReadAtCloser) loadpage(offset int64) (s3Page, error) {
 	}
 	output, err := rac.svc.GetObject(input)
 	if err != nil {
+		log.Println("S3 loadpage:", rac, offset, err)
 		// if we get an invalid range error then we have gone too far
 		e, ok := err.(awserr.RequestFailure)
 		if ok && e.StatusCode() == http.StatusRequestedRangeNotSatisfiable {
 			err = io.EOF
-			// can we upper bound the size?
-			if rac.size == 0 || rac.size > offset {
-				rac.size = offset
-			}
 		}
 		return s3Page{}, err
 	}
@@ -280,11 +371,6 @@ func (rac *s3ReadAtCloser) loadpage(offset int64) (s3Page, error) {
 		// nothing was transferred and there was no error...?
 		err = io.EOF
 	}
-	// Try to bound the file size from above by assuming a partial range
-	// returned means we hit the end. (this may be a terrible assumption).
-	if rac.size == 0 && *output.ContentLength < defaultPageSize {
-		rac.size = offset + *output.ContentLength
-	}
 	return s3Page{data: data.Bytes(), offset: offset}, err
 }
 
@@ -293,8 +379,8 @@ func (rac *s3ReadAtCloser) Close() error {
 	return nil
 }
 
-// s3WriteCloser adapts the s3 multipart upload interface to the WriteCloser
-// interface returned by Create().
+// s3WriteCloser does an upload to s3. If the entire file fits into one buffer
+// it will do a single PUT. Otherwise it will use the s3 multipart upload interface.
 //
 // A challenge is that we do not know the ultimate size of the object while we
 // are writing it. To accommodate large file sizes, we vary the size of each
@@ -305,12 +391,14 @@ func (rac *s3ReadAtCloser) Close() error {
 // The size of part i in bytes is bounded below by the function size(i) = b + a*i.
 // We are using a = 128 * 1024 and b = 5 * 1024 * 1024
 // The maximum upload file size for these values of a and b is ~6.6 TB.
+// Formula is (10000 * b) + (10000 * 9999 * a)
 type s3WriteCloser struct {
 	svc      *s3.S3
 	bucket   string
 	key      string
-	uploadID string
 	buf      *bytes.Buffer // current buffer we are writing to
+	isMulti  bool          // true if this is a multipart upload
+	uploadID string        // the multipart id that s3 gave us
 	part     int           // the part number we are currently filling up (0-based. n.b. AWS is 1-based)
 	etags    []string      // list of etags for all our uploaded parts, index i == etag for part i
 	abort    bool          // true to abort upload at close
@@ -326,7 +414,8 @@ var (
 	// between all the s3WriteCloser instances.
 	wcBufferPool sync.Pool
 
-	ErrNoETag = errors.New("No ETag was returned from AWS")
+	ErrNoETag   = errors.New("No ETag was returned from AWS")
+	ErrNotExist = errors.New("Key does not exist")
 )
 
 func (wc *s3WriteCloser) Write(p []byte) (int, error) {
@@ -341,11 +430,10 @@ func (wc *s3WriteCloser) Write(p []byte) (int, error) {
 	}
 	// see if we need to upload this buffer
 	lowerlimit := wcBaseSize + wcIncSize*wc.part
-	if wc.buf.Len() >= lowerlimit {
+	if wc.buf.Len() > lowerlimit {
 		err = wc.uploadpart(wc.part, wc.buf)
+		wc.buf.Reset() // clear the buffer
 		if err != nil {
-			// do we need to do anything with the buffer content?
-			// it will have (probably) been read out of buf, so...can we do anything at this point?
 			wc.abort = true
 			return 0, err
 		}
@@ -359,57 +447,55 @@ func (wc *s3WriteCloser) Write(p []byte) (int, error) {
 // Write()), the entire upload will be deleted. Otherwise it will be saved
 // into S3.
 func (wc *s3WriteCloser) Close() error {
-	// if wc.buf == nil then nothing was written
-	// TODO(dbrower): don't bother if wc.err != nil
-
-	// keep err here so if there is one, we can send it after aborting the upload on S3
-	var err error
 	if wc.buf != nil {
-		// upload anything left in the buffer
-		if wc.buf.Len() > 0 {
-			err = wc.uploadpart(wc.part, wc.buf)
-			if err != nil {
-				wc.abort = true
-			}
-			wc.part++
-		}
-		// we're done with the buffer, so return it for someone else
-		wcBufferPool.Put(wc.buf)
-		wc.buf = nil
+		defer func() {
+			// we're done with the buffer, so return it for someone else
+			wcBufferPool.Put(wc.buf)
+			wc.buf = nil
+		}()
 	}
-	// if there was an upload error, remove the item
+
+	// if we haven't started a multipart transaction yet, just send what is in
+	// the buffer
+	if !wc.isMulti {
+		if wc.abort {
+			return nil
+		}
+		return wc.uploadfull(wc.buf)
+	}
+
+	// should this multipart transaction be abandoned?
+	var err error
+abort:
 	if wc.abort {
 		_, err2 := wc.svc.AbortMultipartUpload(&s3.AbortMultipartUploadInput{
 			Bucket:   aws.String(wc.bucket),
 			Key:      aws.String(wc.key),
 			UploadId: aws.String(wc.uploadID),
 		})
+		if err2 != nil {
+			log.Println("S3 Abort Close:", wc, err2)
+		}
 		// if there was not a previous error, send whatever this one is
 		if err == nil {
 			err = err2
-		} else if err2 != nil {
-			// both err and err2 are set. log err2 so it isn't lost
-			log.Println("s3:", wc.bucket, wc.key, err2)
 		}
 		return err
 	}
-	// need to upload all the part number/etag pairs
-	var completed []*s3.CompletedPart
-	for i, etag := range wc.etags {
-		completed = append(completed, &s3.CompletedPart{
-			ETag:       aws.String(etag),
-			PartNumber: aws.Int64(int64(i + 1)), // part numbers are 1-based
-		})
+
+	// upload anything left in the buffer
+	if wc.buf.Len() > 0 {
+		err = wc.uploadpart(wc.part, wc.buf)
+		if err != nil {
+			wc.abort = true
+			goto abort
+		}
 	}
-	_, err = wc.svc.CompleteMultipartUpload(
-		&s3.CompleteMultipartUploadInput{
-			Bucket:   aws.String(wc.bucket),
-			Key:      aws.String(wc.key),
-			UploadId: aws.String(wc.uploadID),
-			MultipartUpload: &s3.CompletedMultipartUpload{
-				Parts: completed,
-			},
-		})
+	err = wc.finishMultipart()
+	if err != nil {
+		// this message is redundant.
+		log.Println("S3 Complete Close:", wc, err)
+	}
 	return err
 }
 
@@ -423,25 +509,89 @@ func (wc *s3WriteCloser) getbuf() *bytes.Buffer {
 	return b
 }
 
+func (wc *s3WriteCloser) startMultipart() error {
+	if wc.isMulti {
+		// already started one??
+		return nil
+	}
+	result, err := wc.svc.CreateMultipartUpload(&s3.CreateMultipartUploadInput{
+		Bucket: aws.String(wc.bucket),
+		Key:    aws.String(wc.key),
+	})
+	if err != nil {
+		log.Println("S3 startMultipart:", wc.key, err)
+		raven.CaptureError(err, map[string]string{"Bucket": wc.bucket, "Key": wc.key})
+		return err
+	}
+	wc.isMulti = true
+	wc.uploadID = *result.UploadId
+	return nil
+}
+
+func (wc *s3WriteCloser) finishMultipart() error {
+	// need to upload all the part number/etag pairs
+	var completed []*s3.CompletedPart
+	for i, etag := range wc.etags {
+		completed = append(completed, &s3.CompletedPart{
+			ETag:       aws.String(etag),
+			PartNumber: aws.Int64(int64(i + 1)), // part numbers are 1-based
+		})
+	}
+	_, err := wc.svc.CompleteMultipartUpload(
+		&s3.CompleteMultipartUploadInput{
+			Bucket:   aws.String(wc.bucket),
+			Key:      aws.String(wc.key),
+			UploadId: aws.String(wc.uploadID),
+			MultipartUpload: &s3.CompletedMultipartUpload{
+				Parts: completed,
+			},
+		})
+	return err
+}
+
 func (wc *s3WriteCloser) uploadpart(partno int, buf *bytes.Buffer) error {
+	if !wc.isMulti {
+		wc.startMultipart()
+	}
 	//log.Println("s3: uploading", wc.key, partno, buf.Len())
 	input := &s3.UploadPartInput{
-		Body:       bytes.NewReader(buf.Bytes()),
+		Body:       bytes.NewReader(buf.Bytes()), // need Seek()
 		Bucket:     aws.String(wc.bucket),
 		Key:        aws.String(wc.key),
 		PartNumber: aws.Int64(int64(partno + 1)), // parts are 1-based in AWS
 		UploadId:   aws.String(wc.uploadID),
 	}
 	output, err := wc.svc.UploadPart(input)
-	buf.Reset() // mark the buffer as empty. Invalidates earlier pointer from buf.Bytes()
 	// can we detect and retry in event of transient errors?
 	if err != nil {
+		log.Println("S3 uploadpart:", wc, partno+1, err)
 		return err
 	}
 	if output.ETag == nil {
-		log.Println("nil ETag for part", partno, "key=", wc.key)
+		log.Println("S3 nil ETag for part", partno, "key=", wc.key)
 		return ErrNoETag
 	}
 	wc.etags = append(wc.etags, *output.ETag)
 	return nil
+}
+
+func (wc *s3WriteCloser) uploadfull(buf *bytes.Buffer) error {
+	// it is possible to get here with buf == nil. This happens when we are
+	// closed without any calls to Write()
+	source := &bytes.Reader{} // need Seek(), and bytes.Buffer doesn't have it
+	if buf != nil {
+		source.Reset(buf.Bytes())
+	}
+	input := &s3.PutObjectInput{
+		Body:          source,
+		Bucket:        aws.String(wc.bucket),
+		Key:           aws.String(wc.key),
+		ContentLength: aws.Int64(int64(source.Len())),
+	}
+	_, err := wc.svc.PutObject(input)
+	// can we detect and retry in event of transient errors?
+	if err != nil {
+		log.Println("S3 uploadfull:", wc, err)
+	}
+	return err
 }
