@@ -9,12 +9,17 @@ RUN yum -y groupinstall "Development tools" \
  ; yum clean all
 
 COPY install-ruby.sh /
-ARG RUBY_VERSION=2.4.1
-ARG RUBY_GEMS_VERSION=2.6.12
+ARG RUBY_VERSION=2.6.6
+ARG RUBY_GEMS_VERSION=3.1.4
 RUN /install-ruby.sh ${RUBY_VERSION} ${RUBY_GEMS_VERSION}
+# Ruby 2.6.X installs rdoc 6.1.2, which has a bug that prevents us from
+# installing fpm. So install a better version of rdoc.
+# The explicit rdoc can be removed when we move to Ruby >= 2.7.0
+# See https://github.com/enkessler/childprocess/issues/157
+RUN gem install rdoc:6.2.1
 RUN gem install fpm
 
 COPY install-go.sh /
-ARG GOLANG_VERSION=1.13.3
-ARG GOLANG_DOWNLOAD_SHA256=0804bf02020dceaa8a7d7275ee79f7a142f1996bfd0c39216ccb405f93f994c0
+ARG GOLANG_VERSION=1.15.3
+ARG GOLANG_DOWNLOAD_SHA256=010a88df924a81ec21b293b5da8f9b11c176d27c0ee3962dc1738d2352d3c02d
 RUN /install-go.sh ${GOLANG_VERSION} ${GOLANG_DOWNLOAD_SHA256}
