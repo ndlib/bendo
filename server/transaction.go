@@ -23,13 +23,13 @@ func (s *RESTServer) ListTxHandler(w http.ResponseWriter, r *http.Request, ps ht
 var (
 	listTxTemplate = template.Must(template.New("listtx").Parse(`<html>
 <h1>Transactions</h1>
-<ol>
+<ul>
 {{ range . }}
 	<li><a href="/transaction/{{ . }}">{{ . }}</a></li>
 {{ else }}
 	<li>No Transactions</li>
 {{ end }}
-</ol>
+</ul>
 </html>`))
 )
 
