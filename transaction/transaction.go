@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math/rand"
 	"strconv"
 	"sync"
 	"time"
@@ -23,14 +22,16 @@ func New(s store.Store) *Store {
 	return &Store{
 		TxStore: fragment.NewJSON(s),
 		txs:     make(map[string]*Transaction),
+		seqno:   1,
 	}
 }
 
 // A Store tracks item transactions.
 type Store struct {
 	TxStore fragment.JSONStore
-	m       sync.RWMutex            // protects txs
+	m       sync.RWMutex            // protects everything below
 	txs     map[string]*Transaction // cache of transaction ID to transaction
+	seqno   int                     // used to identify new transactions
 }
 
 // Load reads the underlying store and caches an inventory into memory.
@@ -103,17 +104,13 @@ func (r *Store) Create(itemid string) (*Transaction, error) {
 // generate a new transaction id. Assumes caller holds r.m lock (either R or W)
 func (r *Store) makenewid() string {
 	for {
-		id := randomid()
+		id := fmt.Sprintf("%04d", r.seqno)
+		r.seqno++
 		// see if already being used
 		if _, ok := r.txs[id]; !ok {
 			return id
 		}
 	}
-}
-
-func randomid() string {
-	var n = rand.Int31()
-	return strconv.FormatInt(int64(n), 36)
 }
 
 // Lookup the given transaction identifier and return a pointer to the
