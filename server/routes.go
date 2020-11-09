@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"expvar"
 	"fmt"
@@ -17,7 +18,6 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/facebookgo/httpdown"
 	raven "github.com/getsentry/raven-go"
 	"github.com/julienschmidt/httprouter"
 
@@ -89,11 +89,11 @@ type RESTServer struct {
 	FixityDatabase FixityDB
 	DisableFixity  bool
 
-	server   httpdown.Server // used to close our listening socket
-	txqueue  chan string     // channel to feed background transaction workers. contains tx ids
-	txwg     sync.WaitGroup  // for waiting for all background tx workers to exit
-	txcancel chan struct{}   // Is closed to indicate tx workers should exit
-	useTape  bool            // Is Bendo reading/writing from tape?
+	server   *http.Server   // used to close our listening socket
+	txqueue  chan string    // channel to feed background transaction workers. contains tx ids
+	txwg     sync.WaitGroup // for waiting for all background tx workers to exit
+	txcancel chan struct{}  // Is closed to indicate tx workers should exit
+	useTape  bool           // Is Bendo reading/writing from tape?
 }
 
 // the number of transaction commits to tape we allow at a given time. If there are more
@@ -265,16 +265,20 @@ func (s *RESTServer) Run() error {
 	}
 	log.Println("Listening on", s.PortNumber)
 
-	h := httpdown.HTTP{}
-	s.server, err = h.ListenAndServe(&http.Server{
-		Addr:    ":" + s.PortNumber,
+	s.server = &http.Server{
 		Handler: raven.Recoverer(s.addRoutes()),
-	})
+		Addr:    ":" + s.PortNumber,
+	}
+	err = s.server.ListenAndServe()
+
+	// being shutdown is not an error
+	if err == http.ErrServerClosed {
+		err = nil
+	}
 	if err != nil {
 		log.Println(err)
-		return err
 	}
-	return s.server.Wait()
+	return err
 }
 
 // Stop will stop the server and return when all the server goroutines have
@@ -286,7 +290,7 @@ func (s *RESTServer) Stop() error {
 	s.txwg.Wait() // wait for all tx workers to exit
 
 	// then shutdown all the HTTP connections
-	return s.server.Stop()
+	return s.server.Shutdown(context.Background())
 }
 
 // initCommitQueue adds all transactions in the tx store to the transaction queue.
