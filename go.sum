@@ -2,6 +2,8 @@ github.com/BurntSushi/migration v0.0.0-20140125045755-c45b897f1335 h1:n8o916boOo
 github.com/BurntSushi/migration v0.0.0-20140125045755-c45b897f1335/go.mod h1:eVEKGm5N/F2XPdHocE3gP//Ab+rb/54WJ7XXtFGxwaQ=
 github.com/BurntSushi/toml v0.2.0 h1:OthAm9ZSUx4uAmn3WbPwc06nowWrByRwBsYRhbmFjBs=
 github.com/BurntSushi/toml v0.2.0/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
+github.com/SpectraLogic/ds3_go_sdk v5.2.0+incompatible h1:zmX+yNnjkR7cTGm++gKc6wanWI2F3+QWfrCqmiuuTQU=
+github.com/SpectraLogic/ds3_go_sdk v5.2.0+incompatible/go.mod h1:hfNdUVZZscbBj9/7t8x47Y+LTlqLGckwb0MVqNjZnqM=
 github.com/antonholmquist/jason v1.0.0 h1:Ytg94Bcf1Bfi965K2q0s22mig/n4eGqEij/atENBhA0=
 github.com/antonholmquist/jason v1.0.0/go.mod h1:+GxMEKI0Va2U8h3os6oiUAetHAlGMvxjdpAH/9uvUMA=
 github.com/aws/aws-sdk-go v1.29.3 h1:yvEwt1IvgiWpWWayQBQHCK0knTmHKyI7FCrliOV5Pd8=
