@@ -2,7 +2,7 @@
 BINARIES:=$(subst /cmd/,/bin/,$(wildcard ./cmd/*))
 GOCMD:=go
 VERSION:=$(shell git describe --always)
-PACKAGES:=$(shell go list ./... | grep -v /vendor/)
+PACKAGES:=$(shell go list ./...)
 GO15VENDOREXPERIMENT=1
 
 .PHONY: all test test-integration clean rpm buildimage upload-buildimage $(BINARIES)
