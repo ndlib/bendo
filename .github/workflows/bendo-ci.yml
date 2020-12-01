@@ -20,9 +20,9 @@ jobs:
       run: sudo service mysql start
 
     - name: Create Test DB
-      run: mysql -uroot -e "CREATE DATABASE test;"
+      run: mysql -uroot -proot -e "CREATE DATABASE test;"
 
     - name: Run Go Tests
       env:
-        MYSQL_CONNECTION: 'root@tcp(0.0.0.0:3306)/test'
+        MYSQL_CONNECTION: 'root:root@tcp(0.0.0.0:3306)/test'
       run: make test-integration 
