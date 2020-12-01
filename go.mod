@@ -5,6 +5,7 @@ go 1.15
 require (
 	github.com/BurntSushi/migration v0.0.0-20140125045755-c45b897f1335
 	github.com/BurntSushi/toml v0.2.0
+	github.com/SpectraLogic/ds3_go_sdk v5.2.0+incompatible
 	github.com/antonholmquist/jason v1.0.0
 	github.com/aws/aws-sdk-go v1.29.3
 	github.com/certifi/gocertifi v0.0.0-20180118203423-deb3ae2ef261 // indirect
