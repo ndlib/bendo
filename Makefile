@@ -40,9 +40,6 @@ rpm: ./bin/bendo ./bin/bclient ./bin/butil
 buildimage: ./docker/buildimage/install-ruby.sh ./docker/buildimage/install-go.sh
 	cd ./docker/buildimage/ && docker build . -t ndlib/bendo-buildimage -f Dockerfile
 
-buildimage7: ./docker/buildimage7/install-ruby.sh ./docker/buildimage7/install-go.sh
-	cd ./docker/buildimage7/ && docker build . -t ndlib/bendo-buildimage7 -f Dockerfile
-
 # make a new buildimage container and push it to docker hub
 upload-buildimage: buildimage
 	docker login
