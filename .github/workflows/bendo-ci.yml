@@ -1,10 +1,12 @@
 name: bendo-ci
-on: [push]
+
+on: push:
 jobs:
   run-go-tests:
-    runs-on: ubuntu-18.04
-    steps:
 
+    runs-on: ubuntu-18.04
+
+    steps:
     - name: Set up Go 1.15
       uses: actions/setup-go@v2
       with:
