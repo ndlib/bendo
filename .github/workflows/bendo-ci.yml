@@ -16,6 +16,9 @@ jobs:
     - name: Check out code into the Go module directory
       uses: actions/checkout@v2
 
+    - name: start mysql DB
+      run: sudo service mysql start
+
     - name: Create Test DB
       run: mysql -uroot -e "CREATE DATABASE test;"
 
