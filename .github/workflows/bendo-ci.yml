@@ -1,6 +1,7 @@
 name: bendo-ci
 
-on: push:
+on: 
+  push:
 jobs:
   run-go-tests:
 
