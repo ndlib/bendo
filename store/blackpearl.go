@@ -24,11 +24,12 @@ import (
 // BlackPearl appliance.
 // Do not change Bucket or Prefix concurrently with calls using the structure.
 type BlackPearl struct {
-	client *ds3.Client
-	Bucket string
-	Prefix string
-	m      sync.RWMutex    // protects everything below
-	cache  map[string]head // cache for item sizes
+	client  *ds3.Client
+	Bucket  string
+	Prefix  string
+	TempDir string          // where to make temp files. "" uses default place
+	m       sync.RWMutex    // protects everything below
+	cache   map[string]head // cache for item sizes
 }
 
 // NewBlackPearl creates a new BlackPearl store. It will use the given bucket
@@ -134,7 +135,7 @@ func (bp *BlackPearl) Create(key string) (io.WriteCloser, error) {
 	bp.setkeysize(key, 0) // make 0 in case this key was previously deleted
 	fullkey := bp.Prefix + key
 
-	f, err := ioutil.TempFile("", "blackpearl-")
+	f, err := ioutil.TempFile(bp.TempDir, "blackpearl-")
 	if err != nil {
 		return nil, err
 	}

@@ -76,6 +76,7 @@ func parselocation(location string, addition string) store.Store {
 		}
 		return store.NewS3(bucket, prefix, session.New(conf))
 	case "blackpearl", "blackpearls":
+		tempdir := os.Getenv("DS3_TEMPDIR") // okay if returns ""
 		accessKey := os.Getenv("DS3_ACCESS_KEY")
 		secretKey := os.Getenv("DS3_SECRET_KEY")
 		switch {
@@ -101,8 +102,9 @@ func parselocation(location string, addition string) store.Store {
 			endpoint,
 			&networking.Credentials{AccessId: accessKey, Key: secretKey},
 		).BuildClient()
-		return store.NewBlackPearl(bucket, prefix, bp)
-
+		s := store.NewBlackPearl(bucket, prefix, bp)
+		s.TempDir = tempdir
+		return s
 	}
 	// there was some kind of error. Return a Memory store? or fail?
 	log.Println("Problem parsing location", location)

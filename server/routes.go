@@ -40,36 +40,8 @@ type RESTServer struct {
 	PProfPort string
 
 	// Items is the base item store (that is, tape system or file system where
-	// preservation content is stored). ItemDir is a URL or local file path of
-	// a directory, e.g.
-	//		"bendo_storage"
-	//		"/mnt/bendo/production"
-	// A BlackPearl device is configured using the notation
-	// 		"blackpearl:/bucket/prefix" or
-	// 		"blackpearl://hostname:port/bucket/prefix".
-	// If a BlackPearl endpoint is given, credentials are pulled from the
-	// environment variables DS3_ACCESS_KEY, and DS3_SECRET_KEY.
-	//
-	// Run will panic if ItemDir is empty.
-	ItemDir string
-	Items   *items.Store
-
-	// CacheDir is the path to put the cache in the filesystem.
-	// Used if Cache, FileStore, or TxStore are nil.
-	// If CacheDir is empty then no caching is done, and any transactions
-	// and uploads are kept entirely in memory.
-	// CacheDir may point to an s3 bucket using the notation "s3:/bucket/prefix"
-	// or "s3://hostname:port/bucket/prefix"
-	//CacheDir string
-
-	// Pass in a dial command to use a MySQL server as a database.
-	// Otherwise a lightweight internal database is used, and placed inside
-	// the CacheDir directory. The special value "memory" will run
-	// the database entirely inside the server's memory. (useful for testing).
-	// e.g. "user:password@tcp(localhost:5555)/dbname" or just "/dbname"
-	// if everything else can be the default. Can also use domain sockets:
-	// "user@unix(/path/to/socket)/dbname"
-	//MySQL string
+	// preservation content is stored). Run() will panic if Items is nil.
+	Items *items.Store
 
 	// --- The following fields are more advanced and only need to be
 	// set in special situations. ---

@@ -25,5 +25,5 @@ require (
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/remyoudompheng/bigfft v0.0.0-20190728182440-6a916e37a237 // indirect
-	golang.org/x/tools v0.0.0-20201202100533-7534955ac86b // indirect
+	golang.org/x/net v0.0.0-20201021035429-f5854403a974 // indirect
 )
