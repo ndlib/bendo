@@ -9,22 +9,14 @@ import (
 	"log"
 	"net/http"
 	_ "net/http/pprof" // for pprof server
-	"net/url"
-	"os"
-	"path/filepath"
-	"strings"
 	"sync"
-	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
 	raven "github.com/getsentry/raven-go"
 	"github.com/julienschmidt/httprouter"
 
 	"github.com/ndlib/bendo/blobcache"
 	"github.com/ndlib/bendo/fragment"
 	"github.com/ndlib/bendo/items"
-	"github.com/ndlib/bendo/store"
 	"github.com/ndlib/bendo/transaction"
 )
 
@@ -42,29 +34,14 @@ import (
 type RESTServer struct {
 	// Port number to run bendo on. defaults to 14000
 	PortNumber string
-	PProfPort  string
 
-	// Items is the base item store. Run will panic if Items is nil.
+	// Port to run the profiler/inspector on. If empty, the goroutine is not
+	// started. It provides information on the "/debug/" route.
+	PProfPort string
+
+	// Items is the base item store (that is, tape system or file system where
+	// preservation content is stored). Run() will panic if Items is nil.
 	Items *items.Store
-
-	// CacheDir is the path to put the cache in the filesystem.
-	// Used if Cache, FileStore, or TxStore are nil.
-	// If CacheDir is empty then no caching is done, and any transactions
-	// and uploads are kept entirely in memory.
-	// CacheDir may point to an s3 bucket using the notation "s3:/bucket/prefix"
-	// or "s3://hostname:port/bucket/prefix"
-	CacheDir     string
-	CacheSize    int64         // in bytes
-	CacheTimeout time.Duration // nonzero for time-based caching. Ignores cache size
-
-	// Pass in a dial command to use a MySQL server as a database.
-	// Otherwise a lightweight internal database is used, and placed inside
-	// the CacheDir directory. The special value "memory" will run
-	// the database entirely inside the server's memory. (useful for testing).
-	// e.g. "user:password@tcp(localhost:5555)/dbname" or just "/dbname"
-	// if everything else can be the default. Can also use domain sockets:
-	// "user@unix(/path/to/socket)/dbname"
-	MySQL string
 
 	// --- The following fields are more advanced and only need to be
 	// set in special situations. ---
@@ -100,66 +77,9 @@ type RESTServer struct {
 // they will wait in a queue.
 const MaxConcurrentCommits = 2
 
-// getcachestore will use the value of s.CacheDir and return an approporate
-// store (i.e. memory, filesystem, or S3).
-func (s *RESTServer) getcachestore(name string) store.Store {
-	if s.CacheDir == "" {
-		return store.NewMemory()
-	}
-	u, _ := url.Parse(s.CacheDir)
-	switch u.Scheme {
-	case "", "file":
-		path := filepath.Join(u.Path, name)
-		os.MkdirAll(path, 0755)
-		return store.NewFileSystem(path)
-	case "s3":
-		conf := &aws.Config{}
-		if u.Host != "" {
-			conf.Endpoint = aws.String(u.Host)
-			conf.Region = aws.String("us-east-1")
-			// disable SSL for local development
-			if strings.Contains(u.Host, "localhost") {
-				conf.DisableSSL = aws.Bool(true)
-				conf.S3ForcePathStyle = aws.Bool(true)
-			}
-		}
-		var bucket, prefix string
-		if len(u.Path) > 0 {
-			v := strings.SplitN(u.Path[1:], "/", 2)
-			bucket = v[0]
-			if len(v) > 1 {
-				prefix = v[1]
-			}
-		}
-		if bucket == "" {
-			log.Println("Error parsing location, no bucket name", s.CacheDir)
-			break
-		}
-		// make sure there is a / between prefix and name, and a trailing slash
-		// if the result is not empty
-		if len(prefix) > 0 && prefix[len(prefix)-1] != '/' {
-			prefix += "/"
-		}
-		prefix += name
-		if len(prefix) > 0 && prefix[len(prefix)-1] != '/' {
-			prefix += "/"
-		}
-		return store.NewS3(bucket, prefix, session.New(conf))
-	default:
-		log.Println("Unknown cache location", s.CacheDir)
-	}
-	// there was some kind of error. Return a Memory store? or fail?
-	return store.NewMemory()
-}
-
 // Run initializes and starts all the goroutines used by the server. It then
 // blocks listening for and handling http requests.
 func (s *RESTServer) Run() error {
-	log.Println("==========")
-	log.Printf("Starting Bendo Server version %s", Version)
-	log.Printf("CacheDir = %s", s.CacheDir)
-	log.Printf("CacheSize = %d", s.CacheSize)
-
 	if s.Items == nil {
 		panic("No base storage given. Items is nil.")
 	}
@@ -169,78 +89,28 @@ func (s *RESTServer) Run() error {
 		s.Validator = NobodyValidator{}
 	}
 
-	// init database
-	var db interface {
-		FixityDB
-		items.ItemCache
-	}
-	var err error
-	if s.MySQL != "" {
-		log.Printf("Using MySQL")
-		db, err = NewMysqlCache(s.MySQL)
-	} else {
-		var path string
-		// this gets wonky if the cacheDir is an s3: path. but it still works!
-		// (it makes a file system directory named "s3:")
-		if s.CacheDir != "" {
-			os.MkdirAll(s.CacheDir, 0755)
-			path = filepath.Join(s.CacheDir, "bendo.ql")
-		} else {
-			path = "memory"
-		}
-		log.Printf("Using internal database at %s", path)
-		db, err = NewQlCache(path)
-	}
-	if db == nil || err != nil {
-		panic("problem setting up database")
-	}
-	s.Items.SetCache(db)
-
-	// init tapeuse
 	s.EnableTapeUse()
 
-	// init fixity
-	if s.FixityDatabase == nil {
-		s.FixityDatabase = db
-	}
 	if !s.DisableFixity {
 		s.StartFixity()
 	}
 
-	// init blobcache
-	if s.Cache == nil {
-		if s.CacheDir == "" || s.CacheSize == 0 {
-			log.Println("Not using blob cache")
-			s.Cache = blobcache.EmptyCache{}
-		} else {
-			v := s.getcachestore("blobcache")
-			if s.CacheTimeout != 0 {
-				log.Println("Using time-based cache strategy")
-				c := blobcache.NewTime(v, s.CacheTimeout)
-				go c.Scan()
-				s.Cache = c
-			} else {
-				log.Println("Using size-based cache strategy")
-				c := blobcache.NewLRU(v, s.CacheSize)
-				go c.Scan()
-				s.Cache = c
-			}
+	// index the cached items into memory
+	if s.Cache != nil {
+		// not everything needs a scan. but if it does, run it
+		// maybe Scan() should be added to the cache interface?
+		type Scanner interface {
+			Scan()
+		}
+		if c, ok := s.Cache.(Scanner); ok {
+			go c.Scan()
 		}
 	}
 
-	// init TxStore
-	if s.TxStore == nil {
-		v := s.getcachestore("transaction")
-		s.TxStore = transaction.New(v)
-	}
 	log.Println("Scanning Transactions")
 	s.TxStore.Load()
 
 	// init upload store
-	if s.FileStore == nil {
-		v := s.getcachestore("upload")
-		s.FileStore = fragment.New(v)
-	}
 	log.Println("Scanning Upload Queue")
 	s.FileStore.Load()
 
@@ -260,7 +130,7 @@ func (s *RESTServer) Run() error {
 	if s.PProfPort != "" {
 		log.Println("Starting PProf on port", s.PProfPort)
 		go func() {
-			log.Println(http.ListenAndServe(":"+s.PProfPort, nil))
+			log.Println("pprof:", http.ListenAndServe(":"+s.PProfPort, nil))
 		}()
 	}
 	log.Println("Listening on", s.PortNumber)
@@ -269,14 +139,11 @@ func (s *RESTServer) Run() error {
 		Handler: raven.Recoverer(s.addRoutes()),
 		Addr:    ":" + s.PortNumber,
 	}
-	err = s.server.ListenAndServe()
+	err := s.server.ListenAndServe()
 
 	// being shutdown is not an error
 	if err == http.ErrServerClosed {
 		err = nil
-	}
-	if err != nil {
-		log.Println(err)
 	}
 	return err
 }
