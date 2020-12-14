@@ -236,10 +236,7 @@ func (s *S3) background() {
 	for {
 		time.Sleep(time.Hour) // arbitrary length
 
-		log.Println("Start S3 ageSizeCache", s.Bucket, s.Prefix)
-		start := time.Now()
 		s.ageSizeCache()
-		log.Println("End S3 ageSizeCache", s.Bucket, s.Prefix, time.Now().Sub(start))
 	}
 }
 
