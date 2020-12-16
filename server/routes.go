@@ -185,10 +185,6 @@ func (s *RESTServer) addRoutes() http.Handler {
 		role    Role // RoleUnknown means no API key is needed to access
 		handler httprouter.Handle
 	}{
-		// the /blob/* routes can be removed. they are functionally the
-		// same as /item/@blob/*
-		{"GET", "/blob/:id/:bid", RoleRead, s.BlobHandler},
-		{"HEAD", "/blob/:id/:bid", RoleRead, s.BlobHandler},
 		{"GET", "/item/:id/*slot", RoleUnknown, s.SlotHandler},
 		{"HEAD", "/item/:id/*slot", RoleUnknown, s.SlotHandler},
 		{"GET", "/item/:id", RoleUnknown, s.ItemHandler},

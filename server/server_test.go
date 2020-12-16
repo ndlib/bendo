@@ -52,8 +52,8 @@ func TestTransaction1(t *testing.T) {
 	waitTransaction(t, txpath)
 
 	checkStatus(t, "GET", "/item/"+itemid, 200)
-	checkStatus(t, "GET", "/blob/"+itemid+"/2", 404)
-	text := getbody(t, "GET", "/blob/"+itemid+"/1", 200)
+	checkStatus(t, "GET", "/item/"+itemid+"/@blob/2", 404)
+	text := getbody(t, "GET", "/item/"+itemid+"/@blob/1", 200)
 	if text != "hello world and hello sun" {
 		t.Fatalf("Received %#v, expected %#v", text, "hello world and hello sun")
 	}
