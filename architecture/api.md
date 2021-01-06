@@ -242,9 +242,8 @@ following forms.
 
     [“delete”, blobid]
 Purges the underlying blob from our underlying storage. blobid is either an
-integer giving the blob id, or a URL to the blob of the form /blob/:item/:blob.
-It is an error to delete a blob which is being uploaded in the current
-transaction.
+integer giving the blob id. It is an error to delete a blob which is being
+uploaded in the current transaction.
 
     [“slot”, “slot name”, blobid]
 Sets the given slot to point to the given blob id. The blob id may either be an

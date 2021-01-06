@@ -1,23 +1,21 @@
 Bendo
 =====
 
-[![APACHE 2
-License](http://img.shields.io/badge/APACHE2-license-blue.svg)](./LICENSE)
-[![Contributing
-Guidelines](http://img.shields.io/badge/CONTRIBUTING-Guidelines-blue.svg)](./CONTRIBUTING.md)
-[![Go Report
-Card](https://goreportcard.com/badge/github.com/ndlib/bendo)](https://goreportcard.com/report/github.com/ndlib/bendo)
+[![APACHE 2 License](http://img.shields.io/badge/APACHE2-license-blue.svg)](./LICENSE)
+[![Contributing Guidelines](http://img.shields.io/badge/CONTRIBUTING-Guidelines-blue.svg)](./CONTRIBUTING.md)
+[![Go Report Card](https://goreportcard.com/badge/github.com/ndlib/bendo)](https://goreportcard.com/report/github.com/ndlib/bendo)
 
 Bendo is a content agnostic storage service.
-It was designed to be front-end to our tape system, as well as being a piece of a larger digital library architecture.
+It provides services useful to digital preservation and an API on top ofour tape system,
+and is designed to be a piece of a larger digital library architecture.
 Bendo provides the abstraction of a versioned directory, similar to the [Moab](https://journal.code4lib.org/articles/8482) storage design or Git.
-Every version of every file stored in it has a unique URI.
+Every version of every file it stores has a unique URI.
 All files are collected into uncompressed Zip files in the [BagIt format](https://tools.ietf.org/html/draft-kunze-bagit-16).
-The Zip files are treated as being immutable, and are never changed once created.
+The created Zip files are treated as immutable, and are never changed once created.
 Updates and deletions are handled by adding more Zip files.
 Content is deduplicated within each item, so unchanged files do not need to be duplicated when new versions are created. 
 
-Bendo will run periodic fixity checks on content in the background.
+Bendo runs periodic fixity checks on content.
 It also caches content, so popular items do not need to be read from tape every time.
 It can store the cache either on disk or in S3.
 
@@ -45,18 +43,7 @@ The repository is organized as so:
 
 To install Bendo, first install Go. This is probably easiest with a package manager, e.g. `brew install go` or `yum install golang`.
 
-Download and compile the server by executing `go get github.com/ndlib/bendo/cmd/bendo`.
-In the directory of your digital library application create a subdirectory to store files, for example `bendo`
-
-    mkdir -p bendo/uploads bendo/store
-
-Start Bendo by running
-
-    bendo --storage-dir bendo/store --uploads bendo/uploads &
-
-This will run Bendo in the background on port 14000. You can test it by hitting `localhost:14000` in your browser and seeing the Bendo version displayed.
-
-If you already had files in these directories Bendo will resync itself on them, but it may take some time. (How will one know when it is finished?)
+There are instructions in [./CONTRIBUTING.md]() for installing and running Bendo locally.
 
 # S3
 
@@ -76,6 +63,18 @@ And set the environment variables to have the correct access key and secret acce
 To run the S3 tests in the `store/` directory run
 
     env "AWS_ACCESS_KEY_ID=bob" "AWS_SECRET_ACCESS_KEY=1234567890" go test -tags=s3 -run S3
+
+# BlackPearl
+
+Bendo can use the SpectraLogic BlackPearl appliance as a storage location. To
+configure it give a storage dir location in the form of `blackpearl://[hostname
+or IP address]:[port]/bucket/prefix`. Or use `blackpearls://` if the device is
+configured to use https for its API. Put the credentials in the environment
+variables `DS3_ACCESS_KEY` and `DS3_SECRET_KEY`. The blackpearl support
+requires enough temporary drive space to store the largest file being uploaded
+or 1 GB, whichever is larger. By default the system temp file directory is
+used. To change this, give an alternate directory in the `DS3_TEMPDIR`
+environment variable.
 
 
 # Sentry
@@ -109,8 +108,7 @@ TBD
 
 # Codebuild and the Docker buildimage container
 
-You can optionally configure codebuild to build RPM images.
-We use a docker image to do the compiling.
+You can configure codebuild to build RPM images using a docker image to do the compiling.
 The Dockerfile is `docker/buildimage/Dockerfile`.
 You can rebuild it locally using `make buildimage` in the root of the repository.
 

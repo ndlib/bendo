@@ -93,9 +93,10 @@ func (s *RESTServer) StartFixity() {
 }
 
 const (
-	// by default schedule the next fixity in 273 days (~9 months)
-	// this duration is completely arbitrary.
-	nextFixityDuration = 273 * 24 * time.Hour
+	// by default schedule the next fixity sometime between 6 and 12 months in
+	// the future. This range is completely arbitrary.
+	nextFixityWindowBegin = 182 * 24 * time.Hour // 6 months
+	nextFixityWindowEnd   = 365 * 24 * time.Hour // 12 months
 )
 
 // implements an infinite loop doing fixity checking. This function does not
@@ -147,10 +148,7 @@ func (s *RESTServer) fixity() {
 		// schedule the next check unless one is already scheduled
 		when, _ := s.FixityDatabase.LookupCheck(fx.Item)
 		if when.IsZero() {
-			s.FixityDatabase.UpdateFixity(Fixity{
-				Item:          fx.Item,
-				ScheduledTime: time.Now().Add(nextFixityDuration),
-			})
+			s.addwithjitter(fx.Item, nextFixityWindowBegin, nextFixityWindowEnd)
 		}
 	}
 }
@@ -176,15 +174,28 @@ func (s *RESTServer) scanfixity() {
 			// something is scheduled
 			continue
 		}
-		// schedule something for some random period into the future
+		// This item is new, so check it sometime in the next 12 hours to make
+		// sure it is okay.
 		log.Println("scanfixity adding", id)
-		jitter := rand.Int63n(int64(nextFixityDuration))
-		s.FixityDatabase.UpdateFixity(Fixity{
-			Item:          id,
-			ScheduledTime: time.Now().Add(time.Duration(jitter)),
-		})
+		s.addwithjitter(id, 0, 12*time.Hour)
 	}
 	log.Println("Ending scanfixity. duration = ", time.Now().Sub(starttime))
+}
+
+// addwithjitter creates a fixity check for the item id some time between
+// earliest and latest times in the future. The exact time is chosen uniformly
+// at random.
+//
+// The idea is that we want to spread the fixity checking evenly over time so
+// we add some randomness to break up clusters of items. (e.g. ETDs get
+// deposited three times a year...spread that work over the other months).
+func (s *RESTServer) addwithjitter(id string, earliest, latest time.Duration) {
+	jitter := rand.Int63n(int64(latest - earliest))
+	nextdate := time.Now().Add(earliest + time.Duration(jitter))
+	s.FixityDatabase.UpdateFixity(Fixity{
+		Item:          id,
+		ScheduledTime: nextdate,
+	})
 }
 
 func (s *RESTServer) GetFixityHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {

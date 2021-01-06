@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
 
@@ -43,18 +42,6 @@ type blobDB interface {
 	// Index the given item using the given id.
 	// (The item id should already be in the item structure. can that parameter be removed?)
 	IndexItem(itemid string, item *items.Item) error
-}
-
-// BlobHandler handles requests to GET /blob/:id/:bid
-func (s *RESTServer) BlobHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	id := ps.ByName("id")
-	bid, err := strconv.ParseInt(ps.ByName("bid"), 10, 0)
-	if err != nil || bid <= 0 {
-		w.WriteHeader(404)
-		fmt.Fprintln(w, err)
-		return
-	}
-	s.getblob(w, r, id, items.BlobID(bid))
 }
 
 // SlotHandler handles requests to GET /item/:id/*slot

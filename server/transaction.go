@@ -23,13 +23,13 @@ func (s *RESTServer) ListTxHandler(w http.ResponseWriter, r *http.Request, ps ht
 var (
 	listTxTemplate = template.Must(template.New("listtx").Parse(`<html>
 <h1>Transactions</h1>
-<ol>
+<ul>
 {{ range . }}
 	<li><a href="/transaction/{{ . }}">{{ . }}</a></li>
 {{ else }}
 	<li>No Transactions</li>
 {{ end }}
-</ol>
+</ul>
 </html>`))
 )
 
@@ -107,11 +107,12 @@ func (s *RESTServer) NewTxHandler(w http.ResponseWriter, r *http.Request, ps htt
 
 // transactionWorker pulls transactions off of the channel and then
 // processes them. It is intended for many of these to run in parallel.
-// Close queue to get all workers to gracefully exit.
+// Close s.txcancel for all workers to gracefully exit.
 func (s *RESTServer) transactionWorker(queue <-chan string) {
 	defer s.txwg.Done()
 	for {
 		var txid string
+		// wait for a transaction to be queued
 		select {
 		case txid = <-queue:
 		case <-s.txcancel:
@@ -119,7 +120,7 @@ func (s *RESTServer) transactionWorker(queue <-chan string) {
 		}
 		tx := s.TxStore.Lookup(txid)
 		if tx == nil {
-			// must have been deleted
+			// tx is missing...must have been deleted
 			continue
 		}
 		switch tx.Status {
@@ -152,6 +153,7 @@ func (s *RESTServer) transactionWorker(queue <-chan string) {
 			// make sure the tape is available. Keep looping until it is.
 			for !s.useTape {
 				log.Printf("Transaction %s waiting for tape availability", tx.ID)
+				// wait for tape use to be enabled. for now we poll it every minute.
 				select {
 				case <-s.txcancel:
 					return
@@ -196,11 +198,11 @@ func (s *RESTServer) TxCleaner() {
 
 // transactionCleaner will go through all finished transactions (i.e. in either
 // the error or successful states) which are old, and delete them and any
-// uploaded files they reference. Successful transactions older than a day are
+// uploaded files they reference. Successful transactions older than four days are
 // removed, and failed transactions older than a week are removed.
 func (s *RESTServer) transactionCleaner() error {
 	// these time limits are completely arbitrary
-	cutoffSuccess := time.Now().Add(-24 * time.Hour)
+	cutoffSuccess := time.Now().Add(-4 * 24 * time.Hour)
 	cutoffError := time.Now().Add(-7 * 24 * time.Hour)
 	for _, txid := range s.TxStore.List() {
 		tx := s.TxStore.Lookup(txid)

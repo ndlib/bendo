@@ -91,13 +91,29 @@ Gives the port number for bendo to listen on. Defaults to port 14000.
 
     StoreDir = "<PATH>"
 
-The storage option provides a path to the directory in which to store the data to be preserved.
-It is designed that this path maps to a networked-mapped tape system, but that is not a requirement.
-It may be any disk location.
+The storage option provides the location for the preservation storage.
+It may be a path to the directory in which to store the data to be preserved, e.g. a
+networked-mapped tape system.
 If no storage path is provided, it defaults to the current working directory.
 Items are stored in uncompressed zip files having the BagIt structure, and are
 organized into a two-level pairtree system.
 See BAG FORMAT below for more information.
+It may also give other locations such as an S3 bucket or a BlackPearl storage gateway.
+For the BlackPearl, use a string in the form `blackpearl://host:port/bucket`
+or `blackpearl://host:port/bucket/prefix`. The `blackpearl://` scheme will use http to
+connect; for https use `blackpearls://`.
+Using the BlackPearl the secret access keys will be pulled from the envrionment
+variables `DS3_ACCESS_KEY` and `DS3_SECRET_KEY`.
+When using the BlackPearl option, a place is required to store temporary files.
+This place needs to be big enough to store a complete bag file. Based on the size of
+files being uploaded, it may need up to 1 TB of free space.
+By default the system temp space is used. Pass an alternative path in the envrionment
+variable `DS3_TEMPDIR`.
+Example values:
+  * "bendo_storage"
+  * "/mnt/bendo/production"
+  * "blackpearl:/bucket/prefix" or
+  * "blackpearls://hostname:port/bucket/prefix".
 
     Tokenfile = "<FILE>"
 
@@ -129,10 +145,17 @@ Bendo uses a few envrionment variables to confiugure optional features.
 
   AWS_ACCESS_KEY and AWS_SECRET_ACCESS_KEY
 
-    These variables are used by the S3 cache store, should that be enabled by specifying an S3
-    location for CacheDir in the configuration file.
+    These variables are used by the S3 cache store, should that be enabled by
+    specifying an S3 location for CacheDir in the configuration file.
 
   SENTRY_DSN, SENTRY_RELEASE, and SENTRY_ENVIRONMENT
 
-    These variables contain configuration error reporting to Sentry. They are optional.
-    Refer to https://docs.sentry.io/clients/go/ for information on setting them.
+    These variables contain configuration error reporting to Sentry. They are
+    optional. Refer to https://docs.sentry.io/clients/go/ for information on
+    setting them.
+
+  DS3_ACCESS_KEY, DS3_SECRET_KEY, DS3_TEMPDIR
+
+    When using the BlackPearl storage device, these variables are used to set
+    the access tokens and give an optional place to store the temporary files
+    that are created when uploading content.

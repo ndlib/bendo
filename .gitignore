@@ -3,8 +3,9 @@ cmd/bclient/bclient
 cmd/bendo/bendo
 cmd/bstress/bstress
 cmd/butil/butil
-bendo
+./bendo
 ql.db
 bendo_storage/*
 bendo_cache/*
 config.local
+.vscode
