@@ -8,3 +8,4 @@ ql.db
 bendo_storage/*
 bendo_cache/*
 config.local
+.vscode
