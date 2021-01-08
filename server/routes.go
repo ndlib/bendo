@@ -13,6 +13,7 @@ import (
 
 	raven "github.com/getsentry/raven-go"
 	"github.com/julienschmidt/httprouter"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/ndlib/bendo/blobcache"
 	"github.com/ndlib/bendo/fragment"
@@ -71,10 +72,23 @@ type RESTServer struct {
 	txwg     sync.WaitGroup // for waiting for all background tx workers to exit
 	txcancel chan struct{}  // Is closed to indicate tx workers should exit
 	useTape  bool           // Is Bendo reading/writing from tape?
+
+	// tapeinflight tracks whether a blob is being copied into the cache. If
+	// one is, then a channel is returned that will signal when the copy is
+	// finished. When that happens calling findContent() again will return
+	// either a reader for the blob or the error that happened while copying it
+	// into the cache.
+	tapeinflight *singleflight.Group
+
+	// errorledger tracks the errors that happen when copying blobs into the
+	// cache. The errors are only kept for a short amount of time (at least
+	// long enough that others waiting on the channel can call findContent
+	// again to get the error).
+	errorledger errorlist
 }
 
-// the number of transaction commits to tape we allow at a given time. If there are more
-// they will wait in a queue.
+// the number of transaction commits to tape we allow at a given time. If there
+// are more they will wait in a queue.
 const MaxConcurrentCommits = 2
 
 // Run initializes and starts all the goroutines used by the server. It then
