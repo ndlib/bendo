@@ -41,6 +41,13 @@ type ROStore interface {
 	Open(key string) (ReadAtCloser, int64, error)
 }
 
+// Stager is something where it can get a performace gain from prefitching
+// files. Stage() should not affect the semantics of the store in any other
+// way.
+type Stager interface {
+	Stage(keys []string)
+}
+
 // NewReader converts a ReaderAt into a io.Reader. It is here as a utility to
 // help work with the ReadAtCloser returned by Open.
 func NewReader(r io.ReaderAt) io.Reader {
