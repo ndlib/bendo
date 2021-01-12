@@ -81,9 +81,9 @@ func parselocation(location string, addition string) store.Store {
 		secretKey := os.Getenv("DS3_SECRET_KEY")
 		switch {
 		case accessKey == "":
-			panic("DS3_ACCESS_KEY missing")
+			log.Fatalln("DS3_ACCESS_KEY missing")
 		case secretKey == "":
-			panic("DS3_SECRET_KEY missing")
+			log.Fatalln("DS3_SECRET_KEY missing")
 		}
 		// build the URL for the blackpearl
 		endpoint := &url.URL{
