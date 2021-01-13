@@ -81,7 +81,7 @@ const MaxConcurrentCommits = 2
 // blocks listening for and handling http requests.
 func (s *RESTServer) Run() error {
 	if s.Items == nil {
-		panic("No base storage given. Items is nil.")
+		log.Fatalln("No base storage given. Items is nil.")
 	}
 
 	if s.Validator == nil {
