@@ -277,7 +277,8 @@ func (rac *s3ReadAtCloser) ReadAt(p []byte, offset int64) (int, error) {
 		var page s3Page
 		page, err = rac.getpage(offset)
 		if err != nil {
-			// don't return, in case we have already copied some data
+			// don't return, in case we have already copied some data in
+			// a previous loop.
 			break
 		}
 		n := copy(p, page.data[offset-page.offset:])
@@ -298,7 +299,7 @@ func (rac *s3ReadAtCloser) ReadAt(p []byte, offset int64) (int, error) {
 // The number of pages we keep in the cache. After this we will evict the LRU.
 const defaultNumPages = 5
 
-// getpage will find or load a page for the given offset
+// getpage will find in memory or load a page for the given offset
 func (rac *s3ReadAtCloser) getpage(offset int64) (s3Page, error) {
 	i := rac.findpage(offset)
 	if i == -1 {
@@ -342,13 +343,17 @@ const defaultPageSize = 10 * 1024 * 1024 // 10 MiB
 
 // loadpage will read one page of data from S3. It tries to read defaultPageSize
 // bytes, but less may be returned, e.g. at the end of the file. Hence pages
-// may be of various sizes.
+// may be of various sizes. It also choses a starting offset that is a multiple
+// of defaultPageSize, so all pages in memory are disjoint.
 func (rac *s3ReadAtCloser) loadpage(offset int64) (s3Page, error) {
-	endpos := offset + defaultPageSize
+	// take the page start to be the greatest multiple of defaultPageSize less
+	// than the given offset
+	startpos := (offset / defaultPageSize) * defaultPageSize
+	endpos := startpos + defaultPageSize
 	input := &s3.GetObjectInput{
 		Bucket: aws.String(rac.bucket),
 		Key:    aws.String(rac.key),
-		Range:  aws.String(fmt.Sprintf("bytes=%d-%d", offset, endpos-1)),
+		Range:  aws.String(fmt.Sprintf("bytes=%d-%d", startpos, endpos-1)),
 	}
 	output, err := rac.svc.GetObject(input)
 	if err != nil {
@@ -368,7 +373,7 @@ func (rac *s3ReadAtCloser) loadpage(offset int64) (s3Page, error) {
 		// nothing was transferred and there was no error...?
 		err = io.EOF
 	}
-	return s3Page{data: data.Bytes(), offset: offset}, err
+	return s3Page{data: data.Bytes(), offset: startpos}, err
 }
 
 // Close will close this file.
