@@ -33,6 +33,11 @@ func (s *Store) Validate(id string) (nb int64, problems []string, err error) {
 		return
 	}
 
+	// can we prefetch all the bundle files?
+	if x, ok := s.S.(store.Stager); ok {
+		x.Stage(bundleNames)
+	}
+
 	for _, name := range bundleNames {
 		// open the bundle directly since we need access to the size
 		var stream store.ReadAtCloser
@@ -95,7 +100,6 @@ func (s *Store) Validate(id string) (nb int64, problems []string, err error) {
 				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has a delete note", id, blob.ID))
 			}
 			// now verify these hashes match what is stored in the manifest
-			// TODO(dbrower): Make the checksum verification more efficient.
 			bundlename := sugar(id, blob.Bundle)
 			bundleblobmap[bundlename] = append(bundleblobmap[bundlename], blob)
 

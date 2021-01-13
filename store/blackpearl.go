@@ -174,6 +174,19 @@ func (bp *BlackPearl) Delete(key string) error {
 	return err
 }
 
+// Stage will take a list of keys and ask the BlackPearl to stage all of them
+// in its cache. It is for performance only and doesn't need to be called.
+func (bp *BlackPearl) Stage(keys []string) {
+	// need to prefix all the keys
+	var prefixkeys []string
+	for _, key := range keys {
+		prefixkeys = append(prefixkeys, bp.Prefix+key)
+	}
+	_, _ = bp.client.StageObjectsJobSpectraS3(
+		ds3models.NewStageObjectsJobSpectraS3Request(bp.Bucket, prefixkeys),
+	)
+}
+
 // stat will check if a key exists, and if so it returns the size. If the item
 // does not exist an error is returned. The prefix is added to the key before
 // checking.
