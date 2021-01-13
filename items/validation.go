@@ -68,7 +68,8 @@ func (s *Store) Validate(id string) (nb int64, problems []string, err error) {
 	if err != nil {
 		return
 	}
-	// First validate blob metadata
+	// validate blob metadata
+	var bundleblobmap = make(map[string][]*Blob)
 	for _, blob := range item.Blobs {
 		if blob.SaveDate.IsZero() {
 			problems = append(problems, fmt.Sprintf("Blob (%s,%d) has a zero save date", id, blob.ID))
@@ -95,19 +96,8 @@ func (s *Store) Validate(id string) (nb int64, problems []string, err error) {
 			}
 			// now verify these hashes match what is stored in the manifest
 			// TODO(dbrower): Make the checksum verification more efficient.
-			var bag *BagreaderCloser
-			bag, err = OpenBundle(s.S, sugar(id, blob.Bundle))
-			if err != nil {
-				return
-			}
-			checksum := bag.Checksum(fmt.Sprintf("blob/%d", blob.ID))
-			_ = bag.Close()
-			if !bytes.Equal(blob.MD5, checksum.MD5) {
-				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has MD5 mismatch", id, blob.ID))
-			}
-			if !bytes.Equal(blob.SHA256, checksum.SHA256) {
-				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has SHA-256 mismatch", id, blob.ID))
-			}
+			bundlename := sugar(id, blob.Bundle)
+			bundleblobmap[bundlename] = append(bundleblobmap[bundlename], blob)
 
 		case blob.Size == 0:
 			// blob is deleted
@@ -123,6 +113,27 @@ func (s *Store) Validate(id string) (nb int64, problems []string, err error) {
 
 		case blob.Size < 0:
 			problems = append(problems, fmt.Sprintf("Blob (%s,%d) has negative size", id, blob.ID))
+		}
+	}
+
+	for bundlename, bloblist := range bundleblobmap {
+		var bag *BagreaderCloser
+		bag, err = OpenBundle(s.S, bundlename)
+		if err != nil {
+			return
+		}
+		for _, blob := range bloblist {
+			checksum := bag.Checksum(fmt.Sprintf("blob/%d", blob.ID))
+			if !bytes.Equal(blob.MD5, checksum.MD5) {
+				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has MD5 mismatch", id, blob.ID))
+			}
+			if !bytes.Equal(blob.SHA256, checksum.SHA256) {
+				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has SHA-256 mismatch", id, blob.ID))
+			}
+		}
+		err = bag.Close()
+		if err != nil {
+			return
 		}
 	}
 
