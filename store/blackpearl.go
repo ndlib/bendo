@@ -367,11 +367,15 @@ func (rac *bpReadAtCloser) findpage(offset int64) int {
 
 // loadpage will read one page of data. It tries to read defaultPageSize bytes,
 // but it may be smaller at the end of the file. Hence pages may be of various
-// sizes.
+// sizes. It also choses a starting offset that is a multiple of
+// defaultPageSize, so all pages in memory are disjoint.
 func (rac *bpReadAtCloser) loadpage(offset int64) (bpPage, error) {
 	// try to fill up the page, but don't ask for more than
 	// the file has. The BlackPearl doesn't like that.
-	endpos := offset + defaultPageSize
+	// Take the page start to be the greatest multiple of defaultPageSize less
+	// than the given offset
+	startpos := (offset / defaultPageSize) * defaultPageSize
+	endpos := startpos + defaultPageSize
 	if endpos > rac.size {
 		endpos = rac.size
 	}
@@ -380,7 +384,7 @@ func (rac *bpReadAtCloser) loadpage(offset int64) (bpPage, error) {
 	// we mostly just stream the contents (up to keeping a few pages around in our
 	// page cache).
 	request := ds3models.NewGetObjectRequest(rac.bucket, rac.key).
-		WithRanges(ds3models.Range{offset, endpos - 1})
+		WithRanges(ds3models.Range{startpos, endpos - 1})
 	output, err := rac.client.GetObject(request)
 	if err != nil {
 		log.Println("BlackPearl loadpage:", rac, offset, err)
@@ -394,7 +398,7 @@ func (rac *bpReadAtCloser) loadpage(offset int64) (bpPage, error) {
 		// nothing was transferred and there was no error...?
 		err = io.EOF
 	}
-	return bpPage{data: data.Bytes(), offset: offset}, err
+	return bpPage{data: data.Bytes(), offset: startpos}, err
 }
 
 // Close will close this file.
