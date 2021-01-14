@@ -12,7 +12,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/SpectraLogic/ds3_go_sdk/ds3"
@@ -27,9 +26,8 @@ type BlackPearl struct {
 	client  *ds3.Client
 	Bucket  string
 	Prefix  string
-	TempDir string          // where to make temp files. "" uses default place
-	m       sync.RWMutex    // protects everything below
-	cache   map[string]head // cache for item sizes
+	TempDir string     // where to make temp files. "" uses default place
+	sizes   *sizecache // track HEAD info
 }
 
 // NewBlackPearl creates a new BlackPearl store. It will use the given bucket
@@ -39,14 +37,12 @@ type BlackPearl struct {
 // authorization method and credentials in the session are used for all
 // accesses.
 func NewBlackPearl(bucket, prefix string, client *ds3.Client) *BlackPearl {
-	bp := &BlackPearl{
+	return &BlackPearl{
 		Bucket: bucket,
 		Prefix: prefix,
 		client: client,
-		cache:  make(map[string]head),
+		sizes:  newSizeCache(),
 	}
-	go bp.background()
-	return bp
 }
 
 // listeach will call f once for each item in the bucket with the given prefix.
@@ -132,7 +128,7 @@ func (bp *BlackPearl) Create(key string) (io.WriteCloser, error) {
 	if err == nil {
 		return nil, ErrKeyExists
 	}
-	bp.setkeysize(key, 0) // make 0 in case this key was previously deleted
+	bp.sizes.Set(key, 0) // make 0 in case this key was previously deleted
 	fullkey := bp.Prefix + key
 
 	f, err := ioutil.TempFile(bp.TempDir, "blackpearl-")
@@ -169,7 +165,7 @@ func (bp *BlackPearl) Delete(key string) error {
 			"Prefix": bp.Prefix,
 			"Key":    key})
 	} else {
-		bp.setkeysize(key, sizeDeleted)
+		bp.sizes.Set(key, sizeDeleted)
 	}
 	return err
 }
@@ -193,20 +189,7 @@ func (bp *BlackPearl) Stage(keys []string) {
 func (bp *BlackPearl) stat(key string) (int64, error) {
 	// Cache the key sizes as we see them. This drastically cuts down on the
 	// number of HEAD requests.
-	bp.m.Lock()
-	defer bp.m.Unlock()
-	entry := bp.cache[key]
-	if entry.size > 0 {
-		return entry.size, nil
-	}
-	if entry.size < 0 {
-		// we have previously determined this key does not exist
-		return 0, ErrNotExist
-	}
-	// key is not cached, so do the HEAD request
-	size, err := bp.stat0(key)
-	bp.setkeysize0(key, size)
-	return size, err
+	return bp.sizes.Get(key, bp.stat0)
 }
 
 // stat0 implements the actual HEAD request to the blackpearl. Returns either
@@ -228,59 +211,6 @@ func (bp *BlackPearl) stat0(key string) (int64, error) {
 	xx, err := strconv.Atoi(x)
 	return int64(xx), err
 }
-
-/////// size cache
-
-// setkeysize caches a size to use for the given key.
-// use sizeDeleted to mark the key as missing.
-//
-// Do not hold the s.m lock when calling this.
-func (bp *BlackPearl) setkeysize(key string, size int64) {
-	bp.m.Lock()
-	bp.setkeysize0(key, size)
-	bp.m.Unlock()
-}
-
-// setkeysize0 is just like setkeysize but assumes caller already has a lock
-// on s.m
-func (bp *BlackPearl) setkeysize0(key string, size int64) {
-	ttl := defaultHitTTL
-	switch {
-	case size < 0:
-		ttl = defaultMissTTL
-	case size == 0:
-		ttl = 0
-	}
-	bp.cache[key] = head{ttl: ttl, size: size}
-}
-
-// ageSizeCache will age all the cache entries, and remove the ones that have
-// become too old. It holds m the entire time.
-func (bp *BlackPearl) ageSizeCache() {
-	bp.m.Lock()
-	defer bp.m.Unlock()
-	for k, v := range bp.cache {
-		v.ttl--
-		if v.ttl < 0 {
-			delete(bp.cache, k) // remove aged entries
-		} else {
-			bp.cache[k] = v
-		}
-	}
-}
-
-func (bp *BlackPearl) background() {
-	for {
-		time.Sleep(time.Hour) // arbitrary length
-
-		log.Println("Start BlackPearl ageSizeCache", bp.Bucket, bp.Prefix)
-		start := time.Now()
-		bp.ageSizeCache()
-		log.Println("End BlackPearl ageSizeCache", bp.Bucket, bp.Prefix, time.Now().Sub(start))
-	}
-}
-
-// }}} size cache
 
 // bpReadAtCloser adapts the Reader we get for loading content
 // to the ReadAt interface. It keeps a LRU cache of downloaded pages.
