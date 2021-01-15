@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -24,19 +23,8 @@ type S3 struct {
 	svc    *s3.S3
 	Bucket string
 	Prefix string
-	m      sync.RWMutex    // protects everything below
-	cache  map[string]head // cache for item sizes
+	sizes  *sizecache // keep HEAD info
 }
-
-type head struct {
-	ttl  int   // time to live in hours
-	size int64 // size of item. 0 = ?, -1 = doesn't exist. see constant below
-}
-
-const (
-	// constants for head.size. Indicates that the given key is deleted.
-	sizeDeleted int64 = -1 // any negative number will work
-)
 
 // NewS3 creates a new S3 store. It will use the given bucket and will prepend
 // prefix to all keys. This is to allow for a bucket to be used for more than
@@ -44,14 +32,12 @@ const (
 // look for the key "cache/hello" in the bucket. The authorization method and
 // credentials in the session are used for all accesses.
 func NewS3(bucket, prefix string, awsSession *session.Session) *S3 {
-	s := &S3{
+	return &S3{
 		Bucket: bucket,
 		Prefix: prefix,
 		svc:    s3.New(awsSession),
-		cache:  make(map[string]head),
+		sizes:  newSizeCache(),
 	}
-	go s.background()
-	return s
 }
 
 // List returns a list of all the keys in this store. It will only return ones
@@ -128,7 +114,7 @@ func (s *S3) Create(key string) (io.WriteCloser, error) {
 	if err == nil {
 		return nil, ErrKeyExists
 	}
-	s.setkeysize(key, 0) // make 0 in case this key was previously deleted
+	s.sizes.Set(key, 0) // make 0 in case this key was previously deleted
 	fullkey := s.Prefix + key
 	return &s3WriteCloser{
 		svc:    s.svc,
@@ -148,7 +134,7 @@ func (s *S3) Delete(key string) error {
 		log.Println("S3 Delete:", s.Prefix, key, err)
 		raven.CaptureError(err, map[string]string{"Bucket": s.Bucket, "Prefix": s.Prefix, "Key": key})
 	} else {
-		s.setkeysize(key, sizeDeleted)
+		s.sizes.Set(key, sizeDeleted)
 	}
 	return err
 }
@@ -159,20 +145,7 @@ func (s *S3) Delete(key string) error {
 func (s *S3) stat(key string) (int64, error) {
 	// Cache the key sizes as we see them. This drastically cuts down on the
 	// number of HEAD requests.
-	s.m.Lock()
-	defer s.m.Unlock()
-	entry := s.cache[key]
-	if entry.size > 0 {
-		return entry.size, nil
-	}
-	if entry.size < 0 {
-		// we have previously determined this key does not exist
-		return 0, ErrNotExist
-	}
-	// key is not cached, so do the HEAD request
-	size, err := s.stat0(key)
-	s.setkeysize0(key, size)
-	return size, err
+	return s.sizes.Get(key, s.stat0)
 }
 
 // stat0 implements the actual HEAD request to s3. Returns either an error
@@ -187,57 +160,6 @@ func (s *S3) stat0(key string) (int64, error) {
 		return 0, err
 	}
 	return *info.ContentLength, nil
-}
-
-const (
-	defaultMissTTL = 3   // 3 hours
-	defaultHitTTL  = 240 // 10 days
-)
-
-// setkeysize caches a size to use for the given key.
-// use sizeDeleted to mark the key as missing.
-//
-// Do not hold the s.m lock when calling this.
-func (s *S3) setkeysize(key string, size int64) {
-	s.m.Lock()
-	s.setkeysize0(key, size)
-	s.m.Unlock()
-}
-
-// setkeysize0 is just like setkeysize but assumes caller already has a lock
-// on s.m
-func (s *S3) setkeysize0(key string, size int64) {
-	ttl := defaultHitTTL
-	switch {
-	case size < 0:
-		ttl = defaultMissTTL
-	case size == 0:
-		ttl = 0
-	}
-	s.cache[key] = head{ttl: ttl, size: size}
-}
-
-// ageSizeCache will age all the cache entries, and remove the ones that have
-// become too old. It holds m the entire time.
-func (s *S3) ageSizeCache() {
-	s.m.Lock()
-	defer s.m.Unlock()
-	for k, v := range s.cache {
-		v.ttl--
-		if v.ttl < 0 {
-			delete(s.cache, k) // remove aged entries
-		} else {
-			s.cache[k] = v
-		}
-	}
-}
-
-func (s *S3) background() {
-	for {
-		time.Sleep(time.Hour) // arbitrary length
-
-		s.ageSizeCache()
-	}
 }
 
 // s3ReadAtCloser adapts the Reader we get for loading content via s3
