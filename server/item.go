@@ -410,8 +410,11 @@ func (s *RESTServer) ItemHandler(w http.ResponseWriter, r *http.Request, ps http
 		fmt.Fprintln(w, err.Error())
 		return
 	}
-	vid := item.Versions[len(item.Versions)-1].ID
-	w.Header().Set("ETag", fmt.Sprintf(`"%d"`, vid))
+	// sometimes when there are storage errors no Version list gets saved to tape.
+	if len(item.Versions) > 0 {
+		vid := item.Versions[len(item.Versions)-1].ID
+		w.Header().Set("ETag", fmt.Sprintf(`"%d"`, vid))
+	}
 	writeHTMLorJSON(w, r, itemTemplate, item)
 }
 
