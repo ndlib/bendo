@@ -212,9 +212,14 @@ func (tx *Transaction) Commit(s items.Store, files *fragment.Store, cache blobca
 		return
 	}
 	tx.files = files
-	// execute commands. Errors will be appended to tx.Err
+	// execute commands. Recoverable errors are appended to tx.Err
 	for _, cmd := range tx.Commands {
-		cmd.Execute(iw, tx, cache)
+		err = cmd.Execute(iw, tx, cache)
+		if err != nil {
+			// stop if an unrecoverable error is returned
+			tx.Err = append(tx.Err, fmt.Sprintf("%v: %v", cmd, err))
+			break
+		}
 	}
 	err = iw.Close()
 	if err != nil {
@@ -225,7 +230,6 @@ func (tx *Transaction) Commit(s items.Store, files *fragment.Store, cache blobca
 		tx.Status = StatusError
 	}
 	tx.save()
-	// to do: delete files after successful upload
 }
 
 // ReferencedFiles returns a list of all the upload file ids associated with
@@ -290,22 +294,29 @@ type command []string
 // Execute this command on the given item writer and transaction.
 // Assumes the write mutex on tx is held on entry. Execute will
 // give up and then reacquire the write mutex on tx during lengthy processing steps.
-func (c command) Execute(iw *items.Writer, tx *Transaction, cache blobcache.T) {
+// Returns any errors encountered.
+func (c command) Execute(iw *items.Writer, tx *Transaction, cache blobcache.T) error {
 	if !c.WellFormed() {
-		tx.Err = append(tx.Err, "Command is not well formed")
-		return
+		return fmt.Errorf("Command is not well formed")
 	}
 	cmd := []string(c)
 	switch cmd[0] {
 	case "delete":
 		// delete <blob id>, both in store and in cache
 		id, err := strconv.Atoi(cmd[1])
-		if err == nil {
-			// key in blobcache is itemID+blobid
-			cacheKey := fmt.Sprintf("%s+%04d", tx.ItemID, id)
-			cache.Delete(cacheKey)
-			iw.DeleteBlob(items.BlobID(id))
+		if err != nil {
+			return err
 		}
+		// key in blobcache is itemID+blobid
+		cacheKey := fmt.Sprintf("%s+%04d", tx.ItemID, id)
+		err = cache.Delete(cacheKey)
+		if err != nil {
+			// this is just an error deleting the item from the blob cache.
+			// add the error to the error list, but don't stop processing the
+			// transaction.
+			tx.Err = append(tx.Err, "Removing "+cacheKey+": "+err.Error())
+		}
+		iw.DeleteBlob(items.BlobID(id))
 	case "slot":
 		// slot <label> <blob id/file id>
 		// if the id resolves to a blob we have added
@@ -317,8 +328,7 @@ func (c command) Execute(iw *items.Writer, tx *Transaction, cache blobcache.T) {
 			var err error
 			id, err = strconv.Atoi(cmd[2])
 			if err != nil {
-				tx.Err = append(tx.Err, "Cannot resolve id "+cmd[2])
-				break
+				return fmt.Errorf("Cannot resolve id %s", cmd[2])
 			}
 		}
 		iw.SetSlot(cmd[1], items.BlobID(id))
@@ -329,18 +339,19 @@ func (c command) Execute(iw *items.Writer, tx *Transaction, cache blobcache.T) {
 		// add <file id>
 		f := tx.files.Lookup(cmd[1])
 		if f == nil {
-			tx.Err = append(tx.Err, "Cannot find "+cmd[1])
-			break
+			return fmt.Errorf("Cannot find %s", cmd[1])
 		}
 		tx.M.Unlock()
 		reader := f.Open()
 		fstat := f.Stat()
 		bid, err := iw.WriteBlob(reader, fstat.Size, fstat.MD5, fstat.SHA256)
-		reader.Close()
+		err2 := reader.Close()
 		tx.M.Lock()
 		if err != nil {
-			tx.Err = append(tx.Err, err.Error())
-			break
+			return err
+		}
+		if err2 != nil {
+			return err2
 		}
 		tx.BlobMap[cmd[1]] = int(bid)
 		iw.SetMimeType(bid, fstat.MimeType)
@@ -348,8 +359,7 @@ func (c command) Execute(iw *items.Writer, tx *Transaction, cache blobcache.T) {
 		// mimetype <blob id> <new mime type>
 		bid, err := strconv.ParseInt(cmd[1], 10, 64)
 		if err != nil {
-			tx.Err = append(tx.Err, "Cannot resolve id "+cmd[2])
-			break
+			return fmt.Errorf("Cannot resolve id %s", cmd[2])
 		}
 		iw.SetMimeType(items.BlobID(bid), cmd[2])
 	case "sleep":
@@ -359,8 +369,9 @@ func (c command) Execute(iw *items.Writer, tx *Transaction, cache blobcache.T) {
 		time.Sleep(1 * time.Second)
 		tx.M.Lock()
 	default:
-		tx.Err = append(tx.Err, "Bad command "+cmd[0])
+		return fmt.Errorf("Bad command %s", cmd[0])
 	}
+	return nil
 }
 
 // WellFormed checks this command for well-formed-ness. It returns true if
