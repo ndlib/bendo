@@ -104,6 +104,7 @@ func parselocation(location string, addition string) store.Store {
 		).BuildClient()
 		s := store.NewBlackPearl(bucket, prefix, bp)
 		s.TempDir = tempdir
+		log.Println("Using blackpearl temp dir", tempdir)
 		return s
 	}
 	// there was some kind of error. Return a Memory store? or fail?
