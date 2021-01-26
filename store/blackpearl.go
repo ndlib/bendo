@@ -5,7 +5,6 @@ package store
 // different.
 
 import (
-	"bytes"
 	"io"
 	"io/ioutil"
 	"log"
@@ -102,21 +101,27 @@ func (bp *BlackPearl) ListPrefix(prefix string) ([]string, error) {
 	return result, err
 }
 
-// Open will return a ReadAtCloser to get the content for the given key. Data
-// is paged in as needed, and up to 50 MB or so is cached at a time.
+// Open will return a ReadAtCloser to get the content for the given key.
+//
+// The current implementation will download the entire contents for every call
+// to Open(). There is a lot of room for optimization and caching.
 func (bp *BlackPearl) Open(key string) (ReadAtCloser, int64, error) {
 	// check that the key exists, and if so get its size
 	size, err := bp.stat(key)
 	if err != nil {
 		return nil, 0, err
 	}
-	result := &bpReadAtCloser{
-		client: bp.client,
-		bucket: bp.Bucket,
-		key:    bp.Prefix + key,
-		size:   size,
+	fullkey := bp.Prefix + key
+	f, err := ioutil.TempFile(bp.TempDir, "bp-download-")
+	if err != nil {
+		return nil, size, err
 	}
-	return result, size, nil
+	err = bp.downloadObject(f, fullkey)
+	result := &bpTempFileReadAtCloser{f}
+	if err != nil {
+		result.Close() // this will remove the temp file
+	}
+	return result, size, err
 }
 
 // Create will return a WriteCloser to upload content to the given key. Data is
@@ -212,140 +217,56 @@ func (bp *BlackPearl) stat0(key string) (int64, error) {
 	return int64(xx), err
 }
 
-// bpReadAtCloser adapts the Reader we get for loading content
-// to the ReadAt interface. It keeps a LRU cache of downloaded pages.
-//
-// The pages can start at any offset, and it is possible pages in memory may
-// overlap. Though, in the expected case of a sequential read through the file,
-// the pages will be disjoint.
-//
-// It is not safe to use access this from more than one goroutine.
-type bpReadAtCloser struct {
-	client *ds3.Client
-	bucket string
-	key    string   // with prefix, if any
-	pages  []bpPage // cache of data we've downloaded
-	size   int64    // size of this item in bytes
+// bpTempFileReadAtCloser wraps a file ReadAt interface that will delete the
+// file when it is closed.
+type bpTempFileReadAtCloser struct {
+	*os.File
 }
 
-type bpPage struct {
-	data   []byte
-	offset int64
+func (tf *bpTempFileReadAtCloser) Close() error {
+	name := tf.File.Name()
+	err := tf.File.Close()
+	err2 := os.Remove(name)
+	if err == nil {
+		err = err2
+	}
+	return err
 }
 
-// ReadAt implements the io.ReadAt interface.
-func (rac *bpReadAtCloser) ReadAt(p []byte, offset int64) (int, error) {
-	// since the readat interface allows jumping around the file, we don't
-	// use the bulk get since that
-	//  1) returns chunks in potentially random order, and
-	//	2) doesn't let us control which chunks we want with range headers.
-	// Instead we use the S3 object GET interface, which does support what
-	// we want. This may turn out to be a bad idea.
-	var err error
-	startOffset := offset
-	for len(p) > 0 {
-		if offset >= rac.size {
-			break
-		}
-		var page bpPage
-		page, err = rac.getpage(offset)
-		if err != nil {
-			// don't return, in case we have already copied some data
-			break
-		}
-		n := copy(p, page.data[offset-page.offset:])
-		p = p[n:]
-		offset += int64(n)
-	}
-	// If we copied data and have an EOF, dont return the EOF yet. Conversely
-	// if we did not end up copying any data and there is no error, then assume
-	// we reached the end and return EOF.
-	if err == io.EOF && startOffset != offset {
-		err = nil
-	} else if err == nil && startOffset == offset {
-		err = io.EOF
-	}
-	return int(offset - startOffset), err
-}
-
-// getpage will find or load a page for the given offset
-func (rac *bpReadAtCloser) getpage(offset int64) (bpPage, error) {
-	i := rac.findpage(offset)
-	if i == -1 {
-		// page was not found, try to get it
-		page, err := rac.loadpage(offset)
-		if err != nil {
-			return bpPage{}, err
-		}
-		// if the cache is not too big yet, add it to the end
-		// otherwise replace the last entry with it
-		if len(rac.pages) < defaultNumPages {
-			rac.pages = append(rac.pages, page)
-		}
-		i = len(rac.pages) - 1
-		rac.pages[i] = page
-	}
-	page := rac.pages[i]
-	if i > 0 {
-		// move page to front of cache
-		copy(rac.pages[1:], rac.pages[:i]) // don't need to copy entry i
-		rac.pages[0] = page
-	}
-	return page, nil
-}
-
-// findpage sees if any page in the cache contains the data for the byte at
-// offset. If so, it returns the index of the page in the cache. Otherwise -1
-// is returned.
-func (rac *bpReadAtCloser) findpage(offset int64) int {
-	for i, page := range rac.pages {
-		base := page.offset
-		limit := base + int64(len(page.data))
-		if base <= offset && offset < limit {
-			return i
-		}
-	}
-	return -1
-}
-
-// loadpage will read one page of data. It tries to read defaultPageSize bytes,
-// but it may be smaller at the end of the file. Hence pages may be of various
-// sizes. It also choses a starting offset that is a multiple of
-// defaultPageSize, so all pages in memory are disjoint.
-func (rac *bpReadAtCloser) loadpage(offset int64) (bpPage, error) {
-	// try to fill up the page, but don't ask for more than
-	// the file has. The BlackPearl doesn't like that.
-	// Take the page start to be the greatest multiple of defaultPageSize less
-	// than the given offset
-	startpos := (offset / defaultPageSize) * defaultPageSize
-	endpos := startpos + defaultPageSize
-	if endpos > rac.size {
-		endpos = rac.size
-	}
-	// not sure how to use the bulk get when we only know of one item at this
-	// point in time. ALSO we don't have a palce to store the other items since
-	// we mostly just stream the contents (up to keeping a few pages around in our
-	// page cache).
-	request := ds3models.NewGetObjectRequest(rac.bucket, rac.key).
-		WithRanges(ds3models.Range{startpos, endpos - 1})
-	output, err := rac.client.GetObject(request)
+// downloadObject will copy the entire contents of the given object into the
+// provided writer.
+func (bp *BlackPearl) downloadObject(w io.Writer, key string) error {
+	request := ds3models.NewGetBulkJobSpectraS3Request(bp.Bucket, []string{key})
+	resp, err := bp.client.GetBulkJobSpectraS3(request)
 	if err != nil {
-		log.Println("BlackPearl loadpage:", rac, offset, err)
-		// what kind of errors might we get?
-		return bpPage{}, err
+		return err
 	}
-	data := &bytes.Buffer{} // using Buffer since we need an io.Writer interface
-	n, err := io.Copy(data, output.Content)
-	output.Content.Close()
-	if n == 0 && err == nil {
-		// nothing was transferred and there was no error...?
-		err = io.EOF
-	}
-	return bpPage{data: data.Bytes(), offset: startpos}, err
-}
 
-// Close will close this file.
-func (rac *bpReadAtCloser) Close() error {
+	jobID := resp.MasterObjectList.JobId
+	chunkCount := len(resp.MasterObjectList.Objects)
+
+	for ; chunkCount > 0; chunkCount-- {
+		// wait until BP is ready for download
+		chunks, err := waitForBlackPearl(bp.client, jobID)
+		if err != nil {
+			return err
+		}
+		for _, chunk := range chunks {
+			log.Println("download", chunk)
+			input := ds3models.NewGetObjectRequest(bp.Bucket, key).
+				WithJob(jobID).
+				WithOffset(chunk.offset)
+			response, err := bp.client.GetObject(input)
+			if err != nil {
+				return err
+			}
+			_, err = io.Copy(w, response.Content)
+			if err != nil {
+				return err
+			}
+			response.Content.Close()
+		}
+	}
 	return nil
 }
 
@@ -405,7 +326,7 @@ func (wc *bpWriteCloser) Close() error {
 
 	for ; chunkCount > 0; chunkCount-- {
 		// wait until BP is ready for an upload
-		chunks, err := wc.waitForBlackPearl(jobID)
+		chunks, err := waitForBlackPearl(wc.client, jobID)
 		if err != nil {
 			return err
 		}
@@ -456,12 +377,11 @@ type chunk struct {
 
 // waitForBlackPearl will block until the BlackPearl is ready for the next
 // upload of the given jobid. It will return early if there an an error.
-func (wc *bpWriteCloser) waitForBlackPearl(jobID string) ([]chunk, error) {
+func waitForBlackPearl(client *ds3.Client, jobID string) ([]chunk, error) {
 	// wait until BP is ready for an upload
 	for {
-		input := ds3models.NewGetJobChunksReadyForClientProcessingSpectraS3Request(jobID).
-			WithPreferredNumberOfChunks(1)
-		resp, err := wc.client.GetJobChunksReadyForClientProcessingSpectraS3(input)
+		input := ds3models.NewGetJobChunksReadyForClientProcessingSpectraS3Request(jobID)
+		resp, err := client.GetJobChunksReadyForClientProcessingSpectraS3(input)
 		if err != nil {
 			// TODO figure out what to do
 			return nil, err
@@ -469,13 +389,7 @@ func (wc *bpWriteCloser) waitForBlackPearl(jobID string) ([]chunk, error) {
 
 		// Can any chunks be processed?
 		numberOfChunks := len(resp.MasterObjectList.Objects)
-		switch {
-		case numberOfChunks > 1:
-			log.Println(
-				"BlackPearl: Expected only one chunk at a time. Received",
-				numberOfChunks)
-			fallthrough
-		case numberOfChunks == 1:
+		if numberOfChunks > 0 {
 			var result []chunk
 			for _, c := range resp.MasterObjectList.Objects {
 				for _, d := range c.Objects {
@@ -487,7 +401,6 @@ func (wc *bpWriteCloser) waitForBlackPearl(jobID string) ([]chunk, error) {
 				}
 			}
 			return result, nil
-		default:
 		}
 
 		// If the Get Job Chunks Ready for Processing request returns an empty list,
