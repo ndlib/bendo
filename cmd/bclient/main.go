@@ -26,7 +26,7 @@ var (
 	blobs        = flag.Bool("blobs", false, "Show Blobs Instead of Files")
 	verbose      = flag.Bool("v", false, "Display more information")
 	version      = flag.Int("version", 0, "version number")
-	chunksize    = flag.Int("chunksize", 10, "chunk size of uploads (in meagabytes)")
+	chunksize    = flag.Int("chunksize", 40, "chunk size of uploads (in megabytes)")
 	stub         = flag.Bool("stub", false, "Get Item Information, construct stub number")
 	numuploaders = flag.Int("ul", 2, "Number Uploaders")
 	wait         = flag.Bool("wait", true, "Wait for Upload Transaction to complte before exiting")
@@ -53,7 +53,7 @@ Available actions:
 
     upload Flags:
 
-    -chunksize    ( defaults to 10) Size (in MB) of chunks bclient will use for upload  
+    -chunksize    ( defaults to 40) Size (in MB) of chunks bclient will use for upload  
     -creator      ( defaults to bclient) owner of upload in bendo
     -numuploaders ( defaults to 2) number of upload threads
     -v            ( defaults to false) Provide verbose upload information for troubleshooting
