@@ -1,0 +1,155 @@
+#!/usr/bin/python
+
+from csv import reader
+from ds3 import ds3
+import os
+import sys
+import time
+import base64
+import binascii
+
+# Global Variable init
+Prefix = ""
+BucketName = ""
+FileMap = {}
+
+# Procedures
+
+# CreateFileDict(file) : given a csv of local file names and checksums, cretaes a dictionary
+# where the key 'prefix/filername'maps to a list containing [ checksum, filepath ]
+
+def CreateFileDict(file):
+    fileListDict = dict()
+    csvReader = reader(file)
+    for row in csvReader:
+       if Prefix != "":
+            thisPrefix = Prefix + "/"
+       thisKey = thisPrefix + os.path.basename(row[1]) 
+       row[0] = row[0].upper()
+       fileListDict[thisKey] = row
+    return fileListDict
+
+#  CreateDS3Dict(bucket_name, prefix): given the DS3 bucket name and prefix, cretaes a dictionary
+#  where the key 'prefix/filername' maps to checkksum
+
+def CreateDS3Dict(bucket_name):
+    object_dict=dict()
+    thisClient = ds3.createClientFromEnv()
+    bucketContents = thisClient.get_bucket(ds3.GetBucketRequest(bucket_name))
+
+    # like getService, getBucket returns more information about the bucket than the contents, so we'll extract those
+    objectNames = map(lambda bucket: bucket['Key'], bucketContents.result['ContentsList'])
+    for name in objectNames:
+        if name.startswith(Prefix) and name.endswith("zip"):
+             object_head = thisClient.head_object(ds3.HeadObjectRequest(bucket_name, name))
+             checksums = object_head.blob_checksums
+             object_dict[name] = binascii.hexlify(base64.b64decode(checksums[0])).upper()
+
+    return object_dict
+
+# DS3BucketExists(name) : tries connecting to BlackPearl Bucket
+
+def DS3BucketExists(name):
+    thisClient = ds3.createClientFromEnv()
+    getServiceResponse = thisClient.get_service(ds3.GetServiceRequest())
+    for bucket in getServiceResponse.result['BucketList']:
+        if bucket['Name'] == name:
+            return True
+    return False
+
+# BuildUploadList : iterate through local list. If item does not exist
+# on the Black Pearl, or if it does, but its checksum is different, add it
+# to the upload list
+
+def BuildUploadList(local, bpList):
+    fileList = []
+
+    for file in local:
+        if bpList.has_key(file) == False:
+            fileList.append(local[file][1])
+        elif local[file][0] != bpList[file]:
+            fileList.append(local[file][1])
+    return fileList 
+
+def CreateDs3PutObject(fileName):
+    size = os.stat(fileName).st_size
+    if Prefix != "":
+        thisPrefix = Prefix + "/"
+    ds3ObjName = thisPrefix + os.path.basename(fileName) 
+    FileMap[ds3ObjName] = fileName
+    return ds3.Ds3PutObject(ds3ObjName, size) 
+
+def UploadInBulk(uploadFiles):
+    objectList = list(map(CreateDs3PutObject, uploadFiles))
+    thisClient = ds3.createClientFromEnv()
+    print "starting upload"
+    bulkResult = thisClient.put_bulk_job_spectra_s3(ds3.PutBulkJobSpectraS3Request(BucketName, objectList))
+        
+    for chunk in bulkResult.result['ObjectsList']:
+        print "allocating chunk"
+        allocateChunk = thisClient.allocate_job_chunk_spectra_s3(ds3.AllocateJobChunkSpectraS3Request(chunk['ChunkId']))
+        for obj in allocateChunk.result['ObjectList']:
+            print "processing file %s" % obj['Name']
+            objectDataStream = open(FileMap[obj['Name']], "rb")
+            objectDataStream.seek(int(obj['Offset']), 0)
+            thisClient.put_object(ds3.PutObjectRequest(bucket_name=BucketName,
+                                               object_name=obj['Name'],
+                                               length=obj['Length'],
+                                               stream=objectDataStream,
+                                               offset=int(obj['Offset']),
+                                               job=bulkResult.result['JobId']))
+    return 
+
+# Main Program starts Here
+# check for command line args
+
+if len(sys.argv) < 3:
+    print  "usage: dternity_to_blackpearl bucket_name csv_file [prefix]"
+    sys.exit(1)
+
+#get command line args
+
+BucketName = sys.argv[1]
+print  "bucket name is %s" % (BucketName)
+
+inputFileName =  sys.argv[2]
+
+if len(sys.argv) > 3:
+    Prefix= sys.argv[3]
+
+print "prefix name is %s" % Prefix
+
+# Does provide bucket name exist?
+
+if DS3BucketExists(BucketName) == False:
+    print "Error: bucket %s does not exist!" % BucketName
+    sys.exit(1)
+else:
+    print "Bucket %s exists on DS3" % BucketName
+
+#open inputFileName
+inputFile = open(inputFileName, "r")
+
+# Create Dictionary of local files from CSV file
+ 
+localList = CreateFileDict(inputFile)
+
+print "There are %s entries in %s" % (len(localList), inputFileName)
+
+# The  DS3 bucket exists- create dictionary of files in the bucket with prefix 
+
+ds3Dict = CreateDS3Dict(BucketName)
+
+print "There are %s entries on DS3 " % (len(ds3Dict))
+
+# Compare the two lists, and build an upload list usable by the DS3 SDK
+
+uploadList = BuildUploadList(localList, ds3Dict)
+
+if len(uploadList) > 0:
+    print "Found %s files to upload" % len(uploadList)
+    UploadInBulk(uploadList)
+else:
+    print "No files found which need to be uploaded to DS3"
+    sys.exit(1)
+

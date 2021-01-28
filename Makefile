@@ -23,7 +23,7 @@ clean:
 	mkdir -p ./bin
 
 # the rpm target requires `fpm` to be installed
-rpm: ./bin/bendo ./bin/bclient ./bin/butil
+rpm: ./bin/bendo ./bin/bclient ./bin/butil ./scripts/ds3cp
 	fpm -t rpm -s dir \
 		--name bendo \
 		--version $(VERSION) \
@@ -34,7 +34,8 @@ rpm: ./bin/bendo ./bin/bclient ./bin/butil
 		--rpm-group app \
 		bin/bendo=/opt/bendo/bin/bendo \
 		bin/bclient=/opt/bendo/bin/bclient \
-		bin/butil=/opt/bendo/bin/butil
+		bin/butil=/opt/bendo/bin/butil \
+		scripts/ds3cp=/opt/bendo/scripts/ds3cp
 
 # make a new docker image for building bendo RPMs
 buildimage: ./docker/buildimage/install-ruby.sh ./docker/buildimage/install-go.sh
