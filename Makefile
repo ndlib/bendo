@@ -34,7 +34,7 @@ rpm: ./bin/bendo ./bin/bclient ./bin/butil ./scripts/ds3cp
 		--rpm-group app \
 		bin/bendo=/opt/bendo/bin/bendo \
 		bin/bclient=/opt/bendo/bin/bclient \
-		bin/butil=/opt/bendo/bin/butil
+		bin/butil=/opt/bendo/bin/butil \
 		scripts/ds3cp=/opt/bendo/scripts/ds3cp
 
 # make a new docker image for building bendo RPMs
