@@ -304,18 +304,27 @@ func (rac *s3ReadAtCloser) Close() error {
 }
 
 // s3WriteCloser does an upload to s3. If the entire file fits into one buffer
-// it will do a single PUT. Otherwise it will use the s3 multipart upload interface.
+// it will do a single PUT. Otherwise it will use the s3 multipart upload
+// interface.
 //
 // A challenge is that we do not know the ultimate size of the object while we
 // are writing it. To accommodate large file sizes, we vary the size of each
 // part. Varying the part sizes lets us use small parts for small files, but
-// still be able to handle files larger than 50 GB (which would be the max if
-// we used a constant part size of 5 MB).
+// still be able to handle large files, e.g. larger than 50 GB (which would be
+// the max if we used a constant part size of 5 MB).
 //
-// The size of part i in bytes is bounded below by the function size(i) = b + a*i.
-// We are using a = 128 * 1024 and b = 5 * 1024 * 1024
-// The maximum upload file size for these values of a and b is ~6.6 TB.
-// Formula is (10000 * b) + (10000 * 9999 * a)
+// AWS restricts part sizes to be between 5 MB and 5 GB.
+//
+// We set the upload threshold of part i to size(i) = min(a*2^i, b) where
+// constants a and b are a = 64 * 1024 * 1024 (64 MB) and
+// b = 4 * 1024 * 1024 * 1024 (4 GB)
+//
+//      File Size       # Parts (using this system)
+//      ---------       -------
+//           1 GB             5
+//          10 GB             8
+//         100 GB            36
+//        1000 GB           301
 type s3WriteCloser struct {
 	svc      *s3.S3
 	bucket   string
@@ -328,9 +337,11 @@ type s3WriteCloser struct {
 	abort    bool          // true to abort upload at close
 }
 
+// These are constants, but beware! The relationship that
+// wcBaseSize << 6 == wcMaxSize is baked into the code below
 const (
-	wcBaseSize = 5 * 1024 * 1024
-	wcIncSize  = 128 * 1024
+	wcBaseSize = 64 * 1024 * 1024
+	wcMaxSize  = 4 * 1024 * 1024 * 1024
 )
 
 var (
@@ -353,7 +364,10 @@ func (wc *s3WriteCloser) Write(p []byte) (int, error) {
 		return n, err
 	}
 	// see if we need to upload this buffer
-	lowerlimit := wcBaseSize + wcIncSize*wc.part
+	lowerlimit := wcMaxSize
+	if wc.part < 6 {
+		lowerlimit = wcBaseSize << wc.part
+	}
 	if wc.buf.Len() > lowerlimit {
 		err = wc.uploadpart(wc.part, wc.buf)
 		wc.buf.Reset() // clear the buffer
