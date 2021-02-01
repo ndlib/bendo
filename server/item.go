@@ -13,6 +13,7 @@ import (
 
 	raven "github.com/getsentry/raven-go"
 	"github.com/julienschmidt/httprouter"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/ndlib/bendo/items"
 	"github.com/ndlib/bendo/store"
@@ -178,9 +179,9 @@ retry:
 // contentSource is either a ReadCloser that contains the requested data, or it is a promise of a future data stream, which is ready when the done channel is closed.
 type contentSource struct {
 	status ContentStatus
-	r      io.ReadCloser   // valid if status is Cached or Large
-	size   int64           // valid if status is Cached, Large, or Waiting
-	done   <-chan struct{} // valid if status is Waiting
+	r      io.ReadCloser              // valid if status is Cached or Large
+	size   int64                      // valid if status is Cached, Large, or Waiting
+	done   <-chan singleflight.Result // valid if status is Waiting
 }
 
 type ContentStatus int
@@ -191,36 +192,6 @@ const (
 	ContentLarge                 // the content was very big and is not cached
 	ContentWaiting               // the content is being copied into the cache
 )
-
-type singleFlight struct {
-	m     sync.Mutex
-	chans map[string]chan struct{}
-}
-
-// lookup sees if key has already been created, and if so returns the
-// channel for it. Otherwise it makes a new channel and returns that.
-// The bool is true if the key was already present, and false if it wasn't.
-// Keys are only removed by calling remove().
-// This function is goroutine safe.
-func (s *singleFlight) lookup(key string) (chan struct{}, bool) {
-	s.m.Lock()
-	if s.chans == nil {
-		s.chans = make(map[string]chan struct{})
-	}
-	c, exists := s.chans[key]
-	if !exists {
-		c = make(chan struct{})
-		s.chans[key] = c
-	}
-	s.m.Unlock()
-	return c, exists
-}
-
-func (s *singleFlight) remove(key string) {
-	s.m.Lock()
-	delete(s.chans, key)
-	s.m.Unlock()
-}
 
 // An errorlist is a simple goroutine safe map that expires entries
 // based on time.
@@ -278,22 +249,6 @@ out:
 	return result
 }
 
-var (
-	// copyChannels tracks whether a blob is being copied into the cache. If
-	// one is, then we track a channel that is closed either when the blob has
-	// been copied or when there is an error. Others can wait on this channel.
-	// When the channel closes, calling findContent() again will return either
-	// a reader for the blob or the error that happened while copying it into
-	// the cache.
-	copyChannels singleFlight
-
-	// errorledger tracks the errors that happen when copying blobs into the
-	// cache. The errors are only kept for a short amount of time (at least
-	// long enough that others waiting on the channel can call findContent
-	// again to get the error).
-	errorledger errorlist
-)
-
 // findContent will look in the cache and on tape for the given blob. If
 // it is not in the cache, it will load it into the cache, if doLoad is true.
 // (This is to facilitate HEAD requests that shouldn't recall content).
@@ -325,7 +280,7 @@ func (s *RESTServer) findContent(key string, id string, bid items.BlobID, doLoad
 		return result, nil
 	}
 	// were there previous errors when caching this blob?
-	err = errorledger.find(key)
+	err = s.errorledger.find(key)
 	if err != nil {
 		return result, err
 	}
@@ -335,11 +290,15 @@ func (s *RESTServer) findContent(key string, id string, bid items.BlobID, doLoad
 	// (remember maxsize == 0 means infinite)
 	cacheMaxSize := s.Cache.MaxSize()
 	if cacheMaxSize == 0 || length < cacheMaxSize/8 {
-		// try to single flight the requests
-		c, exists := copyChannels.lookup(key)
-		if !exists {
-			go s.copyBlobIntoCache(c, key, id, bid)
+		// single flight the requests
+		// lazy initialize
+		if s.tapeinflight == nil {
+			s.tapeinflight = &singleflight.Group{}
 		}
+		c := s.tapeinflight.DoChan(key, func() (interface{}, error) {
+			s.copyBlobIntoCache(key, id, bid)
+			return nil, nil
+		})
 		result.status = ContentWaiting
 		result.done = c
 		return result, nil
@@ -358,7 +317,7 @@ func (s *RESTServer) findContent(key string, id string, bid items.BlobID, doLoad
 // copyBlobIntoCache copies the given blob of the item id into s's blobcache
 // under the given key. Closes the given channel when the item is copied or if
 // there was an error. Errors are added to the errorledger.
-func (s *RESTServer) copyBlobIntoCache(done chan struct{}, key, id string, bid items.BlobID) {
+func (s *RESTServer) copyBlobIntoCache(key, id string, bid items.BlobID) {
 	starttime := time.Now()
 	var keepcopy bool
 	// defer this first so it is the last to run at exit.
@@ -369,8 +328,6 @@ func (s *RESTServer) copyBlobIntoCache(done chan struct{}, key, id string, bid i
 			s.Cache.Delete(key)
 		}
 		log.Println("copyblob finished", key, time.Now().Sub(starttime))
-		copyChannels.remove(key)
-		close(done) // signal that we are done
 	}()
 	cw, err := s.Cache.Put(key)
 	if err != nil {
@@ -393,7 +350,7 @@ func (s *RESTServer) copyBlobIntoCache(done chan struct{}, key, id string, bid i
 	cr, length, err := s.Items.Blob(id, bid)
 	if err != nil {
 		log.Printf("cache items get %s: %s", key, err.Error())
-		errorledger.add(key, err)
+		s.errorledger.add(key, err)
 		return
 	}
 	defer cr.Close()
@@ -401,13 +358,13 @@ func (s *RESTServer) copyBlobIntoCache(done chan struct{}, key, id string, bid i
 	n, err := io.Copy(cw, cr)
 	if err != nil {
 		log.Printf("cache copy %s: %s", key, err.Error())
-		errorledger.add(key, err)
+		s.errorledger.add(key, err)
 		return
 	}
 	if n != length {
 		err = fmt.Errorf("cache length mismatch: read %d, expected %d", n, length)
 		log.Println(err)
-		errorledger.add(key, err)
+		s.errorledger.add(key, err)
 		return
 	}
 	keepcopy = true
@@ -453,8 +410,11 @@ func (s *RESTServer) ItemHandler(w http.ResponseWriter, r *http.Request, ps http
 		fmt.Fprintln(w, err.Error())
 		return
 	}
-	vid := item.Versions[len(item.Versions)-1].ID
-	w.Header().Set("ETag", fmt.Sprintf(`"%d"`, vid))
+	// sometimes when there are storage errors no Version list gets saved to tape.
+	if len(item.Versions) > 0 {
+		vid := item.Versions[len(item.Versions)-1].ID
+		w.Header().Set("ETag", fmt.Sprintf(`"%d"`, vid))
+	}
 	writeHTMLorJSON(w, r, itemTemplate, item)
 }
 

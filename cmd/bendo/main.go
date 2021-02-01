@@ -116,7 +116,7 @@ func signalHandler(sig <-chan os.Signal, svr *server.RESTServer) {
 func setupItemStore(config *bendoConfig, s *server.RESTServer) {
 	itemstore := parselocation(config.StoreDir, "")
 	if itemstore == nil {
-		panic("no storage location")
+		log.Fatalln("no storage location")
 	}
 	if config.CowHost != "" {
 		log.Printf("Using COW with target %s", config.CowHost)
@@ -137,7 +137,7 @@ func setupTokens(config *bendoConfig, s *server.RESTServer) {
 		log.Printf("Using user token file %s\n", config.Tokenfile)
 		s.Validator, err = server.NewListValidatorFile(config.Tokenfile)
 		if err != nil {
-			panic(err)
+			log.Fatalln(err)
 		}
 	} else {
 		log.Printf("No user token file specified")
@@ -154,7 +154,7 @@ func setupCache(config *bendoConfig, s *server.RESTServer) {
 	} else {
 		v := parselocation(config.CacheDir, "blobcache")
 		if v == nil {
-			panic("no location for cache")
+			log.Fatalln("no location for cache")
 		}
 		if timeout != 0 {
 			log.Println("Using time-based cache strategy")
@@ -199,7 +199,7 @@ func setupDatabase(config *bendoConfig, s *server.RESTServer) {
 		db, err = server.NewQlCache(path)
 	}
 	if db == nil || err != nil {
-		panic("problem setting up database")
+		log.Fatalln("problem setting up database")
 	}
 	s.FixityDatabase = db
 	s.Items.SetCache(db)

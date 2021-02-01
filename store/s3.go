@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -24,19 +23,8 @@ type S3 struct {
 	svc    *s3.S3
 	Bucket string
 	Prefix string
-	m      sync.RWMutex    // protects everything below
-	cache  map[string]head // cache for item sizes
+	sizes  *sizecache // keep HEAD info
 }
-
-type head struct {
-	ttl  int   // time to live in hours
-	size int64 // size of item. 0 = ?, -1 = doesn't exist. see constant below
-}
-
-const (
-	// constants for head.size. Indicates that the given key is deleted.
-	sizeDeleted int64 = -1 // any negative number will work
-)
 
 // NewS3 creates a new S3 store. It will use the given bucket and will prepend
 // prefix to all keys. This is to allow for a bucket to be used for more than
@@ -44,14 +32,12 @@ const (
 // look for the key "cache/hello" in the bucket. The authorization method and
 // credentials in the session are used for all accesses.
 func NewS3(bucket, prefix string, awsSession *session.Session) *S3 {
-	s := &S3{
+	return &S3{
 		Bucket: bucket,
 		Prefix: prefix,
 		svc:    s3.New(awsSession),
-		cache:  make(map[string]head),
+		sizes:  newSizeCache(),
 	}
-	go s.background()
-	return s
 }
 
 // List returns a list of all the keys in this store. It will only return ones
@@ -128,7 +114,7 @@ func (s *S3) Create(key string) (io.WriteCloser, error) {
 	if err == nil {
 		return nil, ErrKeyExists
 	}
-	s.setkeysize(key, 0) // make 0 in case this key was previously deleted
+	s.sizes.Set(key, 0) // make 0 in case this key was previously deleted
 	fullkey := s.Prefix + key
 	return &s3WriteCloser{
 		svc:    s.svc,
@@ -148,7 +134,7 @@ func (s *S3) Delete(key string) error {
 		log.Println("S3 Delete:", s.Prefix, key, err)
 		raven.CaptureError(err, map[string]string{"Bucket": s.Bucket, "Prefix": s.Prefix, "Key": key})
 	} else {
-		s.setkeysize(key, sizeDeleted)
+		s.sizes.Set(key, sizeDeleted)
 	}
 	return err
 }
@@ -159,20 +145,7 @@ func (s *S3) Delete(key string) error {
 func (s *S3) stat(key string) (int64, error) {
 	// Cache the key sizes as we see them. This drastically cuts down on the
 	// number of HEAD requests.
-	s.m.Lock()
-	defer s.m.Unlock()
-	entry := s.cache[key]
-	if entry.size > 0 {
-		return entry.size, nil
-	}
-	if entry.size < 0 {
-		// we have previously determined this key does not exist
-		return 0, ErrNotExist
-	}
-	// key is not cached, so do the HEAD request
-	size, err := s.stat0(key)
-	s.setkeysize0(key, size)
-	return size, err
+	return s.sizes.Get(key, s.stat0)
 }
 
 // stat0 implements the actual HEAD request to s3. Returns either an error
@@ -187,60 +160,6 @@ func (s *S3) stat0(key string) (int64, error) {
 		return 0, err
 	}
 	return *info.ContentLength, nil
-}
-
-const (
-	defaultMissTTL = 3   // 3 hours
-	defaultHitTTL  = 240 // 10 days
-)
-
-// setkeysize caches a size to use for the given key.
-// use sizeDeleted to mark the key as missing.
-//
-// Do not hold the s.m lock when calling this.
-func (s *S3) setkeysize(key string, size int64) {
-	s.m.Lock()
-	s.setkeysize0(key, size)
-	s.m.Unlock()
-}
-
-// setkeysize0 is just like setkeysize but assumes caller already has a lock
-// on s.m
-func (s *S3) setkeysize0(key string, size int64) {
-	ttl := defaultHitTTL
-	switch {
-	case size < 0:
-		ttl = defaultMissTTL
-	case size == 0:
-		ttl = 0
-	}
-	s.cache[key] = head{ttl: ttl, size: size}
-}
-
-// ageSizeCache will age all the cache entries, and remove the ones that have
-// become too old. It holds m the entire time.
-func (s *S3) ageSizeCache() {
-	s.m.Lock()
-	defer s.m.Unlock()
-	for k, v := range s.cache {
-		v.ttl--
-		if v.ttl < 0 {
-			delete(s.cache, k) // remove aged entries
-		} else {
-			s.cache[k] = v
-		}
-	}
-}
-
-func (s *S3) background() {
-	for {
-		time.Sleep(time.Hour) // arbitrary length
-
-		log.Println("Start S3 ageSizeCache", s.Bucket, s.Prefix)
-		start := time.Now()
-		s.ageSizeCache()
-		log.Println("End S3 ageSizeCache", s.Bucket, s.Prefix, time.Now().Sub(start))
-	}
 }
 
 // s3ReadAtCloser adapts the Reader we get for loading content via s3
@@ -280,7 +199,8 @@ func (rac *s3ReadAtCloser) ReadAt(p []byte, offset int64) (int, error) {
 		var page s3Page
 		page, err = rac.getpage(offset)
 		if err != nil {
-			// don't return, in case we have already copied some data
+			// don't return, in case we have already copied some data in
+			// a previous loop.
 			break
 		}
 		n := copy(p, page.data[offset-page.offset:])
@@ -301,7 +221,7 @@ func (rac *s3ReadAtCloser) ReadAt(p []byte, offset int64) (int, error) {
 // The number of pages we keep in the cache. After this we will evict the LRU.
 const defaultNumPages = 5
 
-// getpage will find or load a page for the given offset
+// getpage will find in memory or load a page for the given offset
 func (rac *s3ReadAtCloser) getpage(offset int64) (s3Page, error) {
 	i := rac.findpage(offset)
 	if i == -1 {
@@ -345,13 +265,17 @@ const defaultPageSize = 10 * 1024 * 1024 // 10 MiB
 
 // loadpage will read one page of data from S3. It tries to read defaultPageSize
 // bytes, but less may be returned, e.g. at the end of the file. Hence pages
-// may be of various sizes.
+// may be of various sizes. It also choses a starting offset that is a multiple
+// of defaultPageSize, so all pages in memory are disjoint.
 func (rac *s3ReadAtCloser) loadpage(offset int64) (s3Page, error) {
-	endpos := offset + defaultPageSize
+	// take the page start to be the greatest multiple of defaultPageSize less
+	// than the given offset
+	startpos := (offset / defaultPageSize) * defaultPageSize
+	endpos := startpos + defaultPageSize
 	input := &s3.GetObjectInput{
 		Bucket: aws.String(rac.bucket),
 		Key:    aws.String(rac.key),
-		Range:  aws.String(fmt.Sprintf("bytes=%d-%d", offset, endpos-1)),
+		Range:  aws.String(fmt.Sprintf("bytes=%d-%d", startpos, endpos-1)),
 	}
 	output, err := rac.svc.GetObject(input)
 	if err != nil {
@@ -371,7 +295,7 @@ func (rac *s3ReadAtCloser) loadpage(offset int64) (s3Page, error) {
 		// nothing was transferred and there was no error...?
 		err = io.EOF
 	}
-	return s3Page{data: data.Bytes(), offset: offset}, err
+	return s3Page{data: data.Bytes(), offset: startpos}, err
 }
 
 // Close will close this file.
@@ -380,18 +304,27 @@ func (rac *s3ReadAtCloser) Close() error {
 }
 
 // s3WriteCloser does an upload to s3. If the entire file fits into one buffer
-// it will do a single PUT. Otherwise it will use the s3 multipart upload interface.
+// it will do a single PUT. Otherwise it will use the s3 multipart upload
+// interface.
 //
 // A challenge is that we do not know the ultimate size of the object while we
 // are writing it. To accommodate large file sizes, we vary the size of each
 // part. Varying the part sizes lets us use small parts for small files, but
-// still be able to handle files larger than 50 GB (which would be the max if
-// we used a constant part size of 5 MB).
+// still be able to handle large files, e.g. larger than 50 GB (which would be
+// the max if we used a constant part size of 5 MB).
 //
-// The size of part i in bytes is bounded below by the function size(i) = b + a*i.
-// We are using a = 128 * 1024 and b = 5 * 1024 * 1024
-// The maximum upload file size for these values of a and b is ~6.6 TB.
-// Formula is (10000 * b) + (10000 * 9999 * a)
+// AWS restricts part sizes to be between 5 MB and 5 GB.
+//
+// We set the upload threshold of part i to size(i) = min(a*2^i, b) where
+// constants a and b are a = 64 * 1024 * 1024 (64 MB) and
+// b = 4 * 1024 * 1024 * 1024 (4 GB)
+//
+//      File Size       # Parts (using this system)
+//      ---------       -------
+//           1 GB             5
+//          10 GB             8
+//         100 GB            36
+//        1000 GB           301
 type s3WriteCloser struct {
 	svc      *s3.S3
 	bucket   string
@@ -404,9 +337,11 @@ type s3WriteCloser struct {
 	abort    bool          // true to abort upload at close
 }
 
+// These are constants, but beware! The relationship that
+// wcBaseSize << 6 == wcMaxSize is baked into the code below
 const (
-	wcBaseSize = 5 * 1024 * 1024
-	wcIncSize  = 128 * 1024
+	wcBaseSize = 64 * 1024 * 1024
+	wcMaxSize  = 4 * 1024 * 1024 * 1024
 )
 
 var (
@@ -429,7 +364,10 @@ func (wc *s3WriteCloser) Write(p []byte) (int, error) {
 		return n, err
 	}
 	// see if we need to upload this buffer
-	lowerlimit := wcBaseSize + wcIncSize*wc.part
+	lowerlimit := wcMaxSize
+	if wc.part < 6 {
+		lowerlimit = wcBaseSize << wc.part
+	}
 	if wc.buf.Len() > lowerlimit {
 		err = wc.uploadpart(wc.part, wc.buf)
 		wc.buf.Reset() // clear the buffer
