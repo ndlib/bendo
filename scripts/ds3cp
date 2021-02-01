@@ -2,11 +2,16 @@
 
 from csv import reader
 from ds3 import ds3
+
+from dotenv import load_dotenv
+
 import os
 import sys
 import time
 import base64
 import binascii
+
+load_dotenv()
 
 # Global Variable init
 Prefix = ""
@@ -35,7 +40,8 @@ def CreateFileDict(file):
 def CreateDS3Dict(bucket_name):
     object_dict=dict()
     thisClient = ds3.createClientFromEnv()
-    bucketContents = thisClient.get_bucket(ds3.GetBucketRequest(bucket_name))
+    # max_keys defaults to 1000. Bendo production circa 1/18/21 has 9345 zip files
+    bucketContents = thisClient.get_bucket(ds3.GetBucketRequest(bucket_name, max_keys = 15000))
 
     # like getService, getBucket returns more information about the bucket than the contents, so we'll extract those
     objectNames = map(lambda bucket: bucket['Key'], bucketContents.result['ContentsList'])
@@ -104,7 +110,7 @@ def UploadInBulk(uploadFiles):
 # check for command line args
 
 if len(sys.argv) < 3:
-    print  "usage: dternity_to_blackpearl bucket_name csv_file [prefix]"
+    print  "usage: ds3cp bucket_name csv_file [prefix]"
     sys.exit(1)
 
 #get command line args
