@@ -378,7 +378,7 @@ type chunk struct {
 // waitForBlackPearl will block until the BlackPearl is ready for the next
 // upload of the given jobid. It will return early if there an an error.
 func waitForBlackPearl(client *ds3.Client, jobID string) ([]chunk, error) {
-	// wait until BP is ready for an upload
+	timeout := 10 * time.Second // start at 10 seconds
 	for {
 		input := ds3models.NewGetJobChunksReadyForClientProcessingSpectraS3Request(jobID)
 		resp, err := client.GetJobChunksReadyForClientProcessingSpectraS3(input)
@@ -407,14 +407,19 @@ func waitForBlackPearl(client *ds3.Client, jobID string) ([]chunk, error) {
 		// then the server's cache is currently saturated and the client must wait
 		// before sending more data. The client should wait the number of seconds
 		// specified in the Retry-After HTTP response header.
-		timeout := 10 * time.Second // default to 10 seconds
+		//
+		// The BlackPearl seems to always tell us to wait for 300 seconds. So
+		// we will ignore it and do a shorter timeout in the beginning.
 		if s := resp.Headers.Get("Retry-After"); s != "" {
-			v, err := strconv.Atoi(s)
-			if err == nil && v > 0 {
-				timeout = time.Duration(v) * time.Second
+			if v, err := strconv.Atoi(s); err == nil && v > 0 {
+				suggestion := time.Duration(v) * time.Second
+				if suggestion < timeout {
+					timeout = suggestion
+				}
 			}
 		}
 		log.Println("waiting for blackpearl", timeout.Seconds())
 		time.Sleep(timeout)
+		timeout = timeout + 10*time.Second // linear backoff
 	}
 }
