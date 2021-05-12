@@ -79,8 +79,11 @@ func (s *Store) Validate(id string) (nb int64, problems []string, err error) {
 		if blob.SaveDate.IsZero() {
 			problems = append(problems, fmt.Sprintf("Blob (%s,%d) has a zero save date", id, blob.ID))
 		}
-		switch {
-		case blob.Size > 0:
+		if blob.DeleteDate.IsZero() {
+			// this blob is not deleted
+			if blob.Size < 0 {
+				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has negative size", id, blob.ID))
+			}
 			if blob.Bundle <= 0 {
 				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has non-positive bundle ID", id, blob.ID))
 			}
@@ -89,9 +92,6 @@ func (s *Store) Validate(id string) (nb int64, problems []string, err error) {
 			}
 			if len(blob.SHA256) != 32 {
 				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has malformed SHA-256 hash", id, blob.ID))
-			}
-			if !blob.DeleteDate.IsZero() {
-				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has non-zero delete date", id, blob.ID))
 			}
 			if blob.Deleter != "" {
 				problems = append(problems, fmt.Sprintf("Blob (%s,%d) has a deleter", id, blob.ID))
@@ -102,21 +102,17 @@ func (s *Store) Validate(id string) (nb int64, problems []string, err error) {
 			// now verify these hashes match what is stored in the manifest
 			bundlename := sugar(id, blob.Bundle)
 			bundleblobmap[bundlename] = append(bundleblobmap[bundlename], blob)
-
-		case blob.Size == 0:
+		} else {
 			// blob is deleted
 			if blob.Bundle != 0 {
 				problems = append(problems, fmt.Sprintf("Blob (%s,%d) is deleted and has non-zero bundle ID", id, blob.ID))
 			}
-			if blob.DeleteDate.IsZero() {
-				problems = append(problems, fmt.Sprintf("Blob (%s,%d) is deleted and has no delete date", id, blob.ID))
+			if blob.Size != 0 {
+				problems = append(problems, fmt.Sprintf("Blob (%s,%d) is deleted and has non-zero size", id, blob.ID))
 			}
 			if blob.Deleter == "" {
 				problems = append(problems, fmt.Sprintf("Blob (%s,%d) is deleted and has no deleter", id, blob.ID))
 			}
-
-		case blob.Size < 0:
-			problems = append(problems, fmt.Sprintf("Blob (%s,%d) has negative size", id, blob.ID))
 		}
 	}
 
