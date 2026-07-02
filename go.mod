@@ -1,6 +1,6 @@
 module github.com/ndlib/bendo
 
-go 1.16
+go 1.25.0
 
 require (
 	github.com/BurntSushi/migration v0.0.0-20140125045755-c45b897f1335
@@ -8,6 +8,14 @@ require (
 	github.com/SpectraLogic/ds3_go_sdk v5.2.0+incompatible
 	github.com/antonholmquist/jason v1.0.0
 	github.com/aws/aws-sdk-go v1.29.3
+	github.com/cznic/ql v1.2.1-0.20181122101857-b60735abf8a0
+	github.com/getsentry/raven-go v0.2.0
+	github.com/go-sql-driver/mysql v1.5.0
+	github.com/julienschmidt/httprouter v1.3.0
+	golang.org/x/sync v0.20.0
+)
+
+require (
 	github.com/certifi/gocertifi v0.0.0-20180118203423-deb3ae2ef261 // indirect
 	github.com/cznic/b v0.0.0-20181122101859-a26611c4d92d // indirect
 	github.com/cznic/db v0.0.0-20181122101858-661fca3aa13d // indirect
@@ -15,16 +23,15 @@ require (
 	github.com/cznic/fileutil v0.0.0-20181122101858-4d67cfea8c87 // indirect
 	github.com/cznic/golex v0.0.0-20181122101858-9c343928389c // indirect
 	github.com/cznic/internal v0.0.0-20181122101858-3279554c546e // indirect
+	github.com/cznic/lldb v1.1.0 // indirect
 	github.com/cznic/mathutil v0.0.0-20181122101859-297441e03548 // indirect
-	github.com/cznic/ql v1.2.1-0.20181122101857-b60735abf8a0
 	github.com/cznic/sortutil v0.0.0-20181122101858-f5f958428db8 // indirect
 	github.com/cznic/strutil v0.0.0-20181122101858-275e90344537 // indirect
 	github.com/cznic/zappy v0.0.0-20181122101859-ca47d358d4b1 // indirect
 	github.com/edsrzf/mmap-go v1.0.0 // indirect
-	github.com/getsentry/raven-go v0.2.0
-	github.com/go-sql-driver/mysql v1.5.0
-	github.com/julienschmidt/httprouter v1.3.0
+	github.com/jmespath/go-jmespath v0.0.0-20180206201540-c2b33e8439af // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20190728182440-6a916e37a237 // indirect
-	golang.org/x/net v0.0.0-20201021035429-f5854403a974 // indirect
-	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 )
